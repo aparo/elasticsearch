@@ -24,7 +24,6 @@ import org.elasticsearch.common.Preconditions;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.ImmutableSet;
 import org.elasticsearch.common.collect.MapBuilder;
-import org.elasticsearch.common.compress.CompressedString;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.ImmutableSettings;
@@ -243,13 +242,19 @@ public class IndexMetaData {
             return this;
         }
 
-        public Builder putMapping(MappingMetaData mappingMd) {
-            mappings.put(mappingMd.type(), mappingMd);
+        public Builder putMapping(String type, String source) throws IOException {
+            XContentParser parser = XContentFactory.xContent(source).createParser(source);
+            try {
+                putMapping(new MappingMetaData(type, parser.map()));
+            } finally {
+                parser.close();
+            }
             return this;
         }
 
-        public Builder putMapping(String mappingType, String mappingSource) throws IOException {
-            return putMapping(new MappingMetaData(mappingType, new CompressedString(mappingSource)));
+        public Builder putMapping(MappingMetaData mappingMd) {
+            mappings.put(mappingMd.type(), mappingMd);
+            return this;
         }
 
         public Builder state(State state) {
@@ -276,7 +281,7 @@ public class IndexMetaData {
             for (Map.Entry<String, MappingMetaData> entry : indexMetaData.mappings().entrySet()) {
                 byte[] data = entry.getValue().source().uncompressed();
                 XContentParser parser = XContentFactory.xContent(data).createParser(data);
-                Map<String, Object> mapping = parser.map();
+                Map<String, Object> mapping = parser.mapOrdered();
                 parser.close();
                 builder.map(mapping);
             }
@@ -305,16 +310,10 @@ public class IndexMetaData {
                         builder.settings(settingsBuilder.build());
                     } else if ("mappings".equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                            Map<String, Object> mapping = parser.map();
+                            Map<String, Object> mapping = parser.mapOrdered();
                             if (mapping.size() == 1) {
                                 String mappingType = mapping.keySet().iterator().next();
-                                String mappingSource = XContentFactory.jsonBuilder().map(mapping).string();
-
-                                if (mappingSource == null) {
-                                    // crap, no mapping source, warn?
-                                } else {
-                                    builder.putMapping(new MappingMetaData(mappingType, new CompressedString(mappingSource)));
-                                }
+                                builder.putMapping(new MappingMetaData(mappingType, mapping));
                             }
                         }
                     }

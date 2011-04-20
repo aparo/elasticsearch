@@ -33,6 +33,8 @@ import org.elasticsearch.common.util.concurrent.ThreadSafe;
 @ThreadSafe
 public interface DocumentMapper {
 
+    void close();
+
     String type();
 
     /**

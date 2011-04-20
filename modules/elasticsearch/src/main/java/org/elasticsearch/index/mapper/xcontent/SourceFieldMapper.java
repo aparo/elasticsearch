@@ -126,7 +126,7 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements or
                 context.source(data);
             }
         }
-        return new Field(names.indexName(), data);
+        return new Field(names().indexName(), data);
     }
 
     @Override public byte[] value(Document document) {

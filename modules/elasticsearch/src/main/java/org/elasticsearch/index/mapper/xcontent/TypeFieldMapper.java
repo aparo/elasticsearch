@@ -23,9 +23,17 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.PrefixFilter;
+import org.apache.lucene.search.Query;
 import org.elasticsearch.common.lucene.Lucene;
+import org.elasticsearch.common.lucene.search.TermFilter;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.mapper.MergeMappingException;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.UidFieldMapper;
+import org.elasticsearch.index.query.xcontent.QueryParseContext;
 
 import java.io.IOException;
 
@@ -57,7 +65,7 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements org.
         }
 
         @Override public TypeFieldMapper build(BuilderContext context) {
-            return new TypeFieldMapper(name, indexName, store, termVector, boost, omitNorms, omitTermFreqAndPositions);
+            return new TypeFieldMapper(name, indexName, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions);
         }
     }
 
@@ -66,13 +74,13 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements org.
     }
 
     protected TypeFieldMapper(String name, String indexName) {
-        this(name, indexName, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
+        this(name, indexName, Defaults.INDEX, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
                 Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS);
     }
 
-    public TypeFieldMapper(String name, String indexName, Field.Store store, Field.TermVector termVector,
+    public TypeFieldMapper(String name, String indexName, Field.Index index, Field.Store store, Field.TermVector termVector,
                            float boost, boolean omitNorms, boolean omitTermFreqAndPositions) {
-        super(new Names(name, indexName, indexName, name), Defaults.INDEX, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
+        super(new Names(name, indexName, indexName, name), index, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
                 Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
     }
 
@@ -101,8 +109,26 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements org.
         return new Term(names.indexName(), value);
     }
 
+    @Override public Filter fieldFilter(String value) {
+        if (index == Field.Index.NO) {
+            return new PrefixFilter(new Term(UidFieldMapper.NAME, Uid.typePrefix(value)));
+        }
+        return new TermFilter(new Term(names.indexName(), value));
+    }
+
+    @Override public Query fieldQuery(String value, QueryParseContext context) {
+        return new DeletionAwareConstantScoreQuery(context.cacheFilter(fieldFilter(value)));
+    }
+
+    @Override public boolean useFieldQueryWithQueryString() {
+        return true;
+    }
+
     @Override protected Field parseCreateField(ParseContext context) throws IOException {
-        return new Field(names.indexName(), context.type(), store, index);
+        if (index == Field.Index.NO && store == Field.Store.NO) {
+            return null;
+        }
+        return new Field(names.indexName(), false, context.type(), store, index, termVector);
     }
 
     @Override protected String contentType() {
@@ -111,12 +137,15 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements org.
 
     @Override public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         // if all are defaults, no sense to write it at all
-        if (store == Defaults.STORE) {
+        if (store == Defaults.STORE && index == Defaults.INDEX) {
             return builder;
         }
         builder.startObject(CONTENT_TYPE);
         if (store != Defaults.STORE) {
             builder.field("store", store.name().toLowerCase());
+        }
+        if (index != Defaults.INDEX) {
+            builder.field("index", index.name().toLowerCase());
         }
         builder.endObject();
         return builder;

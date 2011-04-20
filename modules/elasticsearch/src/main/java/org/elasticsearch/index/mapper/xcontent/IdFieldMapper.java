@@ -39,7 +39,7 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements org.el
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = "_id";
         public static final String INDEX_NAME = "_id";
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final Field.Index INDEX = Field.Index.NO;
         public static final Field.Store STORE = Field.Store.NO;
         public static final boolean OMIT_NORMS = true;
         public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
@@ -57,22 +57,26 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements org.el
         }
 
         @Override public IdFieldMapper build(BuilderContext context) {
-            return new IdFieldMapper(name, indexName, store, termVector, boost, omitNorms, omitTermFreqAndPositions);
+            return new IdFieldMapper(name, indexName, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions);
         }
     }
 
     protected IdFieldMapper() {
-        this(Defaults.NAME, Defaults.INDEX_NAME);
+        this(Defaults.NAME, Defaults.INDEX_NAME, Defaults.INDEX);
     }
 
-    protected IdFieldMapper(String name, String indexName) {
-        this(name, indexName, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
+    protected IdFieldMapper(Field.Index index) {
+        this(Defaults.NAME, Defaults.INDEX_NAME, index);
+    }
+
+    protected IdFieldMapper(String name, String indexName, Field.Index index) {
+        this(name, indexName, index, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
                 Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS);
     }
 
-    protected IdFieldMapper(String name, String indexName, Field.Store store, Field.TermVector termVector,
+    protected IdFieldMapper(String name, String indexName, Field.Index index, Field.Store store, Field.TermVector termVector,
                             float boost, boolean omitNorms, boolean omitTermFreqAndPositions) {
-        super(new Names(name, indexName, indexName, name), Defaults.INDEX, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
+        super(new Names(name, indexName, indexName, name), index, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
                 Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
     }
 
@@ -105,12 +109,18 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements org.el
             }
             context.id(id);
             context.parsedId(ParseContext.ParsedIdState.PARSED);
-            return new Field(names.indexName(), context.id(), store, index);
+            if (index == Field.Index.NO && store == Field.Store.NO) {
+                return null;
+            }
+            return new Field(names.indexName(), false, context.id(), store, index, termVector);
         } else if (context.parsedIdState() == ParseContext.ParsedIdState.EXTERNAL) {
             if (context.id() == null) {
                 throw new MapperParsingException("No id mapping with [" + names.name() + "] found in the content, and not explicitly set");
             }
-            return new Field(names.indexName(), context.id(), store, index);
+            if (index == Field.Index.NO && store == Field.Store.NO) {
+                return null;
+            }
+            return new Field(names.indexName(), false, context.id(), store, index, termVector);
         } else {
             throw new MapperParsingException("Illegal parsed id state");
         }
@@ -122,12 +132,15 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements org.el
 
     @Override public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         // if all are defaults, no sense to write it at all
-        if (store == Defaults.STORE) {
+        if (store == Defaults.STORE && index == Defaults.INDEX) {
             return builder;
         }
         builder.startObject(CONTENT_TYPE);
         if (store != Defaults.STORE) {
             builder.field("store", store.name().toLowerCase());
+        }
+        if (index != Defaults.INDEX) {
+            builder.field("index", index.name().toLowerCase());
         }
         builder.endObject();
         return builder;

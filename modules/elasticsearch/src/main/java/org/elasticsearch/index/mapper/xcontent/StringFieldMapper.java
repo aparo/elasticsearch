@@ -89,6 +89,9 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements In
         }
     }
 
+    static class FieldWrapper {
+        public Field field;
+    }
 
     private String nullValue;
 
@@ -147,7 +150,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements In
             context.ignoredValue(names.indexName(), value);
             return null;
         }
-        return new Field(names.indexName(), value, store, index, termVector);
+        return new Field(names.indexName(), false, value, store, index, termVector);
     }
 
     @Override protected String contentType() {

@@ -132,7 +132,7 @@ public class XContentDocumentMapperParser extends AbstractIndexComponent impleme
 
         XContentMapper.TypeParser.ParserContext parserContext = new XContentMapper.TypeParser.ParserContext(analysisService, typeParsers);
 
-        XContentDocumentMapper.Builder docBuilder = doc(index.name(), (RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext));
+        XContentDocumentMapper.Builder docBuilder = doc(index.name(), indexSettings, (RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext));
 
         for (Map.Entry<String, Object> entry : mapping.entrySet()) {
             String fieldName = Strings.toUnderscoreCase(entry.getKey());
@@ -221,6 +221,7 @@ public class XContentDocumentMapperParser extends AbstractIndexComponent impleme
         return builder;
     }
 
+    // NOTE, we also parse this in MappingMetaData
     private RoutingFieldMapper.Builder parseRoutingField(Map<String, Object> routingNode, XContentMapper.TypeParser.ParserContext parserContext) {
         RoutingFieldMapper.Builder builder = routing();
         parseField(builder, builder.name, routingNode, parserContext);

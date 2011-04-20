@@ -22,6 +22,8 @@ package org.elasticsearch.plugins;
 import org.elasticsearch.common.collect.ImmutableList;
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.Module;
+import org.elasticsearch.common.settings.ImmutableSettings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.CloseableIndexComponent;
 
 import java.util.Collection;
@@ -78,4 +80,9 @@ public abstract class AbstractPlugin implements Plugin {
     @Override public void processModule(Module module) {
         // nothing to do here
     }
+
+    @Override public Settings additionalSettings() {
+        return ImmutableSettings.Builder.EMPTY_SETTINGS;
+    }
+
 }

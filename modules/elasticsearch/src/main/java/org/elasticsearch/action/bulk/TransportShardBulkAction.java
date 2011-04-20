@@ -40,7 +40,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.percolator.PercolatorExecutor;
 import org.elasticsearch.index.service.IndexService;
@@ -106,8 +105,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
         final BulkShardRequest request = shardRequest.request;
         IndexShard indexShard = indexShard(shardRequest);
 
-        Engine.Operation[] ops = new Engine.Operation[request.items().length];
-
+        Engine.IndexingOperation[] ops = null;
 
         BulkItemResponse[] responses = new BulkItemResponse[request.items().length];
         for (int i = 0; i < request.items().length; i++) {
@@ -127,16 +125,15 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                     SourceToParse sourceToParse = SourceToParse.source(indexRequest.source()).type(indexRequest.type()).id(indexRequest.id())
                             .routing(indexRequest.routing()).parent(indexRequest.parent());
                     long version;
-                    ParsedDocument doc;
-                    Engine.Operation op;
+                    Engine.IndexingOperation op;
                     if (indexRequest.opType() == IndexRequest.OpType.INDEX) {
                         Engine.Index index = indexShard.prepareIndex(sourceToParse).version(indexRequest.version()).versionType(indexRequest.versionType()).origin(Engine.Operation.Origin.PRIMARY);
-                        doc = indexShard.index(index);
+                        indexShard.index(index);
                         version = index.version();
                         op = index;
                     } else {
                         Engine.Create create = indexShard.prepareCreate(sourceToParse).version(indexRequest.version()).versionType(indexRequest.versionType()).origin(Engine.Operation.Origin.PRIMARY);
-                        doc = indexShard.create(create);
+                        indexShard.create(create);
                         version = create.version();
                         op = create;
                     }
@@ -144,14 +141,14 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                     indexRequest.version(version);
 
                     // update mapping on master if needed, we won't update changes to the same type, since once its changed, it won't have mappers added
-                    if (doc.mappersAdded()) {
+                    if (op.parsedDoc().mappersAdded()) {
                         updateMappingOnMaster(indexRequest);
                     }
 
                     // if we are going to percolate, then we need to keep this op for the postPrimary operation
                     if (Strings.hasLength(indexRequest.percolate())) {
                         if (ops == null) {
-                            ops = new Engine.Operation[request.items().length];
+                            ops = new Engine.IndexingOperation[request.items().length];
                         }
                         ops[i] = op;
                     }
@@ -200,7 +197,10 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
     @Override protected void postPrimaryOperation(BulkShardRequest request, PrimaryResponse<BulkShardResponse> response) {
         IndexService indexService = indicesService.indexServiceSafe(request.index());
-        Engine.Operation[] ops = (Engine.Operation[]) response.payload();
+        Engine.IndexingOperation[] ops = (Engine.IndexingOperation[]) response.payload();
+        if (ops == null) {
+            return;
+        }
         for (int i = 0; i < ops.length; i++) {
             BulkItemRequest itemRequest = request.items()[i];
             BulkItemResponse itemResponse = response.response().responses()[i];
@@ -208,22 +208,17 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                 // failure, continue
                 continue;
             }
-            if (ops[i] == null) {
-                continue; // failed
+            Engine.IndexingOperation op = ops[i];
+            if (op == null) {
+                continue; // failed / no matches requested
             }
             if (itemRequest.request() instanceof IndexRequest) {
                 IndexRequest indexRequest = (IndexRequest) itemRequest.request();
                 if (!Strings.hasLength(indexRequest.percolate())) {
                     continue;
                 }
-                ParsedDocument doc;
-                if (ops[i] instanceof Engine.Create) {
-                    doc = ((Engine.Create) ops[i]).parsedDoc();
-                } else {
-                    doc = ((Engine.Index) ops[i]).parsedDoc();
-                }
                 try {
-                    PercolatorExecutor.Response percolate = indexService.percolateService().percolate(new PercolatorExecutor.DocAndSourceQueryRequest(doc, indexRequest.percolate()));
+                    PercolatorExecutor.Response percolate = indexService.percolateService().percolate(new PercolatorExecutor.DocAndSourceQueryRequest(op.parsedDoc(), indexRequest.percolate()));
                     ((IndexResponse) itemResponse.response()).matches(percolate.matches());
                 } catch (Exception e) {
                     logger.warn("failed to percolate [{}]", e, itemRequest.request());

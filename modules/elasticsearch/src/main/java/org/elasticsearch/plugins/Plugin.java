@@ -21,6 +21,7 @@ package org.elasticsearch.plugins;
 
 import org.elasticsearch.common.component.LifecycleComponent;
 import org.elasticsearch.common.inject.Module;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.CloseableIndexComponent;
 
 import java.util.Collection;
@@ -73,4 +74,9 @@ public interface Plugin {
     Collection<Class<? extends CloseableIndexComponent>> shardServices();
 
     void processModule(Module module);
+
+    /**
+     * Additional node settings loaded by the plugin
+     */
+    Settings additionalSettings();
 }
