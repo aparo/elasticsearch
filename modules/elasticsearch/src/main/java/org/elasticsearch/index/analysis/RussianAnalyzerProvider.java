@@ -19,15 +19,14 @@
 
 package org.elasticsearch.index.analysis;
 
+import org.apache.lucene.analysis.CharArraySet;
 import org.apache.lucene.analysis.ru.RussianAnalyzer;
-import org.elasticsearch.common.collect.ImmutableSet;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.settings.IndexSettings;
-
-import java.util.Set;
 
 /**
  * @author kimchy (shay.banon)
@@ -36,18 +35,11 @@ public class RussianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Russi
 
     private final RussianAnalyzer analyzer;
 
-    @Inject public RussianAnalyzerProvider(Index index, @IndexSettings Settings indexSettings, @Assisted String name, @Assisted Settings settings) {
+    @Inject public RussianAnalyzerProvider(Index index, @IndexSettings Settings indexSettings, Environment env, @Assisted String name, @Assisted Settings settings) {
         super(index, indexSettings, name, settings);
-        if (Analysis.isNoStopwords(settings)) {
-            analyzer = new RussianAnalyzer(version, ImmutableSet.of());
-        } else {
-            Set<?> stopWords = Analysis.parseStopWords(settings, ImmutableSet.of());
-            if (!stopWords.isEmpty()) {
-                analyzer = new RussianAnalyzer(version, stopWords);
-            } else {
-                analyzer = new RussianAnalyzer(version);
-            }
-        }
+        analyzer = new RussianAnalyzer(version,
+                Analysis.parseStopWords(env, settings, RussianAnalyzer.getDefaultStopSet()),
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
     }
 
     @Override public RussianAnalyzer get() {

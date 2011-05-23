@@ -342,6 +342,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         if (request.query() == null) {
             Lucene.ExistsCollector collector = new Lucene.ExistsCollector();
             for (Map.Entry<String, Query> entry : queries.entrySet()) {
+                collector.reset();
                 try {
                     searcher.search(entry.getValue(), collector);
                 } catch (IOException e) {

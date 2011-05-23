@@ -27,12 +27,15 @@ import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.action.index.NodeIndexCreatedAction;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.action.index.NodeMappingCreatedAction;
+import org.elasticsearch.cluster.action.index.NodeMappingRefreshAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
+import org.elasticsearch.cluster.metadata.AliasMetaData;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.*;
+import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.compress.CompressedString;
@@ -42,6 +45,8 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.index.IndexShardAlreadyExistsException;
 import org.elasticsearch.index.IndexShardMissingException;
+import org.elasticsearch.index.aliases.IndexAlias;
+import org.elasticsearch.index.aliases.IndexAliasesService;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.gateway.IndexShardGatewayRecoveryException;
 import org.elasticsearch.index.gateway.IndexShardGatewayService;
@@ -60,6 +65,7 @@ import org.elasticsearch.index.shard.service.InternalIndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 
@@ -89,7 +95,10 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
 
     private final NodeMappingCreatedAction nodeMappingCreatedAction;
 
-    // a map of mappings type we have seen per index
+    private final NodeMappingRefreshAction nodeMappingRefreshAction;
+
+    // a map of mappings type we have seen per index due to cluster state
+    // we need this so we won't remove types automatically created as part of the indexing process
     private final ConcurrentMap<Tuple<String, String>, Boolean> seenMappings = ConcurrentCollections.newConcurrentMap();
 
     private final Object mutex = new Object();
@@ -100,7 +109,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                                               ThreadPool threadPool, RecoveryTarget recoveryTarget, RecoverySource recoverySource,
                                               ShardStateAction shardStateAction,
                                               NodeIndexCreatedAction nodeIndexCreatedAction, NodeIndexDeletedAction nodeIndexDeletedAction,
-                                              NodeMappingCreatedAction nodeMappingCreatedAction) {
+                                              NodeMappingCreatedAction nodeMappingCreatedAction, NodeMappingRefreshAction nodeMappingRefreshAction) {
         super(settings);
         this.indicesService = indicesService;
         this.clusterService = clusterService;
@@ -111,6 +120,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         this.nodeIndexCreatedAction = nodeIndexCreatedAction;
         this.nodeIndexDeletedAction = nodeIndexDeletedAction;
         this.nodeMappingCreatedAction = nodeMappingCreatedAction;
+        this.nodeMappingRefreshAction = nodeMappingRefreshAction;
     }
 
     @Override protected void doStart() throws ElasticSearchException {
@@ -136,6 +146,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         synchronized (mutex) {
             applyNewIndices(event);
             applyMappings(event);
+            applyAliases(event);
             applyNewOrUpdatedShards(event);
             applyDeletedIndices(event);
             applyDeletedShards(event);
@@ -191,6 +202,12 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                     });
                 } catch (Exception e) {
                     logger.warn("failed to delete index", e);
+                }
+                // clear seen mappings as well
+                for (Tuple<String, String> tuple : seenMappings.keySet()) {
+                    if (tuple.v1().equals(index)) {
+                        seenMappings.remove(tuple);
+                    }
                 }
             }
         }
@@ -277,6 +294,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                 // we only create / update here
                 continue;
             }
+            List<String> typesToRefresh = null;
             String index = indexMetaData.index();
             IndexService indexService = indicesService.indexServiceSafe(index);
             MapperService mapperService = indexService.mapperService();
@@ -292,7 +310,16 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                 if (mappingType.equals(MapperService.DEFAULT_MAPPING)) { // we processed _default_ first
                     continue;
                 }
-                processMapping(event, index, mapperService, mappingType, mappingSource);
+                boolean requireRefresh = processMapping(event, index, mapperService, mappingType, mappingSource);
+                if (requireRefresh) {
+                    if (typesToRefresh == null) {
+                        typesToRefresh = Lists.newArrayList();
+                    }
+                    typesToRefresh.add(mappingType);
+                }
+            }
+            if (typesToRefresh != null) {
+                nodeMappingRefreshAction.nodeMappingRefresh(new NodeMappingRefreshAction.NodeMappingRefreshRequest(index, typesToRefresh.toArray(new String[typesToRefresh.size()]), event.state().nodes().localNodeId()));
             }
             // go over and remove mappings
             for (DocumentMapper documentMapper : mapperService) {
@@ -305,11 +332,12 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         }
     }
 
-    private void processMapping(ClusterChangedEvent event, String index, MapperService mapperService, String mappingType, CompressedString mappingSource) {
+    private boolean processMapping(ClusterChangedEvent event, String index, MapperService mapperService, String mappingType, CompressedString mappingSource) {
         if (!seenMappings.containsKey(new Tuple<String, String>(index, mappingType))) {
             seenMappings.put(new Tuple<String, String>(index, mappingType), true);
         }
 
+        boolean requiresRefresh = false;
         try {
             if (!mapperService.hasMapping(mappingType)) {
                 if (logger.isDebugEnabled()) {
@@ -317,7 +345,9 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                 }
                 mapperService.add(mappingType, mappingSource.string());
                 if (!mapperService.documentMapper(mappingType).mappingSource().equals(mappingSource)) {
-                    logger.warn("[{}] parsed mapping [{}], and got different sources\noriginal:\n{}\nparsed:\n{}", index, mappingType, mappingSource, mapperService.documentMapper(mappingType).mappingSource());
+                    // this might happen when upgrading from 0.15 to 0.16
+                    logger.debug("[{}] parsed mapping [{}], and got different sources\noriginal:\n{}\nparsed:\n{}", index, mappingType, mappingSource, mapperService.documentMapper(mappingType).mappingSource());
+                    requiresRefresh = true;
                 }
                 nodeMappingCreatedAction.nodeMappingCreated(new NodeMappingCreatedAction.NodeMappingCreatedResponse(index, mappingType, event.state().nodes().localNodeId()));
             } else {
@@ -329,7 +359,9 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                     }
                     mapperService.add(mappingType, mappingSource.string());
                     if (!mapperService.documentMapper(mappingType).mappingSource().equals(mappingSource)) {
-                        logger.warn("[{}] parsed mapping [{}], and got different sources\noriginal:\n{}\nparsed:\n{}", index, mappingType, mappingSource, mapperService.documentMapper(mappingType).mappingSource());
+                        requiresRefresh = true;
+                        // this might happen when upgrading from 0.15 to 0.16
+                        logger.debug("[{}] parsed mapping [{}], and got different sources\noriginal:\n{}\nparsed:\n{}", index, mappingType, mappingSource, mapperService.documentMapper(mappingType).mappingSource());
                     }
                     nodeMappingCreatedAction.nodeMappingCreated(new NodeMappingCreatedAction.NodeMappingCreatedResponse(index, mappingType, event.state().nodes().localNodeId()));
                 }
@@ -337,6 +369,52 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         } catch (Exception e) {
             logger.warn("[{}] failed to add mapping [{}], source [{}]", e, index, mappingType, mappingSource);
         }
+        return requiresRefresh;
+    }
+
+    private void applyAliases(ClusterChangedEvent event) {
+        // go over and update aliases
+        for (IndexMetaData indexMetaData : event.state().metaData()) {
+            if (!indicesService.hasIndex(indexMetaData.index())) {
+                // we only create / update here
+                continue;
+            }
+            String index = indexMetaData.index();
+            IndexService indexService = indicesService.indexService(index);
+            IndexAliasesService indexAliasesService = indexService.aliasesService();
+            for (AliasMetaData aliasesMd : indexMetaData.aliases().values()) {
+                processAlias(index, aliasesMd.alias(), aliasesMd.filter(), indexAliasesService);
+            }
+            // go over and remove aliases
+            for (IndexAlias indexAlias : indexAliasesService) {
+                if (!indexMetaData.aliases().containsKey(indexAlias.alias())) {
+                    // we have it in our aliases, but not in the metadata, remove it
+                    indexAliasesService.remove(indexAlias.alias());
+                }
+            }
+        }
+    }
+
+    private void processAlias(String index, String alias, CompressedString filter, IndexAliasesService indexAliasesService) {
+        try {
+            if (!indexAliasesService.hasAlias(alias)) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("[{}] adding alias [{}], filter [{}]", index, alias, filter);
+                }
+                indexAliasesService.add(alias, filter);
+            } else {
+                if ((filter == null && indexAliasesService.alias(alias).filter() != null) ||
+                        (filter != null && !filter.equals(indexAliasesService.alias(alias).filter()))) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("[{}] updating alias [{}], filter [{}]", index, alias, filter);
+                    }
+                    indexAliasesService.add(alias, filter);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("[{}] failed to add alias [{}], filter [{}]", e, index, alias, filter);
+        }
+
     }
 
     private void applyNewOrUpdatedShards(final ClusterChangedEvent event) throws ElasticSearchException {
@@ -415,11 +493,22 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
             } catch (Exception e) {
                 logger.warn("[{}][{}] failed to create shard", e, shardRouting.index(), shardRouting.id());
                 try {
-                    indexService.cleanShard(shardId, "failed to create [" + ExceptionsHelper.detailedMessage(e) + "]");
+                    indexService.removeShard(shardId, "failed to create [" + ExceptionsHelper.detailedMessage(e) + "]");
                 } catch (IndexShardMissingException e1) {
                     // ignore
                 } catch (Exception e1) {
-                    logger.warn("[{}][{}] failed to delete shard after failed creation", e1, shardRouting.index(), shardRouting.id());
+                    logger.warn("[{}][{}] failed to remove shard after failed creation", e1, shardRouting.index(), shardRouting.id());
+                }
+                shardStateAction.shardFailed(shardRouting, "Failed to create shard, message [" + detailedMessage(e) + "]");
+                return;
+            } catch (OutOfMemoryError e) {
+                logger.warn("[{}][{}] failed to create shard", e, shardRouting.index(), shardRouting.id());
+                try {
+                    indexService.removeShard(shardId, "failed to create [" + ExceptionsHelper.detailedMessage(e) + "]");
+                } catch (IndexShardMissingException e1) {
+                    // ignore
+                } catch (Exception e1) {
+                    logger.warn("[{}][{}] failed to remove shard after failed creation", e1, shardRouting.index(), shardRouting.id());
                 }
                 shardStateAction.shardFailed(shardRouting, "Failed to create shard, message [" + detailedMessage(e) + "]");
                 return;

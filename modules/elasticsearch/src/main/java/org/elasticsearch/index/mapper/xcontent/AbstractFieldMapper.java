@@ -205,6 +205,8 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, XContent
 
     protected final NamedAnalyzer searchAnalyzer;
 
+    protected final Term termFactory;
+
     protected AbstractFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
                                   float boost, boolean omitNorms, boolean omitTermFreqAndPositions, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
         this.names = names;
@@ -224,6 +226,8 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, XContent
         } else {
             this.searchAnalyzer = searchAnalyzer;
         }
+
+        this.termFactory = new Term(names.indexName(), "");
     }
 
     @Override public String name() {
@@ -286,7 +290,9 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, XContent
             }
             field.setOmitNorms(omitNorms);
             field.setOmitTermFreqAndPositions(omitTermFreqAndPositions);
-            field.setBoost(boost);
+            if (!customBoost()) {
+                field.setBoost(boost);
+            }
             if (context.listener().beforeFieldAdded(this, field, context)) {
                 context.doc().add(field);
             }
@@ -296,6 +302,13 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, XContent
     }
 
     protected abstract Fieldable parseCreateField(ParseContext context) throws IOException;
+
+    /**
+     * Derived classes can override it to specify that boost value is set by derived classes.
+     */
+    protected boolean customBoost() {
+        return false;
+    }
 
     @Override public void traverse(FieldMapperListener fieldMapperListener) {
         fieldMapperListener.fieldMapper(this);
@@ -318,11 +331,19 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, XContent
     }
 
     @Override public Query fieldQuery(String value, QueryParseContext context) {
-        return new TermQuery(new Term(names.indexName(), indexedValue(value)));
+        return new TermQuery(termFactory.createTerm(indexedValue(value)));
+    }
+
+    @Override public Query fuzzyQuery(String value, String minSim, int prefixLength, int maxExpansions) {
+        return new FuzzyQuery(termFactory.createTerm(indexedValue(value)), Float.parseFloat(minSim), prefixLength, maxExpansions);
+    }
+
+    @Override public Query fuzzyQuery(String value, double minSim, int prefixLength, int maxExpansions) {
+        return new FuzzyQuery(termFactory.createTerm(value), (float) minSim, prefixLength, maxExpansions);
     }
 
     @Override public Filter fieldFilter(String value) {
-        return new TermFilter(new Term(names.indexName(), indexedValue(value)));
+        return new TermFilter(termFactory.createTerm(indexedValue(value)));
     }
 
     @Override public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {

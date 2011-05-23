@@ -68,6 +68,18 @@ public class AwsS3Service extends AbstractLifecycleComponent<AwsS3Service> {
             throw new ElasticSearchIllegalArgumentException("No s3 secret_key defined for s3 gateway");
         }
 
+        String proxyHost = componentSettings.get("proxy_host");
+        if (proxyHost != null) {
+            String portString = componentSettings.get("proxy_port", "80");
+            Integer proxyPort;
+            try {
+                proxyPort = Integer.parseInt(portString, 10);
+            } catch (NumberFormatException ex) {
+                throw new ElasticSearchIllegalArgumentException("The configured proxy port value [" + portString + "] is invalid", ex);
+            }
+            clientConfiguration.withProxyHost(proxyHost).setProxyPort(proxyPort);
+        }
+
         this.client = new AmazonS3Client(new BasicAWSCredentials(account, key), clientConfiguration);
 
         if (componentSettings.get("s3.endpoint") != null) {

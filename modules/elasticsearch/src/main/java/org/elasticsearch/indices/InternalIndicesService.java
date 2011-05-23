@@ -36,6 +36,7 @@ import org.elasticsearch.common.util.concurrent.ThreadSafe;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.gateway.Gateway;
 import org.elasticsearch.index.*;
+import org.elasticsearch.index.aliases.IndexAliasesServiceModule;
 import org.elasticsearch.index.analysis.AnalysisModule;
 import org.elasticsearch.index.analysis.AnalysisService;
 import org.elasticsearch.index.cache.CacheStats;
@@ -52,6 +53,7 @@ import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.percolator.PercolatorModule;
 import org.elasticsearch.index.percolator.PercolatorService;
 import org.elasticsearch.index.query.IndexQueryParserModule;
+import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.index.service.InternalIndexService;
 import org.elasticsearch.index.settings.IndexSettingsModule;
@@ -241,6 +243,7 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
         modules.add(new IndexCacheModule(indexSettings));
         modules.add(new IndexQueryParserModule(indexSettings));
         modules.add(new MapperServiceModule());
+        modules.add(new IndexAliasesServiceModule());
         modules.add(new IndexGatewayModule(indexSettings, injector.getInstance(Gateway.class)));
         modules.add(new IndexModule());
         modules.add(new PercolatorModule());
@@ -302,6 +305,7 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
 
         indexInjector.getInstance(IndexGateway.class).close(delete);
         indexInjector.getInstance(MapperService.class).close();
+        indexInjector.getInstance(IndexQueryParserService.class).close();
 
         Injectors.close(injector);
 

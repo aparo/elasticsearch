@@ -119,7 +119,7 @@ public class ObjectMapper implements XContentMapper, IncludeInAllMapper {
             context.path().pathType(origPathType);
             context.path().remove();
 
-            objectMapper.includeInAll(includeInAll);
+            objectMapper.includeInAllIfNotSet(includeInAll);
 
             return (Y) objectMapper;
         }
@@ -252,9 +252,21 @@ public class ObjectMapper implements XContentMapper, IncludeInAllMapper {
         }
     }
 
+    @Override public void includeInAllIfNotSet(Boolean includeInAll) {
+        if (this.includeInAll == null) {
+            this.includeInAll = includeInAll;
+        }
+        // when called from outside, apply this on all the inner mappers
+        for (XContentMapper mapper : mappers.values()) {
+            if (mapper instanceof IncludeInAllMapper) {
+                ((IncludeInAllMapper) mapper).includeInAllIfNotSet(includeInAll);
+            }
+        }
+    }
+
     public ObjectMapper putMapper(XContentMapper mapper) {
         if (mapper instanceof IncludeInAllMapper) {
-            ((IncludeInAllMapper) mapper).includeInAll(includeInAll);
+            ((IncludeInAllMapper) mapper).includeInAllIfNotSet(includeInAll);
         }
         synchronized (mutex) {
             mappers = newMapBuilder(mappers).put(mapper.name(), mapper).immutableMap();
@@ -324,7 +336,7 @@ public class ObjectMapper implements XContentMapper, IncludeInAllMapper {
         }
     }
 
-    private void serializeObject(ParseContext context, String currentFieldName) throws IOException {
+    private void serializeObject(final ParseContext context, String currentFieldName) throws IOException {
         context.path().add(currentFieldName);
 
         XContentMapper objectMapper = mappers.get(currentFieldName);
@@ -354,6 +366,14 @@ public class ObjectMapper implements XContentMapper, IncludeInAllMapper {
                         BuilderContext builderContext = new BuilderContext(context.path());
                         objectMapper = builder.build(builderContext);
                         putMapper(objectMapper);
+
+                        // we need to traverse in case we have a dynamic template and need to add field mappers
+                        // introduced by it
+                        objectMapper.traverse(new FieldMapperListener() {
+                            @Override public void fieldMapper(FieldMapper fieldMapper) {
+                                context.docMapper().addFieldMapper(fieldMapper);
+                            }
+                        });
 
                         // now re add it and parse...
                         context.path().add(currentFieldName);

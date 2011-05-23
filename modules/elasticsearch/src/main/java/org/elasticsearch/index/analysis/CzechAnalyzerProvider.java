@@ -19,14 +19,14 @@
 
 package org.elasticsearch.index.analysis;
 
+import org.apache.lucene.analysis.CharArraySet;
 import org.apache.lucene.analysis.cz.CzechAnalyzer;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.settings.IndexSettings;
-
-import java.util.Set;
 
 /**
  * @author kimchy (shay.banon)
@@ -35,11 +35,11 @@ public class CzechAnalyzerProvider extends AbstractIndexAnalyzerProvider<CzechAn
 
     private final CzechAnalyzer analyzer;
 
-    @Inject public CzechAnalyzerProvider(Index index, @IndexSettings Settings indexSettings, @Assisted String name, @Assisted Settings settings) {
+    @Inject public CzechAnalyzerProvider(Index index, @IndexSettings Settings indexSettings, Environment env, @Assisted String name, @Assisted Settings settings) {
         super(index, indexSettings, name, settings);
-        Set<?> stopWords = Analysis.parseStopWords(settings, CzechAnalyzer.getDefaultStopSet());
-
-        analyzer = new CzechAnalyzer(version, stopWords);
+        analyzer = new CzechAnalyzer(version,
+                Analysis.parseStopWords(env, settings, CzechAnalyzer.getDefaultStopSet()),
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
     }
 
     @Override public CzechAnalyzer get() {

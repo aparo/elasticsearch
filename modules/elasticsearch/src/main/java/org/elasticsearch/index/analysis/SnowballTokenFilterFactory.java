@@ -21,6 +21,7 @@ package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.snowball.SnowballFilter;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
 import org.elasticsearch.common.settings.Settings;
@@ -39,7 +40,7 @@ public class SnowballTokenFilterFactory extends AbstractTokenFilterFactory {
 
     @Inject public SnowballTokenFilterFactory(Index index, @IndexSettings Settings indexSettings, @Assisted String name, @Assisted Settings settings) {
         super(index, indexSettings, name, settings);
-        this.language = settings.get("language", settings.get("name", "English"));
+        this.language = Strings.capitalize(settings.get("language", settings.get("name", "English")));
     }
 
     @Override public TokenStream create(TokenStream tokenStream) {

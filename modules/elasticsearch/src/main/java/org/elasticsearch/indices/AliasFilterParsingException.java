@@ -17,27 +17,23 @@
  * under the License.
  */
 
-package org.elasticsearch.index.translog.fs;
+package org.elasticsearch.indices;
 
-import org.elasticsearch.common.io.FileSystemUtils;
-import org.elasticsearch.index.translog.AbstractSimpleTranslogTests;
-import org.elasticsearch.index.translog.Translog;
-import org.testng.annotations.AfterClass;
-
-import java.io.File;
-
-import static org.elasticsearch.common.settings.ImmutableSettings.Builder.*;
+import org.elasticsearch.index.Index;
+import org.elasticsearch.index.IndexException;
 
 /**
- * @author kimchy (shay.banon)
+ * @author imotov
  */
-public class FsStreamSimpleTranslogTests extends AbstractSimpleTranslogTests {
+public class AliasFilterParsingException extends IndexException {
 
-    @Override protected Translog create() {
-        return new FsTranslog(shardId, EMPTY_SETTINGS, new File("work/fs-translog"), true);
+    public AliasFilterParsingException(Index index, String name, String desc) {
+        super(index, "[" + name + "], " + desc);
     }
 
-    @AfterClass public void cleanup() {
-        FileSystemUtils.deleteRecursively(new File("work/fs-translog"), true);
+    public AliasFilterParsingException(Index index, String name, String desc, Throwable ex) {
+        super(index, "[" + name + "], " + desc, ex);
     }
+
+
 }
