@@ -60,6 +60,12 @@ public interface Transport extends LifecycleComponent<Transport> {
     void connectToNode(DiscoveryNode node) throws ConnectTransportException;
 
     /**
+     * Connects to a node in a light manner. Used when just connecting for ping and then
+     * disconnecting.
+     */
+    void connectToNodeLight(DiscoveryNode node) throws ConnectTransportException;
+
+    /**
      * Disconnected from the given node, if not connected, will do nothing.
      */
     void disconnectFromNode(DiscoveryNode node);
@@ -68,4 +74,6 @@ public interface Transport extends LifecycleComponent<Transport> {
      * Sends the request to the node.
      */
     <T extends Streamable> void sendRequest(DiscoveryNode node, long requestId, String action, Streamable message, TransportRequestOptions options) throws IOException, TransportException;
+
+    TransportStats stats();
 }

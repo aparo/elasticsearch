@@ -23,7 +23,7 @@ import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.index.search.geo.GeoDistance;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
@@ -212,8 +212,17 @@ public class GeoDistanceFacetBuilder extends AbstractFacetBuilder {
         return this;
     }
 
-    public GeoDistanceFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public GeoDistanceFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
+        return this;
+    }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public GeoDistanceFacetBuilder nested(String nested) {
+        this.nested = nested;
         return this;
     }
 

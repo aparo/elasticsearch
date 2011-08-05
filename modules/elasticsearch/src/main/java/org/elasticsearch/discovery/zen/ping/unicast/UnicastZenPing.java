@@ -32,18 +32,35 @@ import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+import org.elasticsearch.common.util.concurrent.DynamicExecutors;
+import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.jsr166y.LinkedTransferQueue;
 import org.elasticsearch.discovery.zen.DiscoveryNodesProvider;
 import org.elasticsearch.discovery.zen.ping.ZenPing;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.*;
+import org.elasticsearch.transport.BaseTransportRequestHandler;
+import org.elasticsearch.transport.BaseTransportResponseHandler;
+import org.elasticsearch.transport.ConnectTransportException;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportException;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.*;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -66,6 +83,7 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
 
     private final ClusterName clusterName;
 
+    private final int concurrentConnects;
 
     private final DiscoveryNode[] nodes;
 
@@ -90,8 +108,14 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
         this.transportService = transportService;
         this.clusterName = clusterName;
 
-        List<String> hosts = Lists.newArrayList(componentSettings.getAsArray("hosts"));
-        logger.debug("using initial hosts {}", hosts);
+        this.concurrentConnects = componentSettings.getAsInt("concurrent_connects", 10);
+        String[] hostArr = componentSettings.getAsArray("hosts");
+        // trim the hosts
+        for (int i = 0; i < hostArr.length; i++) {
+            hostArr[i] = hostArr[i].trim();
+        }
+        List<String> hosts = Lists.newArrayList(hostArr);
+        logger.debug("using initial hosts {}, with concurrent_connects [{}]", hosts, concurrentConnects);
 
         List<DiscoveryNode> nodes = Lists.newArrayList();
         int idCounter = 0;
@@ -151,21 +175,61 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
     }
 
     @Override public void ping(final PingListener listener, final TimeValue timeout) throws ElasticSearchException {
-        final int id = pingIdGenerator.incrementAndGet();
-        receivedResponses.put(id, new ConcurrentHashMap<DiscoveryNode, PingResponse>());
-        sendPings(id, timeout, false);
+        final SendPingsHandler sendPingsHandler = new SendPingsHandler(pingIdGenerator.incrementAndGet());
+        receivedResponses.put(sendPingsHandler.id(), new ConcurrentHashMap<DiscoveryNode, PingResponse>());
+        sendPings(timeout, false, sendPingsHandler);
         threadPool.schedule(timeout, ThreadPool.Names.CACHED, new Runnable() {
             @Override public void run() {
-                sendPings(id, timeout, true);
-                ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.remove(id);
+                sendPings(timeout, true, sendPingsHandler);
+                for (DiscoveryNode node : sendPingsHandler.nodeToDisconnect) {
+                    transportService.disconnectFromNode(node);
+                }
+                ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.remove(sendPingsHandler.id());
+                sendPingsHandler.close();
                 listener.onPing(responses.values().toArray(new PingResponse[responses.size()]));
             }
         });
     }
 
-    private void sendPings(final int id, final TimeValue timeout, boolean wait) {
+    class SendPingsHandler {
+        private final int id;
+        private volatile ExecutorService executor;
+        private final Set<DiscoveryNode> nodeToDisconnect = ConcurrentCollections.newConcurrentSet();
+        private volatile boolean closed;
+
+        SendPingsHandler(int id) {
+            this.id = id;
+        }
+
+        public int id() {
+            return this.id;
+        }
+
+        public boolean isClosed() {
+            return this.closed;
+        }
+
+        public Executor executor() {
+            if (executor == null) {
+                ThreadFactory threadFactory = EsExecutors.daemonThreadFactory(settings, "[unicast_connect]");
+                executor = DynamicExecutors.newScalingThreadPool(1, concurrentConnects, 60000, threadFactory);
+            }
+            return executor;
+        }
+
+        public void close() {
+            closed = true;
+            if (executor != null) {
+                executor.shutdownNow();
+                executor = null;
+            }
+            nodeToDisconnect.clear();
+        }
+    }
+
+    void sendPings(final TimeValue timeout, boolean wait, final SendPingsHandler sendPingsHandler) {
         final UnicastPingRequest pingRequest = new UnicastPingRequest();
-        pingRequest.id = id;
+        pingRequest.id = sendPingsHandler.id();
         pingRequest.timeout = timeout;
         DiscoveryNodes discoNodes = nodesProvider.nodes();
         pingRequest.pingResponse = new PingResponse(discoNodes.localNode(), discoNodes.masterNode(), clusterName);
@@ -178,35 +242,43 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
         final CountDownLatch latch = new CountDownLatch(nodesToPing.size());
         for (final DiscoveryNode node : nodesToPing) {
             // make sure we are connected
-            boolean disconnectX;
+            boolean nodeFoundByAddressX;
             DiscoveryNode nodeToSendX = discoNodes.findByAddress(node.address());
             if (nodeToSendX != null) {
-                disconnectX = false;
+                nodeFoundByAddressX = true;
             } else {
                 nodeToSendX = node;
-                disconnectX = true;
+                nodeFoundByAddressX = false;
             }
             final DiscoveryNode nodeToSend = nodeToSendX;
 
-            final boolean disconnect = disconnectX;
+            final boolean nodeFoundByAddress = nodeFoundByAddressX;
             if (!transportService.nodeConnected(nodeToSend)) {
+                if (sendPingsHandler.isClosed()) {
+                    return;
+                }
+                sendPingsHandler.nodeToDisconnect.add(nodeToSend);
                 // fork the connection to another thread
-                threadPool.cached().execute(new Runnable() {
+                sendPingsHandler.executor().execute(new Runnable() {
                     @Override public void run() {
                         try {
                             // connect to the node, see if we manage to do it, if not, bail
-                            transportService.connectToNode(nodeToSend);
+                            if (!nodeFoundByAddress) {
+                                transportService.connectToNodeLight(nodeToSend);
+                            } else {
+                                transportService.connectToNode(nodeToSend);
+                            }
                             // we are connected, send the ping request
-                            sendPingRequestToNode(id, timeout, pingRequest, latch, node, disconnect, nodeToSend);
+                            sendPingRequestToNode(sendPingsHandler.id(), timeout, pingRequest, latch, node, nodeToSend);
                         } catch (ConnectTransportException e) {
                             // can't connect to the node
-                            logger.trace("[{}] failed to connect to {}", e, id, nodeToSend);
+                            logger.trace("[{}] failed to connect to {}", e, sendPingsHandler.id(), nodeToSend);
                             latch.countDown();
                         }
                     }
                 });
             } else {
-                sendPingRequestToNode(id, timeout, pingRequest, latch, node, disconnectX, nodeToSend);
+                sendPingRequestToNode(sendPingsHandler.id(), timeout, pingRequest, latch, node, nodeToSend);
             }
         }
         if (wait) {
@@ -218,8 +290,8 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
         }
     }
 
-    private void sendPingRequestToNode(final int id, TimeValue timeout, UnicastPingRequest pingRequest, final CountDownLatch latch, final DiscoveryNode node, final boolean disconnect, final DiscoveryNode nodeToSend) {
-        logger.trace("[{}] connecting to {}, disconnect[{}]", id, nodeToSend, disconnect);
+    private void sendPingRequestToNode(final int id, TimeValue timeout, UnicastPingRequest pingRequest, final CountDownLatch latch, final DiscoveryNode node, final DiscoveryNode nodeToSend) {
+        logger.trace("[{}] connecting to {}", id, nodeToSend);
         transportService.sendRequest(nodeToSend, UnicastPingRequestHandler.ACTION, pingRequest, TransportRequestOptions.options().withTimeout((long) (timeout.millis() * 1.25)), new BaseTransportResponseHandler<UnicastPingResponse>() {
 
             @Override public UnicastPingResponse newInstance() {
@@ -235,21 +307,18 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
                 try {
                     DiscoveryNodes discoveryNodes = nodesProvider.nodes();
                     for (PingResponse pingResponse : response.pingResponses) {
-                        if (disconnect) {
-                            transportService.disconnectFromNode(nodeToSend);
-                        }
                         if (pingResponse.target().id().equals(discoveryNodes.localNodeId())) {
                             // that's us, ignore
                             continue;
                         }
                         if (!pingResponse.clusterName().equals(clusterName)) {
                             // not part of the cluster
-                            logger.debug("[{}] filtering out response from {}, not same cluster_name [{}]", pingResponse.target(), pingResponse.clusterName().value());
-                            return;
+                            logger.debug("[{}] filtering out response from {}, not same cluster_name [{}]", id, pingResponse.target(), pingResponse.clusterName().value());
+                            continue;
                         }
                         ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.get(response.id);
                         if (responses == null) {
-                            logger.warn("received ping response with no matching id [{}]", response.id);
+                            logger.warn("received ping response {} with no matching id [{}]", pingResponse, response.id);
                         } else {
                             responses.put(pingResponse.target(), pingResponse);
                         }
@@ -265,9 +334,6 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
                     // ok, not connected...
                     logger.trace("failed to connect to {}", exp, nodeToSend);
                 } else {
-                    if (disconnect) {
-                        transportService.disconnectFromNode(nodeToSend);
-                    }
                     logger.warn("failed to send ping to [{}]", exp, node);
                 }
             }

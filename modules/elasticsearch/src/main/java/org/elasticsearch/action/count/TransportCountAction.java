@@ -38,6 +38,8 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 import static org.elasticsearch.common.collect.Lists.*;
@@ -75,19 +77,21 @@ public class TransportCountAction extends TransportBroadcastOperationAction<Coun
     }
 
     @Override protected ShardCountRequest newShardRequest(ShardRouting shard, CountRequest request) {
-        return new ShardCountRequest(shard.index(), shard.id(), request);
+        String[] filteringAliases = clusterService.state().metaData().filteringAliases(shard.index(), request.indices());
+        return new ShardCountRequest(shard.index(), shard.id(), filteringAliases, request);
     }
 
     @Override protected ShardCountResponse newShardResponse() {
         return new ShardCountResponse();
     }
 
-    @Override protected GroupShardsIterator shards(CountRequest request, ClusterState clusterState) {
-        return clusterService.operationRouting().searchShards(clusterState, request.indices(), request.queryHint(), request.routing(), null);
+    @Override protected GroupShardsIterator shards(CountRequest request, String[] concreteIndices, ClusterState clusterState) {
+        Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
+        return clusterService.operationRouting().searchShards(clusterState, request.indices(), concreteIndices, request.queryHint(), routingMap, null);
     }
 
-    @Override protected void checkBlock(CountRequest request, ClusterState state) {
-        for (String index : request.indices()) {
+    @Override protected void checkBlock(CountRequest request, String[] concreteIndices, ClusterState state) {
+        for (String index : concreteIndices) {
             state.blocks().indexBlocked(ClusterBlockLevel.READ, index);
         }
     }
@@ -118,7 +122,7 @@ public class TransportCountAction extends TransportBroadcastOperationAction<Coun
     @Override protected ShardCountResponse shardOperation(ShardCountRequest request) throws ElasticSearchException {
         IndexShard indexShard = indicesService.indexServiceSafe(request.index()).shardSafe(request.shardId());
         long count = indexShard.count(request.minScore(), request.querySource(), request.querySourceOffset(), request.querySourceLength(),
-                request.queryParserName(), request.types());
+                request.filteringAliases(), request.types());
         return new ShardCountResponse(request.index(), request.shardId(), count);
     }
 }

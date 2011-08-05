@@ -21,11 +21,20 @@ package org.elasticsearch.search.internal;
 
 import org.apache.lucene.index.ExtendedIndexSearcher;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.TimeLimitingCollector;
+import org.apache.lucene.search.TopFieldCollector;
+import org.apache.lucene.search.TopFieldDocs;
+import org.apache.lucene.search.Weight;
+import org.elasticsearch.common.collect.ImmutableList;
 import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.lucene.MinimumScoreCollector;
 import org.elasticsearch.common.lucene.MultiCollector;
+import org.elasticsearch.common.lucene.search.AndFilter;
 import org.elasticsearch.common.lucene.search.FilteredCollector;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.search.dfs.CachedDfSource;
@@ -121,11 +130,12 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
         }
     }
 
-    @Override protected Weight createWeight(Query query) throws IOException {
-        if (dfSource == null) {
-            return super.createWeight(query);
+    @Override public Weight createNormalizedWeight(Query query) throws IOException {
+        // if its the main query, use we have dfs data, only then do it
+        if (dfSource != null && (query == searchContext.query() || query == searchContext.parsedQuery().query())) {
+            return dfSource.createNormalizedWeight(query);
         }
-        return query.weight(dfSource);
+        return super.createNormalizedWeight(query);
     }
 
     // override from the Searcher to allow to control if scores will be tracked or not
@@ -165,16 +175,27 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
             collector = new MinimumScoreCollector(collector, searchContext.minimumScore());
         }
 
+        Filter combinedFilter;
+        if (filter == null) {
+            combinedFilter = searchContext.aliasFilter();
+        } else {
+            if (searchContext.aliasFilter() != null) {
+                combinedFilter = new AndFilter(ImmutableList.of(filter, searchContext.aliasFilter()));
+            } else {
+                combinedFilter = filter;
+            }
+        }
+
         // we only compute the doc id set once since within a context, we execute the same query always...
         if (searchContext.timeout() != null) {
             searchContext.queryResult().searchTimedOut(false);
             try {
-                super.search(weight, filter, collector);
+                super.search(weight, combinedFilter, collector);
             } catch (TimeLimitingCollector.TimeExceededException e) {
                 searchContext.queryResult().searchTimedOut(true);
             }
         } else {
-            super.search(weight, filter, collector);
+            super.search(weight, combinedFilter, collector);
         }
     }
 }

@@ -41,20 +41,21 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
     private int querySourceLength;
 
     private String[] types = Strings.EMPTY_ARRAY;
-    @Nullable private String queryParserName;
+
+    @Nullable private String[] filteringAliases;
 
     ShardCountRequest() {
 
     }
 
-    public ShardCountRequest(String index, int shardId, CountRequest request) {
+    public ShardCountRequest(String index, int shardId, @Nullable String[] filteringAliases, CountRequest request) {
         super(index, shardId);
         this.minScore = request.minScore();
         this.querySource = request.querySource();
         this.querySourceOffset = request.querySourceOffset();
         this.querySourceLength = request.querySourceLength();
-        this.queryParserName = request.queryParserName();
         this.types = request.types();
+        this.filteringAliases = filteringAliases;
     }
 
     public float minScore() {
@@ -73,12 +74,12 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
         return querySourceLength;
     }
 
-    public String queryParserName() {
-        return queryParserName;
-    }
-
     public String[] types() {
         return this.types;
+    }
+
+    public String[] filteringAliases() {
+        return filteringAliases;
     }
 
     @Override public void readFrom(StreamInput in) throws IOException {
@@ -88,14 +89,18 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
         querySourceOffset = 0;
         querySource = new byte[querySourceLength];
         in.readFully(querySource);
-        if (in.readBoolean()) {
-            queryParserName = in.readUTF();
-        }
         int typesSize = in.readVInt();
         if (typesSize > 0) {
             types = new String[typesSize];
             for (int i = 0; i < typesSize; i++) {
                 types[i] = in.readUTF();
+            }
+        }
+        int aliasesSize = in.readVInt();
+        if (aliasesSize > 0) {
+            filteringAliases = new String[aliasesSize];
+            for (int i = 0; i < aliasesSize; i++) {
+                filteringAliases[i] = in.readUTF();
             }
         }
     }
@@ -105,15 +110,17 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
         out.writeFloat(minScore);
         out.writeVInt(querySourceLength);
         out.writeBytes(querySource, querySourceOffset, querySourceLength);
-        if (queryParserName == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeUTF(queryParserName);
-        }
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);
+        }
+        if (filteringAliases != null) {
+            out.writeVInt(filteringAliases.length);
+            for (String alias : filteringAliases) {
+                out.writeUTF(alias);
+            }
+        } else {
+            out.writeVInt(0);
         }
     }
 }

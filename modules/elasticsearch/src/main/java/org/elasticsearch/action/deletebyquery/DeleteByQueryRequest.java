@@ -30,7 +30,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Required;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.io.FastByteArrayOutputStream;
+import org.elasticsearch.common.io.BytesStream;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.TimeValue;
@@ -66,7 +66,6 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
     private int querySourceLength;
     private boolean querySourceUnsafe;
 
-    private String queryParserName;
     private String[] types = Strings.EMPTY_ARRAY;
     @Nullable private String routing;
 
@@ -120,10 +119,10 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
     /**
      * The query source to execute.
      *
-     * @see org.elasticsearch.index.query.xcontent.QueryBuilders
+     * @see org.elasticsearch.index.query.QueryBuilders
      */
     @Required public DeleteByQueryRequest query(QueryBuilder queryBuilder) {
-        FastByteArrayOutputStream bos = queryBuilder.buildAsUnsafeBytes();
+        BytesStream bos = queryBuilder.buildAsUnsafeBytes();
         this.querySource = bos.unsafeByteArray();
         this.querySourceOffset = 0;
         this.querySourceLength = bos.size();
@@ -188,21 +187,6 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
     }
 
     /**
-     * The query parse name to use. If not set, will use the default one.
-     */
-    String queryParserName() {
-        return queryParserName;
-    }
-
-    /**
-     * The query parse name to use. If not set, will use the default one.
-     */
-    public DeleteByQueryRequest queryParserName(String queryParserName) {
-        this.queryParserName = queryParserName;
-        return this;
-    }
-
-    /**
      * The types of documents the query will run against. Defaults to all types.
      */
     String[] types() {
@@ -212,7 +196,7 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
     /**
      * A comma separated list of routing values to control the shards the search will be executed on.
      */
-    public String routing() {
+    @Override public String routing() {
         return this.routing;
     }
 
@@ -287,10 +271,6 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
         in.readFully(querySource);
 
         if (in.readBoolean()) {
-            queryParserName = in.readUTF();
-        }
-
-        if (in.readBoolean()) {
             routing = in.readUTF();
         }
 
@@ -311,12 +291,6 @@ public class DeleteByQueryRequest extends IndicesReplicationOperationRequest {
         out.writeVInt(querySourceLength);
         out.writeBytes(querySource, querySourceOffset, querySourceLength);
 
-        if (queryParserName == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeUTF(queryParserName);
-        }
         if (routing == null) {
             out.writeBoolean(false);
         } else {

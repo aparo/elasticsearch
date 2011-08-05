@@ -42,7 +42,6 @@ import static org.elasticsearch.search.Scroll.*;
  *  from : 0, size : 20, (optional, can be set on the request)
  *  sort : { "name.first" : {}, "name.last" : { reverse : true } }
  *  fields : [ "name.first", "name.last" ]
- *  queryParserName : "",
  *  query : { ... }
  *  facets : {
  *      "facet1" : {
@@ -69,6 +68,8 @@ public class InternalSearchRequest implements Streamable {
     private TimeValue timeout;
 
     private String[] types = Strings.EMPTY_ARRAY;
+
+    private String[] filteringAliases;
 
     private byte[] source;
     private int sourceOffset;
@@ -168,6 +169,14 @@ public class InternalSearchRequest implements Streamable {
         return this;
     }
 
+    public String[] filteringAliases() {
+        return filteringAliases;
+    }
+
+    public void filteringAliases(String[] filteringAliases) {
+        this.filteringAliases = filteringAliases;
+    }
+
     public String[] types() {
         return types;
     }
@@ -210,6 +219,15 @@ public class InternalSearchRequest implements Streamable {
                 types[i] = in.readUTF();
             }
         }
+        int indicesSize = in.readVInt();
+        if (indicesSize > 0) {
+            filteringAliases = new String[indicesSize];
+            for (int i = 0; i < indicesSize; i++) {
+                filteringAliases[i] = in.readUTF();
+            }
+        } else {
+            filteringAliases = null;
+        }
     }
 
     @Override public void writeTo(StreamOutput out) throws IOException {
@@ -244,6 +262,14 @@ public class InternalSearchRequest implements Streamable {
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);
+        }
+        if (filteringAliases != null) {
+            out.writeVInt(filteringAliases.length);
+            for (String index : filteringAliases) {
+                out.writeUTF(index);
+            }
+        } else {
+            out.writeVInt(0);
         }
     }
 }

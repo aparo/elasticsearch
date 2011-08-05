@@ -21,6 +21,7 @@ package org.apache.lucene.queryParser;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.search.FuzzyQuery;
+import org.apache.lucene.search.MultiTermQuery;
 
 /**
  * @author kimchy (shay.banon)
@@ -31,6 +32,7 @@ public class QueryParserSettings {
     private String defaultField;
     private float boost = 1.0f;
     private MapperQueryParser.Operator defaultOperator = QueryParser.Operator.OR;
+    private boolean autoGeneratePhraseQueries = false;
     private boolean allowLeadingWildcard = true;
     private boolean lowercaseExpandedTerms = true;
     private boolean enablePositionIncrements = true;
@@ -40,6 +42,7 @@ public class QueryParserSettings {
     private boolean analyzeWildcard = false;
     private boolean escape = false;
     private Analyzer analyzer = null;
+    private MultiTermQuery.RewriteMethod rewriteMethod = MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT;
 
     public String queryString() {
         return queryString;
@@ -71,6 +74,14 @@ public class QueryParserSettings {
 
     public void defaultOperator(QueryParser.Operator defaultOperator) {
         this.defaultOperator = defaultOperator;
+    }
+
+    public boolean autoGeneratePhraseQueries() {
+        return autoGeneratePhraseQueries;
+    }
+
+    public void autoGeneratePhraseQueries(boolean autoGeneratePhraseQueries) {
+        this.autoGeneratePhraseQueries = autoGeneratePhraseQueries;
     }
 
     public boolean allowLeadingWildcard() {
@@ -145,12 +156,21 @@ public class QueryParserSettings {
         this.analyzeWildcard = analyzeWildcard;
     }
 
+    public MultiTermQuery.RewriteMethod rewriteMethod() {
+        return this.rewriteMethod;
+    }
+
+    public void rewriteMethod(MultiTermQuery.RewriteMethod rewriteMethod) {
+        this.rewriteMethod = rewriteMethod;
+    }
+
     @Override public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
         QueryParserSettings that = (QueryParserSettings) o;
 
+        if (autoGeneratePhraseQueries != that.autoGeneratePhraseQueries()) return false;
         if (allowLeadingWildcard != that.allowLeadingWildcard) return false;
         if (Float.compare(that.boost, boost) != 0) return false;
         if (enablePositionIncrements != that.enablePositionIncrements) return false;
@@ -173,6 +193,7 @@ public class QueryParserSettings {
         result = 31 * result + (defaultField != null ? defaultField.hashCode() : 0);
         result = 31 * result + (boost != +0.0f ? Float.floatToIntBits(boost) : 0);
         result = 31 * result + (defaultOperator != null ? defaultOperator.hashCode() : 0);
+        result = 31 * result + (autoGeneratePhraseQueries ? 1 : 0);
         result = 31 * result + (allowLeadingWildcard ? 1 : 0);
         result = 31 * result + (lowercaseExpandedTerms ? 1 : 0);
         result = 31 * result + (enablePositionIncrements ? 1 : 0);

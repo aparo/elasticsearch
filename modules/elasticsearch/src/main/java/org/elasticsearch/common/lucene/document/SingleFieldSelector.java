@@ -19,13 +19,12 @@
 
 package org.elasticsearch.common.lucene.document;
 
-import org.apache.lucene.document.FieldSelector;
 import org.apache.lucene.document.FieldSelectorResult;
 
 /**
  * @author kimchy (shay.banon)
  */
-public class SingleFieldSelector implements FieldSelector {
+public class SingleFieldSelector implements ResetFieldSelector {
 
     private String name;
 
@@ -45,5 +44,8 @@ public class SingleFieldSelector implements FieldSelector {
             return FieldSelectorResult.LOAD;
         }
         return FieldSelectorResult.NO_LOAD;
+    }
+
+    @Override public void reset() {
     }
 }

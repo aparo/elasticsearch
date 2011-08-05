@@ -31,6 +31,8 @@ import org.elasticsearch.action.deletebyquery.DeleteByQueryRequest;
 import org.elasticsearch.action.deletebyquery.DeleteByQueryResponse;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.get.MultiGetRequest;
+import org.elasticsearch.action.get.MultiGetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.mlt.MoreLikeThisRequest;
@@ -44,7 +46,9 @@ import org.elasticsearch.client.action.count.CountRequestBuilder;
 import org.elasticsearch.client.action.delete.DeleteRequestBuilder;
 import org.elasticsearch.client.action.deletebyquery.DeleteByQueryRequestBuilder;
 import org.elasticsearch.client.action.get.GetRequestBuilder;
+import org.elasticsearch.client.action.get.MultiGetRequestBuilder;
 import org.elasticsearch.client.action.index.IndexRequestBuilder;
+import org.elasticsearch.client.action.mlt.MoreLikeThisRequestBuilder;
 import org.elasticsearch.client.action.percolate.PercolateRequestBuilder;
 import org.elasticsearch.client.action.search.SearchRequestBuilder;
 import org.elasticsearch.client.action.search.SearchScrollRequestBuilder;
@@ -228,9 +232,24 @@ public interface Client {
     GetRequestBuilder prepareGet();
 
     /**
-     * Gets the document that was indexed from an index with a type and id.
+     * Gets the document that was indexed from an index with a type (optional) and id.
      */
-    GetRequestBuilder prepareGet(String index, String type, String id);
+    GetRequestBuilder prepareGet(String index, @Nullable String type, String id);
+
+    /**
+     * Multi get documents.
+     */
+    ActionFuture<MultiGetResponse> multiGet(MultiGetRequest request);
+
+    /**
+     * Multi get documents.
+     */
+    void multiGet(MultiGetRequest request, ActionListener<MultiGetResponse> listener);
+
+    /**
+     * Multi get documents.
+     */
+    MultiGetRequestBuilder prepareMultiGet();
 
     /**
      * A count of all the documents matching a specific query.
@@ -316,6 +335,15 @@ public interface Client {
      * @param listener A listener to be notified of the result
      */
     void moreLikeThis(MoreLikeThisRequest request, ActionListener<SearchResponse> listener);
+
+    /**
+     * A more like this action to search for documents that are "like" a specific document.
+     *
+     * @param index The index to load the document from
+     * @param type  The type of the document
+     * @param id    The id of the document
+     */
+    MoreLikeThisRequestBuilder prepareMoreLikeThis(String index, String type, String id);
 
     /**
      * Percolates a request returning the matches documents.

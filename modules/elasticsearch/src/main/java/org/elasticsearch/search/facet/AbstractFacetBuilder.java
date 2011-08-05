@@ -21,7 +21,7 @@ package org.elasticsearch.search.facet;
 
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.search.internal.ContextIndexSearcher;
 
 import java.io.IOException;
@@ -35,14 +35,25 @@ public abstract class AbstractFacetBuilder implements ToXContent {
 
     protected String scope;
 
-    protected XContentFilterBuilder facetFilter;
+    protected FilterBuilder facetFilter;
+
+    protected String nested;
 
     protected AbstractFacetBuilder(String name) {
         this.name = name;
     }
 
-    public AbstractFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public AbstractFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
+        return this;
+    }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public AbstractFacetBuilder nested(String nested) {
+        this.nested = nested;
         return this;
     }
 
@@ -66,6 +77,10 @@ public abstract class AbstractFacetBuilder implements ToXContent {
         if (facetFilter != null) {
             builder.field("facet_filter");
             facetFilter.toXContent(builder, params);
+        }
+
+        if (nested != null) {
+            builder.field("nested", nested);
         }
 
         if (scope != null) {

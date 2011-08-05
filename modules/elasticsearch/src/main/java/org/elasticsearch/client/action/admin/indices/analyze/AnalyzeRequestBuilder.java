@@ -56,4 +56,9 @@ public class AnalyzeRequestBuilder extends BaseIndicesRequestBuilder<AnalyzeRequ
     @Override protected void doExecute(ActionListener<AnalyzeResponse> listener) {
         client.analyze(request, listener);
     }
+
+    public AnalyzeRequestBuilder setField(String field) {
+        request.field(field);
+        return this;
+    }
 }

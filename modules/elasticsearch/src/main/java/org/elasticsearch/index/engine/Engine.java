@@ -24,8 +24,10 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.index.ExtendedIndexSearcher;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.ElasticSearchException;
+import org.elasticsearch.common.BytesHolder;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.CloseableComponent;
 import org.elasticsearch.common.lease.Releasable;
@@ -37,10 +39,12 @@ import org.elasticsearch.index.VersionType;
 import org.elasticsearch.index.deletionpolicy.SnapshotIndexCommit;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.ParsedDocument;
-import org.elasticsearch.index.mapper.UidFieldMapper;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.shard.IndexShardComponent;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
+
+import java.util.List;
 
 /**
  * @author kimchy (shay.banon)
@@ -75,7 +79,11 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
     void delete(DeleteByQuery delete) throws EngineException;
 
+    GetResult get(Get get) throws EngineException;
+
     Searcher searcher() throws EngineException;
+
+    List<Segment> segments();
 
     /**
      * Returns <tt>true</tt> if a refresh is really needed.
@@ -296,7 +304,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
         ParsedDocument parsedDoc();
 
-        Document doc();
+        List<Document> docs();
 
         DocumentMapper docMapper();
     }
@@ -374,8 +382,8 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.doc.parent();
         }
 
-        public Document doc() {
-            return this.doc.doc();
+        public List<Document> docs() {
+            return this.doc.docs();
         }
 
         public Analyzer analyzer() {
@@ -387,7 +395,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         }
 
         public UidField uidField() {
-            return (UidField) doc().getFieldable(UidFieldMapper.NAME);
+            return (UidField) doc.rootDoc().getFieldable(UidFieldMapper.NAME);
         }
     }
 
@@ -448,8 +456,8 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.versionType;
         }
 
-        public Document doc() {
-            return this.doc.doc();
+        public List<Document> docs() {
+            return this.doc.docs();
         }
 
         public Analyzer analyzer() {
@@ -477,7 +485,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         }
 
         public UidField uidField() {
-            return (UidField) doc().getFieldable(UidFieldMapper.NAME);
+            return (UidField) doc.rootDoc().getFieldable(UidFieldMapper.NAME);
         }
     }
 
@@ -551,19 +559,17 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
     static class DeleteByQuery {
         private final Query query;
-        private final String queryParserName;
         private final byte[] source;
+        private final String[] filteringAliases;
+        private final Filter aliasFilter;
         private final String[] types;
 
-        public DeleteByQuery(Query query, byte[] source, @Nullable String queryParserName, String... types) {
+        public DeleteByQuery(Query query, byte[] source, @Nullable String[] filteringAliases, @Nullable Filter aliasFilter, String... types) {
             this.query = query;
             this.source = source;
-            this.queryParserName = queryParserName;
             this.types = types;
-        }
-
-        public String queryParserName() {
-            return this.queryParserName;
+            this.filteringAliases = filteringAliases;
+            this.aliasFilter = aliasFilter;
         }
 
         public Query query() {
@@ -577,5 +583,95 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         public String[] types() {
             return this.types;
         }
+
+        public String[] filteringAliases() {
+            return filteringAliases;
+        }
+
+        public Filter aliasFilter() {
+            return aliasFilter;
+        }
     }
+
+
+    static class Get {
+        private final boolean realtime;
+        private final Term uid;
+        private boolean loadSource = true;
+
+        public Get(boolean realtime, Term uid) {
+            this.realtime = realtime;
+            this.uid = uid;
+        }
+
+        public boolean realtime() {
+            return this.realtime;
+        }
+
+        public Term uid() {
+            return uid;
+        }
+
+        public boolean loadSource() {
+            return this.loadSource;
+        }
+
+        public Get loadSource(boolean loadSource) {
+            this.loadSource = loadSource;
+            return this;
+        }
+    }
+
+    static class GetResult {
+        private final boolean exists;
+        private final long version;
+        private final BytesHolder source;
+        private final UidField.DocIdAndVersion docIdAndVersion;
+        private final Searcher searcher;
+
+        public static final GetResult NOT_EXISTS = new GetResult(false, -1, null);
+
+        public GetResult(boolean exists, long version, @Nullable BytesHolder source) {
+            this.source = source;
+            this.exists = exists;
+            this.version = version;
+            this.docIdAndVersion = null;
+            this.searcher = null;
+        }
+
+        public GetResult(Searcher searcher, UidField.DocIdAndVersion docIdAndVersion) {
+            this.exists = true;
+            this.source = null;
+            this.version = docIdAndVersion.version;
+            this.docIdAndVersion = docIdAndVersion;
+            this.searcher = searcher;
+        }
+
+        public boolean exists() {
+            return exists;
+        }
+
+        public long version() {
+            return this.version;
+        }
+
+        @Nullable public BytesHolder source() {
+            return source;
+        }
+
+        public Searcher searcher() {
+            return this.searcher;
+        }
+
+        public UidField.DocIdAndVersion docIdAndVersion() {
+            return docIdAndVersion;
+        }
+
+        public void release() {
+            if (searcher != null) {
+                searcher.release();
+            }
+        }
+    }
+
 }

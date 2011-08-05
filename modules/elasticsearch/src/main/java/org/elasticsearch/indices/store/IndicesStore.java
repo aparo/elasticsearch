@@ -25,6 +25,7 @@ import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.IndexShardRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -32,6 +33,7 @@ import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.NodeEnvironment;
 import org.elasticsearch.index.service.IndexService;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.indices.IndicesService;
 
 import java.io.File;
@@ -73,7 +75,7 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
         for (IndexRoutingTable indexRoutingTable : routingTable) {
             IndexService indexService = indicesService.indexService(indexRoutingTable.index());
             if (indexService == null) {
-                // not allocated on this node yet...
+                // we handle this later...
                 continue;
             }
             // if the store is not persistent, don't bother trying to check if it can be deleted
@@ -102,9 +104,40 @@ public class IndicesStore extends AbstractComponent implements ClusterStateListe
             }
         }
 
-        // do the reverse, and delete dangling indices that might remain on that node
-        // this can happen when deleting a closed index, or when a node joins and it has deleted indices
+        // do the reverse, and delete dangling indices / shards that might remain on that node
+        // this can happen when deleting a closed index, or when a node joins and it has deleted indices / shards
         if (nodeEnv.hasNodeFile()) {
+            // delete unused shards for existing indices
+            for (IndexRoutingTable indexRoutingTable : routingTable) {
+                IndexService indexService = indicesService.indexService(indexRoutingTable.index());
+                if (indexService != null) { // allocated, ignore this
+                    continue;
+                }
+                for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
+                    boolean shardCanBeDeleted = true;
+                    for (ShardRouting shardRouting : indexShardRoutingTable) {
+                        // don't delete a shard that not all instances are active
+                        if (!shardRouting.active()) {
+                            shardCanBeDeleted = false;
+                            break;
+                        }
+                        String localNodeId = clusterService.localNode().id();
+                        // check if shard is active on the current node or is getting relocated to the our node
+                        if (localNodeId.equals(shardRouting.currentNodeId()) || localNodeId.equals(shardRouting.relocatingNodeId())) {
+                            // shard will be used locally - keep it
+                            shardCanBeDeleted = false;
+                            break;
+                        }
+                    }
+                    if (shardCanBeDeleted) {
+                        ShardId shardId = indexShardRoutingTable.shardId();
+                        logger.debug("[{}][{}] deleting shard that is no longer used", shardId.index().name(), shardId.id());
+                        FileSystemUtils.deleteRecursively(nodeEnv.shardLocation(shardId));
+                    }
+                }
+            }
+
+            // delete indices that are no longer part of the metadata
             File[] files = nodeEnv.indicesLocation().listFiles();
             if (files != null) {
                 for (File file : files) {

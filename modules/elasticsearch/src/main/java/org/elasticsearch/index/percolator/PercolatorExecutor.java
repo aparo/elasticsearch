@@ -34,7 +34,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.io.FastByteArrayOutputStream;
+import org.elasticsearch.common.io.BytesStream;
 import org.elasticsearch.common.io.FastStringReader;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.lucene.Lucene;
@@ -48,11 +48,15 @@ import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.field.data.FieldData;
 import org.elasticsearch.index.field.data.FieldDataType;
-import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.index.query.IndexQueryParser;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.ParsedDocument;
+import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.xcontent.QueryBuilders;
+import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.index.settings.IndexSettings;
 import org.elasticsearch.index.shard.service.IndexShard;
@@ -194,7 +198,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         try {
             XContentBuilder builder = XContentFactory.smileBuilder()
                     .startObject().field("query", queryBuilder).endObject();
-            FastByteArrayOutputStream unsafeBytes = builder.unsafeStream();
+            BytesStream unsafeBytes = builder.unsafeStream();
             addQuery(name, unsafeBytes.unsafeByteArray(), 0, unsafeBytes.size());
         } catch (IOException e) {
             throw new ElasticSearchException("Failed to add query [" + name + "]", e);
@@ -221,8 +225,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                     currentFieldName = parser.currentName();
                 } else if (token == XContentParser.Token.START_OBJECT) {
                     if ("query".equals(currentFieldName)) {
-                        IndexQueryParser queryParser = queryParserService.defaultIndexQueryParser();
-                        query = queryParser.parse(parser).query();
+                        query = queryParserService.parse(parser).query();
                     }
                 }
             }
@@ -269,8 +272,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                     }
                 } else if (token == XContentParser.Token.START_OBJECT) {
                     if ("query".equals(currentFieldName)) {
-                        IndexQueryParser queryParser = queryParserService.defaultIndexQueryParser();
-                        query = queryParser.parse(parser).query();
+                        query = queryParserService.parse(parser).query();
                     }
                 } else if (token == null) {
                     break;
@@ -294,8 +296,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
     public Response percolate(DocAndSourceQueryRequest request) throws ElasticSearchException {
         Query query = null;
         if (Strings.hasLength(request.query()) && !request.query().equals("*")) {
-            IndexQueryParser queryParser = queryParserService.defaultIndexQueryParser();
-            query = queryParser.parse(QueryBuilders.queryString(request.query())).query();
+            query = queryParserService.parse(QueryBuilders.queryString(request.query())).query();
         }
         return percolate(new DocAndQueryRequest(request.doc(), query));
     }
@@ -304,7 +305,8 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         // first, parse the source doc into a MemoryIndex
         final CustomMemoryIndex memoryIndex = new CustomMemoryIndex();
 
-        for (Fieldable field : request.doc().doc().getFields()) {
+        // TODO: This means percolation does not support nested docs...
+        for (Fieldable field : request.doc().rootDoc().getFields()) {
             if (!field.isIndexed()) {
                 continue;
             }
@@ -319,7 +321,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                 Reader reader = field.readerValue();
                 if (reader != null) {
                     try {
-                        memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), reader), field.getBoost() * request.doc().doc().getBoost());
+                        memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), reader), field.getBoost() * request.doc().rootDoc().getBoost());
                     } catch (IOException e) {
                         throw new MapperParsingException("Failed to analyze field [" + field.name() + "]", e);
                     }
@@ -327,7 +329,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                     String value = field.stringValue();
                     if (value != null) {
                         try {
-                            memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), new FastStringReader(value)), field.getBoost() * request.doc().doc().getBoost());
+                            memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), new FastStringReader(value)), field.getBoost() * request.doc().rootDoc().getBoost());
                         } catch (IOException e) {
                             throw new MapperParsingException("Failed to analyze field [" + field.name() + "]", e);
                         }

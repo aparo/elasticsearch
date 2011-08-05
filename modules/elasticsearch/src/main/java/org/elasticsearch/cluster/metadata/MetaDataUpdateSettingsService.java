@@ -19,17 +19,26 @@
 
 package org.elasticsearch.cluster.metadata;
 
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.ElasticSearchIllegalArgumentException;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
+import org.elasticsearch.cluster.routing.allocation.ShardsAllocation;
 import org.elasticsearch.common.Booleans;
+import org.elasticsearch.common.collect.Sets;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 
 import java.util.Map;
+import java.util.Set;
 
-import static org.elasticsearch.cluster.routing.RoutingTable.*;
+import static org.elasticsearch.cluster.ClusterState.*;
 
 /**
  * @author kimchy (shay.banon)
@@ -38,10 +47,13 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
 
     private final ClusterService clusterService;
 
-    @Inject public MetaDataUpdateSettingsService(Settings settings, ClusterService clusterService) {
+    private final ShardsAllocation shardsAllocation;
+
+    @Inject public MetaDataUpdateSettingsService(Settings settings, ClusterService clusterService, ShardsAllocation shardsAllocation) {
         super(settings);
         this.clusterService = clusterService;
         this.clusterService.add(this);
+        this.shardsAllocation = shardsAllocation;
     }
 
     @Override public void clusterChanged(ClusterChangedEvent event) {
@@ -98,30 +110,85 @@ public class MetaDataUpdateSettingsService extends AbstractComponent implements 
     public void updateSettings(final Settings pSettings, final String[] indices, final Listener listener) {
         ImmutableSettings.Builder updatedSettingsBuilder = ImmutableSettings.settingsBuilder();
         for (Map.Entry<String, String> entry : pSettings.getAsMap().entrySet()) {
+            if (entry.getKey().equals("index")) {
+                continue;
+            }
             if (!entry.getKey().startsWith("index.")) {
                 updatedSettingsBuilder.put("index." + entry.getKey(), entry.getValue());
             } else {
                 updatedSettingsBuilder.put(entry.getKey(), entry.getValue());
             }
         }
-        final Settings settings = updatedSettingsBuilder.build();
+        // never allow to change the number of shards
+        for (String key : updatedSettingsBuilder.internalMap().keySet()) {
+            if (key.equals(IndexMetaData.SETTING_NUMBER_OF_SHARDS)) {
+                listener.onFailure(new ElasticSearchIllegalArgumentException("can't change the number of shards for an index"));
+                return;
+            }
+        }
+
+        final Settings closeSettings = updatedSettingsBuilder.build();
+
+        final Set<String> removedSettings = Sets.newHashSet();
+        for (String key : updatedSettingsBuilder.internalMap().keySet()) {
+            if (!IndexMetaData.dynamicSettings().contains(key)) {
+                removedSettings.add(key);
+            }
+        }
+        if (!removedSettings.isEmpty()) {
+            for (String removedSetting : removedSettings) {
+                updatedSettingsBuilder.remove(removedSetting);
+            }
+        }
+        final Settings openSettings = updatedSettingsBuilder.build();
+
         clusterService.submitStateUpdateTask("update-settings", new ProcessedClusterStateUpdateTask() {
             @Override public ClusterState execute(ClusterState currentState) {
                 try {
                     String[] actualIndices = currentState.metaData().concreteIndices(indices);
-                    RoutingTable.Builder routingTableBuilder = newRoutingTableBuilder().routingTable(currentState.routingTable());
+                    RoutingTable.Builder routingTableBuilder = RoutingTable.builder().routingTable(currentState.routingTable());
                     MetaData.Builder metaDataBuilder = MetaData.newMetaDataBuilder().metaData(currentState.metaData());
 
-                    int updatedNumberOfReplicas = settings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, -1);
+                    int updatedNumberOfReplicas = openSettings.getAsInt(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, -1);
                     if (updatedNumberOfReplicas != -1) {
                         routingTableBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
                         metaDataBuilder.updateNumberOfReplicas(updatedNumberOfReplicas, actualIndices);
-                        logger.info("Updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
+                        logger.info("updating number_of_replicas to [{}] for indices {}", updatedNumberOfReplicas, actualIndices);
                     }
 
-                    metaDataBuilder.updateSettings(settings, actualIndices);
+                    // allow to change any settings to a close index, and only allow dynamic settings to be changed
+                    // on an open index
+                    Set<String> openIndices = Sets.newHashSet();
+                    Set<String> closeIndices = Sets.newHashSet();
+                    for (String index : actualIndices) {
+                        if (currentState.metaData().index(index).state() == IndexMetaData.State.OPEN) {
+                            openIndices.add(index);
+                        } else {
+                            closeIndices.add(index);
+                        }
+                    }
 
-                    return ClusterState.builder().state(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder).build();
+                    if (!openIndices.isEmpty()) {
+                        String[] indices = openIndices.toArray(new String[openIndices.size()]);
+                        if (!removedSettings.isEmpty()) {
+                            logger.warn("{} ignoring non dynamic index level settings for open indices: {}", indices, removedSettings);
+                        }
+                        metaDataBuilder.updateSettings(openSettings, indices);
+                    }
+
+                    if (!closeIndices.isEmpty()) {
+                        String[] indices = closeIndices.toArray(new String[closeIndices.size()]);
+                        metaDataBuilder.updateSettings(closeSettings, indices);
+                    }
+
+
+                    ClusterState updatedState = ClusterState.builder().state(currentState).metaData(metaDataBuilder).routingTable(routingTableBuilder).build();
+
+                    // now, reroute in case things change that require it (like number of replicas)
+                    RoutingAllocation.Result routingResult = shardsAllocation.reroute(updatedState);
+                    updatedState = newClusterStateBuilder().state(updatedState).routingResult(routingResult).build();
+
+                    return updatedState;
                 } catch (Exception e) {
                     listener.onFailure(e);
                     return currentState;

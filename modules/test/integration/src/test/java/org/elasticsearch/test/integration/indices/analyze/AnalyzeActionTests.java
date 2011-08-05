@@ -21,6 +21,7 @@ package org.elasticsearch.test.integration.indices.analyze;
 
 import org.elasticsearch.action.admin.indices.analyze.AnalyzeResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.action.admin.indices.analyze.AnalyzeRequestBuilder;
 import org.elasticsearch.test.integration.AbstractNodesTests;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -65,6 +66,42 @@ public class AnalyzeActionTests extends AbstractNodesTests {
             AnalyzeResponse analyzeResponse = client.admin().indices().prepareAnalyze("test", "this is a test").execute().actionGet();
             assertThat(analyzeResponse.tokens().size(), equalTo(1));
             AnalyzeResponse.AnalyzeToken token = analyzeResponse.tokens().get(0);
+            assertThat(token.term(), equalTo("test"));
+            assertThat(token.startOffset(), equalTo(10));
+            assertThat(token.endOffset(), equalTo(14));
+        }
+    }
+
+    @Test public void analyzerWithFieldOrTypeTests() throws Exception {
+        try {
+            client.admin().indices().prepareDelete("test").execute().actionGet();
+        } catch (Exception e) {
+            // ignore
+        }
+
+        client.admin().indices().prepareCreate("test").execute().actionGet();
+        client.admin().cluster().prepareHealth().setWaitForGreenStatus().execute().actionGet();
+
+        client.admin().indices().preparePutMapping("test")
+                .setType("document").setSource(
+                "{\n" +
+                        "    \"document\":{\n" +
+                        "        \"properties\":{\n" +
+                        "            \"simple\":{\n" +
+                        "                \"type\":\"string\",\n" +
+                        "                \"analyzer\": \"simple\"\n" +
+                        "            }\n" +
+                        "        }\n" +
+                        "    }\n" +
+                        "}"
+        ).execute().actionGet();
+
+        for (int i = 0; i < 10; i++) {
+            final AnalyzeRequestBuilder requestBuilder = client.admin().indices().prepareAnalyze("test", "THIS IS A TEST");
+            requestBuilder.setField("document.simple");
+            AnalyzeResponse analyzeResponse = requestBuilder.execute().actionGet();
+            assertThat(analyzeResponse.tokens().size(), equalTo(4));
+            AnalyzeResponse.AnalyzeToken token = analyzeResponse.tokens().get(3);
             assertThat(token.term(), equalTo("test"));
             assertThat(token.startOffset(), equalTo(10));
             assertThat(token.endOffset(), equalTo(14));

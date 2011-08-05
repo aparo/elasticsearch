@@ -20,8 +20,11 @@
 package org.elasticsearch.index.translog;
 
 import org.apache.lucene.index.Term;
+import org.elasticsearch.ElasticSearchIllegalStateException;
+import org.elasticsearch.common.BytesHolder;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.io.stream.BytesStreamInput;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
@@ -85,9 +88,16 @@ public interface Translog extends IndexShardComponent {
     void makeTransientCurrent();
 
     /**
+     * Reverts back to not have a transient translog.
+     */
+    void revertTransient();
+
+    /**
      * Adds a create operation to the transaction log.
      */
-    void add(Operation operation) throws TranslogException;
+    Location add(Operation operation) throws TranslogException;
+
+    byte[] read(Location location);
 
     /**
      * Snapshots the current transaction log allowing to safely iterate over the snapshot.
@@ -119,6 +129,18 @@ public interface Translog extends IndexShardComponent {
      * <p>Can only be called by one thread.
      */
     void close(boolean delete);
+
+    static class Location {
+        public final long translogId;
+        public final long translogLocation;
+        public final int size;
+
+        public Location(long translogId, long translogLocation, int size) {
+            this.translogId = translogId;
+            this.translogLocation = translogLocation;
+            this.size = size;
+        }
+    }
 
     /**
      * A snapshot of the transaction log, allows to iterate over all the transaction log operations.
@@ -200,6 +222,8 @@ public interface Translog extends IndexShardComponent {
         Type opType();
 
         long estimateSize();
+
+        BytesHolder readSource(BytesStreamInput in) throws IOException;
     }
 
     static class Create implements Operation {
@@ -256,6 +280,16 @@ public interface Translog extends IndexShardComponent {
 
         public long version() {
             return this.version;
+        }
+
+        @Override public BytesHolder readSource(BytesStreamInput in) throws IOException {
+            int version = in.readVInt(); // version
+            id = in.readUTF();
+            type = in.readUTF();
+
+            int length = in.readVInt();
+            int offset = in.position();
+            return new BytesHolder(in.underlyingBuffer(), offset, length);
         }
 
         @Override public void readFrom(StreamInput in) throws IOException {
@@ -357,6 +391,16 @@ public interface Translog extends IndexShardComponent {
             return this.version;
         }
 
+        @Override public BytesHolder readSource(BytesStreamInput in) throws IOException {
+            int version = in.readVInt(); // version
+            id = in.readUTF();
+            type = in.readUTF();
+
+            int length = in.readVInt();
+            int offset = in.position();
+            return new BytesHolder(in.underlyingBuffer(), offset, length);
+        }
+
         @Override public void readFrom(StreamInput in) throws IOException {
             int version = in.readVInt(); // version
             id = in.readUTF();
@@ -432,6 +476,10 @@ public interface Translog extends IndexShardComponent {
             return this.version;
         }
 
+        @Override public BytesHolder readSource(BytesStreamInput in) throws IOException {
+            throw new ElasticSearchIllegalStateException("trying to read doc source from delete operation");
+        }
+
         @Override public void readFrom(StreamInput in) throws IOException {
             int version = in.readVInt(); // version
             uid = new Term(in.readUTF(), in.readUTF());
@@ -450,20 +498,20 @@ public interface Translog extends IndexShardComponent {
 
     static class DeleteByQuery implements Operation {
         private byte[] source;
-        @Nullable private String queryParserName;
+        @Nullable private String[] filteringAliases;
         private String[] types = Strings.EMPTY_ARRAY;
 
         public DeleteByQuery() {
         }
 
         public DeleteByQuery(Engine.DeleteByQuery deleteByQuery) {
-            this(deleteByQuery.source(), deleteByQuery.queryParserName(), deleteByQuery.types());
+            this(deleteByQuery.source(), deleteByQuery.filteringAliases(), deleteByQuery.types());
         }
 
-        public DeleteByQuery(byte[] source, @Nullable String queryParserName, String... types) {
-            this.queryParserName = queryParserName;
+        public DeleteByQuery(byte[] source, String[] filteringAliases, String... types) {
             this.source = source;
-            this.types = types;
+            this.types = types == null ? Strings.EMPTY_ARRAY : types;
+            this.filteringAliases = filteringAliases;
         }
 
         @Override public Type opType() {
@@ -471,27 +519,34 @@ public interface Translog extends IndexShardComponent {
         }
 
         @Override public long estimateSize() {
-            return source.length + ((queryParserName == null ? 0 : queryParserName.length()) * 2) + 8;
-        }
-
-        public String queryParserName() {
-            return this.queryParserName;
+            return source.length + 8;
         }
 
         public byte[] source() {
             return this.source;
         }
 
+        public String[] filteringAliases() {
+            return filteringAliases;
+        }
+
         public String[] types() {
             return this.types;
         }
 
+        @Override public BytesHolder readSource(BytesStreamInput in) throws IOException {
+            throw new ElasticSearchIllegalStateException("trying to read doc source from delete_by_query operation");
+        }
+
         @Override public void readFrom(StreamInput in) throws IOException {
-            in.readVInt(); // version
+            int version = in.readVInt(); // version
             source = new byte[in.readVInt()];
             in.readFully(source);
-            if (in.readBoolean()) {
-                queryParserName = in.readUTF();
+            if (version < 2) {
+                // for query_parser_name, which was removed
+                if (in.readBoolean()) {
+                    in.readUTF();
+                }
             }
             int typesSize = in.readVInt();
             if (typesSize > 0) {
@@ -500,21 +555,32 @@ public interface Translog extends IndexShardComponent {
                     types[i] = in.readUTF();
                 }
             }
+            if (version >= 1) {
+                int aliasesSize = in.readVInt();
+                if (aliasesSize > 0) {
+                    filteringAliases = new String[aliasesSize];
+                    for (int i = 0; i < aliasesSize; i++) {
+                        filteringAliases[i] = in.readUTF();
+                    }
+                }
+            }
         }
 
         @Override public void writeTo(StreamOutput out) throws IOException {
-            out.writeVInt(0); // version
+            out.writeVInt(2); // version
             out.writeVInt(source.length);
             out.writeBytes(source);
-            if (queryParserName == null) {
-                out.writeBoolean(false);
-            } else {
-                out.writeBoolean(true);
-                out.writeUTF(queryParserName);
-            }
             out.writeVInt(types.length);
             for (String type : types) {
                 out.writeUTF(type);
+            }
+            if (filteringAliases != null) {
+                out.writeVInt(filteringAliases.length);
+                for (String alias : filteringAliases) {
+                    out.writeUTF(alias);
+                }
+            } else {
+                out.writeVInt(0);
             }
         }
     }

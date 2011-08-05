@@ -54,7 +54,7 @@ public class TransportGatewaySnapshotAction extends TransportBroadcastOperationA
     }
 
     @Override protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.MANAGEMENT;
     }
 
     @Override protected String transportAction() {
@@ -116,7 +116,7 @@ public class TransportGatewaySnapshotAction extends TransportBroadcastOperationA
     /**
      * The snapshot request works against all primary shards.
      */
-    @Override protected GroupShardsIterator shards(GatewaySnapshotRequest request, ClusterState clusterState) {
-        return clusterState.routingTable().primaryShardsGrouped(request.indices());
+    @Override protected GroupShardsIterator shards(GatewaySnapshotRequest request, String[] concreteIndices, ClusterState clusterState) {
+        return clusterState.routingTable().activePrimaryShardsGrouped(concreteIndices, true);
     }
 }

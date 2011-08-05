@@ -42,6 +42,8 @@ public class AnalyzeRequest extends SingleCustomOperationRequest {
 
     private String analyzer;
 
+    private String field;
+
     AnalyzeRequest() {
 
     }
@@ -79,6 +81,15 @@ public class AnalyzeRequest extends SingleCustomOperationRequest {
         return this.analyzer;
     }
 
+    public AnalyzeRequest field(String field) {
+        this.field = field;
+        return this;
+    }
+
+    public String field() {
+        return this.field;
+    }
+
     /**
      * if this operation hits a node with a local relevant shard, should it be preferred
      * to be executed on, or just do plain round robin. Defaults to <tt>true</tt>
@@ -106,17 +117,25 @@ public class AnalyzeRequest extends SingleCustomOperationRequest {
         if (in.readBoolean()) {
             analyzer = in.readUTF();
         }
+        if (in.readBoolean()) {
+            field = in.readUTF();
+        }
     }
 
     @Override public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeUTF(index);
         out.writeUTF(text);
-        if (analyzer == null) {
+        writeOption(out, analyzer);
+        writeOption(out, field);
+    }
+
+    private void writeOption(StreamOutput out, String value) throws IOException {
+        if (value == null) {
             out.writeBoolean(false);
         } else {
             out.writeBoolean(true);
-            out.writeUTF(analyzer);
+            out.writeUTF(value);
         }
     }
 }

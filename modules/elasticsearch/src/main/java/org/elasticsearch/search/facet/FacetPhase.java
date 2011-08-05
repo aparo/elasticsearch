@@ -19,13 +19,19 @@
 
 package org.elasticsearch.search.facet;
 
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.FilteredQuery;
+import org.apache.lucene.search.MultiCollector;
+import org.apache.lucene.search.Query;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.Queries;
+import org.elasticsearch.index.search.nested.BlockJoinQuery;
 import org.elasticsearch.search.SearchParseElement;
 import org.elasticsearch.search.SearchPhase;
 import org.elasticsearch.search.internal.ContextIndexSearcher;
@@ -56,6 +62,19 @@ public class FacetPhase implements SearchPhase {
     }
 
     @Override public void preProcess(SearchContext context) {
+        // add specific facets to nested queries...
+        if (context.nestedQueries() != null) {
+            for (Map.Entry<String, BlockJoinQuery> entry : context.nestedQueries().entrySet()) {
+                List<Collector> collectors = context.searcher().removeCollectors(entry.getKey());
+                if (collectors != null && !collectors.isEmpty()) {
+                    if (collectors.size() == 1) {
+                        entry.getValue().setCollector(collectors.get(0));
+                    } else {
+                        entry.getValue().setCollector(MultiCollector.wrap(collectors.toArray(new Collector[collectors.size()])));
+                    }
+                }
+            }
+        }
     }
 
     @Override public void execute(SearchContext context) throws ElasticSearchException {
@@ -100,8 +119,9 @@ public class FacetPhase implements SearchPhase {
             for (Map.Entry<Filter, List<Collector>> entry : filtersByCollector.entrySet()) {
                 Filter filter = entry.getKey();
                 Query query = new DeletionAwareConstantScoreQuery(filter);
-                if (context.types().length > 0) {
-                    query = new FilteredQuery(query, context.filterCache().cache(context.mapperService().typesFilter(context.types())));
+                Filter searchFilter = context.mapperService().searchFilter(context.types());
+                if (searchFilter != null) {
+                    query = new FilteredQuery(query, context.filterCache().cache(searchFilter));
                 }
                 try {
                     context.searcher().search(query, MultiCollector.wrap(entry.getValue().toArray(new Collector[entry.getValue().size()])));

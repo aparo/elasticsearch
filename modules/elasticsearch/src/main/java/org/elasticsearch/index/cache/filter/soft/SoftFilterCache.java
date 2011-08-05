@@ -20,6 +20,7 @@
 package org.elasticsearch.index.cache.filter.soft;
 
 import org.apache.lucene.search.Filter;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.base.Objects;
 import org.elasticsearch.common.collect.MapEvictionListener;
 import org.elasticsearch.common.collect.MapMaker;
@@ -67,7 +68,7 @@ public class SoftFilterCache extends AbstractConcurrentMapFilterCache implements
         super.close();
     }
 
-    @Override protected ConcurrentMap<Filter, DocSet> buildFilterMap() {
+    @Override protected ConcurrentMap<Object, DocSet> buildFilterMap() {
         // DocSet are not really stored with strong reference only when searching on them...
         // Filter might be stored in query cache
         MapMaker mapMaker = new MapMaker().softValues();
@@ -91,6 +92,13 @@ public class SoftFilterCache extends AbstractConcurrentMapFilterCache implements
 
     @Override public void onEviction(Filter filter, DocSet docSet) {
         evictions.incrementAndGet();
+    }
+
+    static {
+        IndexMetaData.addDynamicSettings(
+                "index.cache.field.max_size",
+                "index.cache.field.expire"
+        );
     }
 
     class ApplySettings implements IndexSettingsService.Listener {

@@ -20,12 +20,12 @@
 package org.elasticsearch.index.query;
 
 import org.elasticsearch.common.collect.Lists;
+import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Scopes;
 import org.elasticsearch.common.inject.assistedinject.FactoryProvider;
 import org.elasticsearch.common.inject.multibindings.MapBinder;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.query.xcontent.*;
 
 import java.util.LinkedList;
 import java.util.Map;
@@ -37,43 +37,12 @@ public class IndexQueryParserModule extends AbstractModule {
 
     /**
      * A custom processor that can be extended to process and bind custom implementations of
-     * {@link IndexQueryParserFactory}, {@link XContentQueryParserFactory}, and {@link XContentFilterParser}.
+     * {@link QueryParserFactory}, and {@link FilterParser}.
      */
     public static class QueryParsersProcessor {
 
         /**
-         * Extension point to bind a custom {@link IndexQueryParserFactory}.
-         */
-        public void processIndexQueryParsers(IndexQueryParsersBindings bindings) {
-
-        }
-
-        public static class IndexQueryParsersBindings {
-            private final MapBinder<String, IndexQueryParserFactory> binder;
-            private final Map<String, Settings> groupSettings;
-
-            public IndexQueryParsersBindings(MapBinder<String, IndexQueryParserFactory> binder, Map<String, Settings> groupSettings) {
-                this.binder = binder;
-                this.groupSettings = groupSettings;
-            }
-
-            public MapBinder<String, IndexQueryParserFactory> binder() {
-                return binder;
-            }
-
-            public Map<String, Settings> groupSettings() {
-                return groupSettings;
-            }
-
-            public void processIndexQueryParser(String name, Class<? extends IndexQueryParser> indexQueryParser) {
-                if (!groupSettings.containsKey(name)) {
-                    binder.addBinding(name).toProvider(FactoryProvider.newFactory(IndexQueryParserFactory.class, indexQueryParser)).in(Scopes.SINGLETON);
-                }
-            }
-        }
-
-        /**
-         * Extension point to bind a custom {@link XContentQueryParserFactory}.
+         * Extension point to bind a custom {@link QueryParserFactory}.
          */
         public void processXContentQueryParsers(XContentQueryParsersBindings bindings) {
 
@@ -81,15 +50,15 @@ public class IndexQueryParserModule extends AbstractModule {
 
         public static class XContentQueryParsersBindings {
 
-            private final MapBinder<String, XContentQueryParserFactory> binder;
+            private final MapBinder<String, QueryParserFactory> binder;
             private final Map<String, Settings> groupSettings;
 
-            public XContentQueryParsersBindings(MapBinder<String, XContentQueryParserFactory> binder, Map<String, Settings> groupSettings) {
+            public XContentQueryParsersBindings(MapBinder<String, QueryParserFactory> binder, Map<String, Settings> groupSettings) {
                 this.binder = binder;
                 this.groupSettings = groupSettings;
             }
 
-            public MapBinder<String, XContentQueryParserFactory> binder() {
+            public MapBinder<String, QueryParserFactory> binder() {
                 return binder;
             }
 
@@ -97,15 +66,15 @@ public class IndexQueryParserModule extends AbstractModule {
                 return groupSettings;
             }
 
-            public void processXContentQueryParser(String name, Class<? extends XContentQueryParser> xcontentQueryParser) {
+            public void processXContentQueryParser(String name, Class<? extends QueryParser> xcontentQueryParser) {
                 if (!groupSettings.containsKey(name)) {
-                    binder.addBinding(name).toProvider(FactoryProvider.newFactory(XContentQueryParserFactory.class, xcontentQueryParser)).in(Scopes.SINGLETON);
+                    binder.addBinding(name).toProvider(FactoryProvider.newFactory(QueryParserFactory.class, xcontentQueryParser)).in(Scopes.SINGLETON);
                 }
             }
         }
 
         /**
-         * Extension point to bind a custom {@link XContentFilterParserFactory}.
+         * Extension point to bind a custom {@link FilterParserFactory}.
          */
         public void processXContentFilterParsers(XContentFilterParsersBindings bindings) {
 
@@ -113,15 +82,15 @@ public class IndexQueryParserModule extends AbstractModule {
 
         public static class XContentFilterParsersBindings {
 
-            private final MapBinder<String, XContentFilterParserFactory> binder;
+            private final MapBinder<String, FilterParserFactory> binder;
             private final Map<String, Settings> groupSettings;
 
-            public XContentFilterParsersBindings(MapBinder<String, XContentFilterParserFactory> binder, Map<String, Settings> groupSettings) {
+            public XContentFilterParsersBindings(MapBinder<String, FilterParserFactory> binder, Map<String, Settings> groupSettings) {
                 this.binder = binder;
                 this.groupSettings = groupSettings;
             }
 
-            public MapBinder<String, XContentFilterParserFactory> binder() {
+            public MapBinder<String, FilterParserFactory> binder() {
                 return binder;
             }
 
@@ -129,9 +98,9 @@ public class IndexQueryParserModule extends AbstractModule {
                 return groupSettings;
             }
 
-            public void processXContentQueryFilter(String name, Class<? extends XContentFilterParser> xcontentFilterParser) {
+            public void processXContentQueryFilter(String name, Class<? extends FilterParser> xcontentFilterParser) {
                 if (!groupSettings.containsKey(name)) {
-                    binder.addBinding(name).toProvider(FactoryProvider.newFactory(XContentFilterParserFactory.class, xcontentFilterParser)).in(Scopes.SINGLETON);
+                    binder.addBinding(name).toProvider(FactoryProvider.newFactory(FilterParserFactory.class, xcontentFilterParser)).in(Scopes.SINGLETON);
                 }
             }
         }
@@ -141,10 +110,31 @@ public class IndexQueryParserModule extends AbstractModule {
 
     private final LinkedList<QueryParsersProcessor> processors = Lists.newLinkedList();
 
+    private final Map<String, Class<? extends QueryParser>> queries = Maps.newHashMap();
+    private final Map<String, Class<? extends FilterParser>> filters = Maps.newHashMap();
 
     public IndexQueryParserModule(Settings settings) {
         this.settings = settings;
-        this.processors.add(new DefaultQueryProcessors());
+    }
+
+    /**
+     * Adds a custom query parser.
+     *
+     * @param name        The name of the query parser
+     * @param queryParser the class of the query parser
+     */
+    public void addQueryParser(String name, Class<? extends QueryParser> queryParser) {
+        queries.put(name, queryParser);
+    }
+
+    /**
+     * Adds a custom filter parser.
+     *
+     * @param name         The name of the filter parser
+     * @param filterParser the class of the filter parser
+     */
+    public void addFilterParser(String name, Class<? extends FilterParser> filterParser) {
+        filters.put(name, filterParser);
     }
 
     public IndexQueryParserModule addProcessor(QueryParsersProcessor processor) {
@@ -154,39 +144,20 @@ public class IndexQueryParserModule extends AbstractModule {
 
     @Override protected void configure() {
 
-        // handle IndexQueryParsers
-        MapBinder<String, IndexQueryParserFactory> qbinder
-                = MapBinder.newMapBinder(binder(), String.class, IndexQueryParserFactory.class);
-
-        Map<String, Settings> queryParserGroupSettings = settings.getGroups(IndexQueryParserService.Defaults.PREFIX);
-        for (Map.Entry<String, Settings> entry : queryParserGroupSettings.entrySet()) {
-            String qName = entry.getKey();
-            Settings qSettings = entry.getValue();
-            qbinder.addBinding(qName).toProvider(FactoryProvider.newFactory(IndexQueryParserFactory.class,
-                    qSettings.getAsClass("type", XContentIndexQueryParser.class))).in(Scopes.SINGLETON);
-        }
-        if (!queryParserGroupSettings.containsKey(IndexQueryParserService.Defaults.DEFAULT)) {
-            qbinder.addBinding(IndexQueryParserService.Defaults.DEFAULT).toProvider(FactoryProvider.newFactory(IndexQueryParserFactory.class,
-                    XContentIndexQueryParser.class)).in(Scopes.SINGLETON);
-        }
-
-        QueryParsersProcessor.IndexQueryParsersBindings queryParsersBindings = new QueryParsersProcessor.IndexQueryParsersBindings(qbinder, queryParserGroupSettings);
-        for (QueryParsersProcessor processor : processors) {
-            processor.processIndexQueryParsers(queryParsersBindings);
-        }
+        bind(IndexQueryParserService.class).asEagerSingleton();
 
         // handle XContenQueryParsers
-        MapBinder<String, XContentQueryParserFactory> queryBinder
-                = MapBinder.newMapBinder(binder(), String.class, XContentQueryParserFactory.class);
-        Map<String, Settings> xContentQueryParserGroups = settings.getGroups(XContentIndexQueryParser.Defaults.QUERY_PREFIX);
+        MapBinder<String, QueryParserFactory> queryBinder
+                = MapBinder.newMapBinder(binder(), String.class, QueryParserFactory.class);
+        Map<String, Settings> xContentQueryParserGroups = settings.getGroups(IndexQueryParserService.Defaults.QUERY_PREFIX);
         for (Map.Entry<String, Settings> entry : xContentQueryParserGroups.entrySet()) {
             String qName = entry.getKey();
             Settings qSettings = entry.getValue();
-            Class<? extends XContentQueryParser> type = qSettings.getAsClass("type", null);
+            Class<? extends QueryParser> type = qSettings.getAsClass("type", null);
             if (type == null) {
                 throw new IllegalArgumentException("Query Parser [" + qName + "] must be provided with a type");
             }
-            queryBinder.addBinding(qName).toProvider(FactoryProvider.newFactory(XContentQueryParserFactory.class,
+            queryBinder.addBinding(qName).toProvider(FactoryProvider.newFactory(QueryParserFactory.class,
                     qSettings.getAsClass("type", null))).in(Scopes.SINGLETON);
         }
 
@@ -195,18 +166,22 @@ public class IndexQueryParserModule extends AbstractModule {
             processor.processXContentQueryParsers(xContentQueryParsersBindings);
         }
 
+        for (Map.Entry<String, Class<? extends QueryParser>> entry : queries.entrySet()) {
+            queryBinder.addBinding(entry.getKey()).toProvider(FactoryProvider.newFactory(QueryParserFactory.class, entry.getValue())).in(Scopes.SINGLETON);
+        }
+
         // handle XContentFilterParsers
-        MapBinder<String, XContentFilterParserFactory> filterBinder
-                = MapBinder.newMapBinder(binder(), String.class, XContentFilterParserFactory.class);
-        Map<String, Settings> xContentFilterParserGroups = settings.getGroups(XContentIndexQueryParser.Defaults.FILTER_PREFIX);
+        MapBinder<String, FilterParserFactory> filterBinder
+                = MapBinder.newMapBinder(binder(), String.class, FilterParserFactory.class);
+        Map<String, Settings> xContentFilterParserGroups = settings.getGroups(IndexQueryParserService.Defaults.FILTER_PREFIX);
         for (Map.Entry<String, Settings> entry : xContentFilterParserGroups.entrySet()) {
             String fName = entry.getKey();
             Settings fSettings = entry.getValue();
-            Class<? extends XContentFilterParser> type = fSettings.getAsClass("type", null);
+            Class<? extends FilterParser> type = fSettings.getAsClass("type", null);
             if (type == null) {
                 throw new IllegalArgumentException("Filter Parser [" + fName + "] must be provided with a type");
             }
-            filterBinder.addBinding(fName).toProvider(FactoryProvider.newFactory(XContentFilterParserFactory.class,
+            filterBinder.addBinding(fName).toProvider(FactoryProvider.newFactory(FilterParserFactory.class,
                     fSettings.getAsClass("type", null))).in(Scopes.SINGLETON);
         }
 
@@ -215,65 +190,8 @@ public class IndexQueryParserModule extends AbstractModule {
             processor.processXContentFilterParsers(xContentFilterParsersBindings);
         }
 
-        bind(IndexQueryParserService.class).asEagerSingleton();
-    }
-
-    private static class DefaultQueryProcessors extends QueryParsersProcessor {
-        @Override public void processXContentQueryParsers(XContentQueryParsersBindings bindings) {
-            bindings.processXContentQueryParser(TextQueryParser.NAME, TextQueryParser.class);
-            bindings.processXContentQueryParser(HasChildQueryParser.NAME, HasChildQueryParser.class);
-            bindings.processXContentQueryParser(TopChildrenQueryParser.NAME, TopChildrenQueryParser.class);
-            bindings.processXContentQueryParser(DisMaxQueryParser.NAME, DisMaxQueryParser.class);
-            bindings.processXContentQueryParser(IdsQueryParser.NAME, IdsQueryParser.class);
-            bindings.processXContentQueryParser(MatchAllQueryParser.NAME, MatchAllQueryParser.class);
-            bindings.processXContentQueryParser(QueryStringQueryParser.NAME, QueryStringQueryParser.class);
-            bindings.processXContentQueryParser(BoostingQueryParser.NAME, BoostingQueryParser.class);
-            bindings.processXContentQueryParser(BoolQueryParser.NAME, BoolQueryParser.class);
-            bindings.processXContentQueryParser(TermQueryParser.NAME, TermQueryParser.class);
-            bindings.processXContentQueryParser(TermsQueryParser.NAME, TermsQueryParser.class);
-            bindings.processXContentQueryParser(FuzzyQueryParser.NAME, FuzzyQueryParser.class);
-            bindings.processXContentQueryParser(FieldQueryParser.NAME, FieldQueryParser.class);
-            bindings.processXContentQueryParser(RangeQueryParser.NAME, RangeQueryParser.class);
-            bindings.processXContentQueryParser(PrefixQueryParser.NAME, PrefixQueryParser.class);
-            bindings.processXContentQueryParser(WildcardQueryParser.NAME, WildcardQueryParser.class);
-            bindings.processXContentQueryParser(FilteredQueryParser.NAME, FilteredQueryParser.class);
-            bindings.processXContentQueryParser(ConstantScoreQueryParser.NAME, ConstantScoreQueryParser.class);
-            bindings.processXContentQueryParser(CustomBoostFactorQueryParser.NAME, CustomBoostFactorQueryParser.class);
-            bindings.processXContentQueryParser(CustomScoreQueryParser.NAME, CustomScoreQueryParser.class);
-            bindings.processXContentQueryParser(SpanTermQueryParser.NAME, SpanTermQueryParser.class);
-            bindings.processXContentQueryParser(SpanNotQueryParser.NAME, SpanNotQueryParser.class);
-            bindings.processXContentQueryParser(SpanFirstQueryParser.NAME, SpanFirstQueryParser.class);
-            bindings.processXContentQueryParser(SpanNearQueryParser.NAME, SpanNearQueryParser.class);
-            bindings.processXContentQueryParser(SpanOrQueryParser.NAME, SpanOrQueryParser.class);
-            bindings.processXContentQueryParser(MoreLikeThisQueryParser.NAME, MoreLikeThisQueryParser.class);
-            bindings.processXContentQueryParser(MoreLikeThisFieldQueryParser.NAME, MoreLikeThisFieldQueryParser.class);
-            bindings.processXContentQueryParser(FuzzyLikeThisQueryParser.NAME, FuzzyLikeThisQueryParser.class);
-            bindings.processXContentQueryParser(FuzzyLikeThisFieldQueryParser.NAME, FuzzyLikeThisFieldQueryParser.class);
-        }
-
-        @Override public void processXContentFilterParsers(XContentFilterParsersBindings bindings) {
-            bindings.processXContentQueryFilter(HasChildFilterParser.NAME, HasChildFilterParser.class);
-            bindings.processXContentQueryFilter(TypeFilterParser.NAME, TypeFilterParser.class);
-            bindings.processXContentQueryFilter(IdsFilterParser.NAME, IdsFilterParser.class);
-            bindings.processXContentQueryFilter(TermFilterParser.NAME, TermFilterParser.class);
-            bindings.processXContentQueryFilter(TermsFilterParser.NAME, TermsFilterParser.class);
-            bindings.processXContentQueryFilter(RangeFilterParser.NAME, RangeFilterParser.class);
-            bindings.processXContentQueryFilter(NumericRangeFilterParser.NAME, NumericRangeFilterParser.class);
-            bindings.processXContentQueryFilter(PrefixFilterParser.NAME, PrefixFilterParser.class);
-            bindings.processXContentQueryFilter(ScriptFilterParser.NAME, ScriptFilterParser.class);
-            bindings.processXContentQueryFilter(GeoDistanceFilterParser.NAME, GeoDistanceFilterParser.class);
-            bindings.processXContentQueryFilter(GeoDistanceRangeFilterParser.NAME, GeoDistanceRangeFilterParser.class);
-            bindings.processXContentQueryFilter(GeoBoundingBoxFilterParser.NAME, GeoBoundingBoxFilterParser.class);
-            bindings.processXContentQueryFilter(GeoPolygonFilterParser.NAME, GeoPolygonFilterParser.class);
-            bindings.processXContentQueryFilter(QueryFilterParser.NAME, QueryFilterParser.class);
-            bindings.processXContentQueryFilter(FQueryFilterParser.NAME, FQueryFilterParser.class);
-            bindings.processXContentQueryFilter(BoolFilterParser.NAME, BoolFilterParser.class);
-            bindings.processXContentQueryFilter(AndFilterParser.NAME, AndFilterParser.class);
-            bindings.processXContentQueryFilter(OrFilterParser.NAME, OrFilterParser.class);
-            bindings.processXContentQueryFilter(NotFilterParser.NAME, NotFilterParser.class);
-            bindings.processXContentQueryFilter(MatchAllFilterParser.NAME, MatchAllFilterParser.class);
-            bindings.processXContentQueryFilter(ExistsFilterParser.NAME, ExistsFilterParser.class);
-            bindings.processXContentQueryFilter(MissingFilterParser.NAME, MissingFilterParser.class);
+        for (Map.Entry<String, Class<? extends FilterParser>> entry : filters.entrySet()) {
+            filterBinder.addBinding(entry.getKey()).toProvider(FactoryProvider.newFactory(FilterParserFactory.class, entry.getValue())).in(Scopes.SINGLETON);
         }
     }
 }

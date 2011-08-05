@@ -36,6 +36,7 @@ import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.FastStringReader;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -58,7 +59,7 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
     }
 
     @Override protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.INDEX;
     }
 
     @Override protected AnalyzeRequest newRequest() {
@@ -79,16 +80,26 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
 
     @Override protected ShardsIterator shards(ClusterState clusterState, AnalyzeRequest request) {
         request.index(clusterState.metaData().concreteIndex(request.index()));
-        return clusterState.routingTable().index(request.index()).randomAllShardsIt();
+        return clusterState.routingTable().index(request.index()).randomAllActiveShardsIt();
     }
 
     @Override protected AnalyzeResponse shardOperation(AnalyzeRequest request, int shardId) throws ElasticSearchException {
         IndexService indexService = indicesService.indexServiceSafe(request.index());
         Analyzer analyzer = null;
-        String field = "contents";
-        if (request.analyzer() != null) {
+        String field = null;
+        if (request.field() != null) {
+            FieldMapper fieldMapper = indexService.mapperService().smartNameFieldMapper(request.field());
+            if (fieldMapper != null) {
+                analyzer = fieldMapper.indexAnalyzer();
+                field = fieldMapper.names().indexName();
+            }
+        }
+        if (field == null) {
+            field = "_all";
+        }
+        if (analyzer == null && request.analyzer() != null) {
             analyzer = indexService.analysisService().analyzer(request.analyzer());
-        } else {
+        } else if (analyzer == null) {
             analyzer = indexService.analysisService().defaultIndexAnalyzer();
         }
         if (analyzer == null) {

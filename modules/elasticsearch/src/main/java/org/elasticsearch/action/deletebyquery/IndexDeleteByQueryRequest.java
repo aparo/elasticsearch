@@ -26,10 +26,12 @@ import org.elasticsearch.common.Required;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.trove.set.hash.THashSet;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.query.QueryBuilder;
 
 import java.io.IOException;
+import java.util.Set;
 
 import static org.elasticsearch.action.Actions.*;
 
@@ -41,19 +43,19 @@ import static org.elasticsearch.action.Actions.*;
 public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest {
 
     private byte[] querySource;
-    private String queryParserName;
     private String[] types = Strings.EMPTY_ARRAY;
-    @Nullable private String routing;
+    @Nullable private Set<String> routing;
+    @Nullable private String[] filteringAliases;
 
-    IndexDeleteByQueryRequest(DeleteByQueryRequest request, String index) {
+    IndexDeleteByQueryRequest(DeleteByQueryRequest request, String index, @Nullable Set<String> routing, @Nullable String[] filteringAliases) {
         this.index = index;
         this.timeout = request.timeout();
         this.querySource = request.querySource();
-        this.queryParserName = request.queryParserName();
         this.types = request.types();
         this.replicationType = request.replicationType();
         this.consistencyLevel = request.consistencyLevel();
-        this.routing = request.routing();
+        this.routing = routing;
+        this.filteringAliases = filteringAliases;
     }
 
     IndexDeleteByQueryRequest() {
@@ -80,11 +82,7 @@ public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest 
         return this;
     }
 
-    String queryParserName() {
-        return queryParserName;
-    }
-
-    String routing() {
+    Set<String> routing() {
         return this.routing;
     }
 
@@ -92,9 +90,8 @@ public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest 
         return this.types;
     }
 
-    public IndexDeleteByQueryRequest queryParserName(String queryParserName) {
-        this.queryParserName = queryParserName;
-        return this;
+    String[] filteringAliases() {
+        return filteringAliases;
     }
 
     public IndexDeleteByQueryRequest timeout(TimeValue timeout) {
@@ -106,9 +103,6 @@ public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest 
         super.readFrom(in);
         querySource = new byte[in.readVInt()];
         in.readFully(querySource);
-        if (in.readBoolean()) {
-            queryParserName = in.readUTF();
-        }
         int typesSize = in.readVInt();
         if (typesSize > 0) {
             types = new String[typesSize];
@@ -116,8 +110,19 @@ public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest 
                 types[i] = in.readUTF();
             }
         }
-        if (in.readBoolean()) {
-            routing = in.readUTF();
+        int routingSize = in.readVInt();
+        if (routingSize > 0) {
+            routing = new THashSet<String>(routingSize);
+            for (int i = 0; i < routingSize; i++) {
+                routing.add(in.readUTF());
+            }
+        }
+        int aliasesSize = in.readVInt();
+        if (aliasesSize > 0) {
+            filteringAliases = new String[aliasesSize];
+            for (int i = 0; i < aliasesSize; i++) {
+                filteringAliases[i] = in.readUTF();
+            }
         }
     }
 
@@ -125,21 +130,25 @@ public class IndexDeleteByQueryRequest extends IndexReplicationOperationRequest 
         super.writeTo(out);
         out.writeVInt(querySource.length);
         out.writeBytes(querySource);
-        if (queryParserName == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeUTF(queryParserName);
-        }
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);
         }
-        if (routing == null) {
-            out.writeBoolean(false);
+        if (routing != null) {
+            out.writeVInt(routing.size());
+            for (String r : routing) {
+                out.writeUTF(r);
+            }
         } else {
-            out.writeBoolean(true);
-            out.writeUTF(routing);
+            out.writeVInt(0);
+        }
+        if (filteringAliases != null) {
+            out.writeVInt(filteringAliases.length);
+            for (String alias : filteringAliases) {
+                out.writeUTF(alias);
+            }
+        } else {
+            out.writeVInt(0);
         }
     }
 }

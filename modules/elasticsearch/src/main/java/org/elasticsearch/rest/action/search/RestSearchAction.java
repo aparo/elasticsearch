@@ -29,16 +29,20 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.QueryBuilders;
-import org.elasticsearch.index.query.xcontent.QueryStringQueryBuilder;
-import org.elasticsearch.rest.*;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.query.QueryStringQueryBuilder;
+import org.elasticsearch.rest.BaseRestHandler;
+import org.elasticsearch.rest.RestChannel;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestRequest;
+import org.elasticsearch.rest.XContentRestResponse;
+import org.elasticsearch.rest.XContentThrowableRestResponse;
 import org.elasticsearch.rest.action.support.RestActions;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.elasticsearch.search.sort.SortOrder;
 
 import java.io.IOException;
-import java.util.regex.Pattern;
 
 import static org.elasticsearch.common.unit.TimeValue.*;
 import static org.elasticsearch.rest.RestRequest.Method.*;
@@ -49,15 +53,6 @@ import static org.elasticsearch.rest.action.support.RestXContentBuilder.*;
  * @author kimchy (shay.banon)
  */
 public class RestSearchAction extends BaseRestHandler {
-
-    private final static Pattern fieldsPattern;
-
-    private final static Pattern indicesBoostPattern;
-
-    static {
-        fieldsPattern = Pattern.compile(",");
-        indicesBoostPattern = Pattern.compile(",");
-    }
 
     @Inject public RestSearchAction(Settings settings, Client client, RestController controller) {
         super(settings, client);
@@ -74,12 +69,14 @@ public class RestSearchAction extends BaseRestHandler {
         try {
             searchRequest = parseSearchRequest(request);
             searchRequest.listenerThreaded(false);
-            SearchOperationThreading operationThreading = SearchOperationThreading.fromString(request.param("operation_threading"), SearchOperationThreading.SINGLE_THREAD);
-            if (operationThreading == SearchOperationThreading.NO_THREADS) {
-                // since we don't spawn, don't allow no_threads, but change it to a single thread
-                operationThreading = SearchOperationThreading.SINGLE_THREAD;
+            SearchOperationThreading operationThreading = SearchOperationThreading.fromString(request.param("operation_threading"), null);
+            if (operationThreading != null) {
+                if (operationThreading == SearchOperationThreading.NO_THREADS) {
+                    // since we don't spawn, don't allow no_threads, but change it to a single thread
+                    operationThreading = SearchOperationThreading.SINGLE_THREAD;
+                }
+                searchRequest.operationThreading(operationThreading);
             }
-            searchRequest.operationThreading(operationThreading);
         } catch (Exception e) {
             if (logger.isDebugEnabled()) {
                 logger.debug("failed to parse search request parameters", e);
@@ -99,7 +96,7 @@ public class RestSearchAction extends BaseRestHandler {
                     builder.startObject();
                     response.toXContent(builder, request);
                     builder.endObject();
-                    channel.sendResponse(new XContentRestResponse(request, OK, builder));
+                    channel.sendResponse(new XContentRestResponse(request, response.status(), builder));
                 } catch (Exception e) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("failed to execute search (building response)", e);
@@ -156,6 +153,8 @@ public class RestSearchAction extends BaseRestHandler {
             QueryStringQueryBuilder queryBuilder = QueryBuilders.queryString(queryString);
             queryBuilder.defaultField(request.param("df"));
             queryBuilder.analyzer(request.param("analyzer"));
+            queryBuilder.analyzeWildcard(request.paramAsBoolean("analyze_wildcard", false));
+            queryBuilder.lowercaseExpandedTerms(request.paramAsBoolean("lowercase_expanded_terms", true));
             String defaultOperator = request.param("default_operator");
             if (defaultOperator != null) {
                 if ("OR".equals(defaultOperator)) {
@@ -179,7 +178,6 @@ public class RestSearchAction extends BaseRestHandler {
         }
 
 
-        searchSourceBuilder.queryParserName(request.param("query_parser_name"));
         searchSourceBuilder.explain(request.paramAsBoolean("explain", null));
         searchSourceBuilder.version(request.paramAsBoolean("version", null));
 
@@ -188,7 +186,7 @@ public class RestSearchAction extends BaseRestHandler {
             if (!Strings.hasText(sField)) {
                 searchSourceBuilder.noFields();
             } else {
-                String[] sFields = fieldsPattern.split(sField);
+                String[] sFields = Strings.splitStringByCommaToArray(sField);
                 if (sFields != null) {
                     for (String field : sFields) {
                         searchSourceBuilder.field(field);
@@ -199,7 +197,7 @@ public class RestSearchAction extends BaseRestHandler {
 
         String sSorts = request.param("sort");
         if (sSorts != null) {
-            String[] sorts = fieldsPattern.split(sSorts);
+            String[] sorts = Strings.splitStringByCommaToArray(sSorts);
             for (String sort : sorts) {
                 int delimiter = sort.lastIndexOf(":");
                 if (delimiter != -1) {
@@ -218,7 +216,7 @@ public class RestSearchAction extends BaseRestHandler {
 
         String sIndicesBoost = request.param("indices_boost");
         if (sIndicesBoost != null) {
-            String[] indicesBoost = indicesBoostPattern.split(sIndicesBoost);
+            String[] indicesBoost = Strings.splitStringByCommaToArray(sIndicesBoost);
             for (String indexBoost : indicesBoost) {
                 int divisor = indexBoost.indexOf(',');
                 if (divisor == -1) {

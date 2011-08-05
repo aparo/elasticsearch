@@ -21,7 +21,7 @@ package org.elasticsearch.search.facet.histogram;
 
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
 
@@ -113,8 +113,17 @@ public class HistogramScriptFacetBuilder extends AbstractFacetBuilder {
         return this;
     }
 
-    public HistogramScriptFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public HistogramScriptFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
+        return this;
+    }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public HistogramScriptFacetBuilder nested(String nested) {
+        this.nested = nested;
         return this;
     }
 

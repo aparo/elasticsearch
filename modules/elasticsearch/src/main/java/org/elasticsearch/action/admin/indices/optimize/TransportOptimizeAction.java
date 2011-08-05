@@ -60,7 +60,7 @@ public class TransportOptimizeAction extends TransportBroadcastOperationAction<O
     }
 
     @Override protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.MERGE;
     }
 
     @Override protected String transportAction() {
@@ -129,7 +129,7 @@ public class TransportOptimizeAction extends TransportBroadcastOperationAction<O
     /**
      * The refresh request works against *all* shards.
      */
-    @Override protected GroupShardsIterator shards(OptimizeRequest request, ClusterState clusterState) {
-        return clusterState.routingTable().allShardsGrouped(request.indices());
+    @Override protected GroupShardsIterator shards(OptimizeRequest request, String[] concreteIndices, ClusterState clusterState) {
+        return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true);
     }
 }

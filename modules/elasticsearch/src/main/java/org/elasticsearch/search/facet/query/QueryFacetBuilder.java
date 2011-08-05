@@ -20,8 +20,8 @@
 package org.elasticsearch.search.facet.query;
 
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
-import org.elasticsearch.index.query.xcontent.XContentQueryBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
 
@@ -32,7 +32,7 @@ import java.io.IOException;
  */
 public class QueryFacetBuilder extends AbstractFacetBuilder {
 
-    private XContentQueryBuilder query;
+    private QueryBuilder query;
 
     public QueryFacetBuilder(String name) {
         super(name);
@@ -54,12 +54,21 @@ public class QueryFacetBuilder extends AbstractFacetBuilder {
         return this;
     }
 
-    public QueryFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public QueryFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
         return this;
     }
 
-    public QueryFacetBuilder query(XContentQueryBuilder query) {
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public QueryFacetBuilder nested(String nested) {
+        this.nested = nested;
+        return this;
+    }
+
+    public QueryFacetBuilder query(QueryBuilder query) {
         this.query = query;
         return this;
     }

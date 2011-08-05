@@ -49,6 +49,7 @@ public class Ec2Discovery extends ZenDiscovery {
                     break;
                 }
             }
+
             if (unicastZenPing != null) {
                 // update the unicast zen ping to add cloud hosts provider
                 // and, while we are at it, use only it and not the multicast for example

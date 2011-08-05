@@ -51,7 +51,7 @@ public class TransportPutIndexTemplateAction extends TransportMasterNodeOperatio
     }
 
     @Override protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.MANAGEMENT;
     }
 
     @Override protected String transportAction() {
@@ -94,7 +94,6 @@ public class TransportPutIndexTemplateAction extends TransportMasterNodeOperatio
                     @Override public void onFailure(Throwable t) {
                         failureRef.set(t);
                         latch.countDown();
-                        ;
                     }
                 });
 

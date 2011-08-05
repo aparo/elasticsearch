@@ -20,6 +20,7 @@
 package org.elasticsearch.index.translog.fs;
 
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.index.translog.TranslogException;
 
 import java.io.IOException;
@@ -37,6 +38,8 @@ public class FsTranslogFile {
 
     private final AtomicLong lastPosition = new AtomicLong(0);
     private final AtomicLong lastWrittenPosition = new AtomicLong(0);
+
+    private volatile long lastSyncPosition = 0;
 
     public FsTranslogFile(ShardId shardId, long id, RafReference raf) throws IOException {
         this.shardId = shardId;
@@ -57,11 +60,18 @@ public class FsTranslogFile {
         return lastWrittenPosition.get();
     }
 
-    public void add(byte[] data, int from, int size) throws IOException {
+    public Translog.Location add(byte[] data, int from, int size) throws IOException {
         long position = lastPosition.getAndAdd(size);
         raf.channel().write(ByteBuffer.wrap(data, from, size), position);
         lastWrittenPosition.getAndAdd(size);
         operationCounter.incrementAndGet();
+        return new Translog.Location(id, position, size);
+    }
+
+    public byte[] read(Translog.Location location) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocate(location.size);
+        raf.channel().read(buffer, location.translogLocation);
+        return buffer.array();
     }
 
     public void close(boolean delete) {
@@ -84,6 +94,12 @@ public class FsTranslogFile {
 
     public void sync() {
         try {
+            // check if we really need to sync here...
+            long last = lastWrittenPosition.get();
+            if (last == lastSyncPosition) {
+                return;
+            }
+            lastSyncPosition = last;
             raf.channel().force(false);
         } catch (Exception e) {
             // ignore

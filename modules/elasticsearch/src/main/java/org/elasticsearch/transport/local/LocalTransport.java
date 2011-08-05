@@ -25,7 +25,13 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.ThrowableObjectInputStream;
-import org.elasticsearch.common.io.stream.*;
+import org.elasticsearch.common.io.stream.BytesStreamInput;
+import org.elasticsearch.common.io.stream.BytesStreamOutput;
+import org.elasticsearch.common.io.stream.CachedStreamInput;
+import org.elasticsearch.common.io.stream.CachedStreamOutput;
+import org.elasticsearch.common.io.stream.HandlesStreamOutput;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.BoundTransportAddress;
@@ -111,6 +117,10 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
         return connectedNodes.containsKey(node);
     }
 
+    @Override public void connectToNodeLight(DiscoveryNode node) throws ConnectTransportException {
+        connectToNode(node);
+    }
+
     @Override public void connectToNode(DiscoveryNode node) throws ConnectTransportException {
         synchronized (this) {
             if (connectedNodes.containsKey(node)) {
@@ -134,31 +144,38 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
         }
     }
 
+    @Override public TransportStats stats() {
+        return new TransportStats(0);
+    }
+
     @Override public <T extends Streamable> void sendRequest(final DiscoveryNode node, final long requestId, final String action, final Streamable message, TransportRequestOptions options) throws IOException, TransportException {
-        HandlesStreamOutput stream = CachedStreamOutput.cachedHandlesBytes();
+        CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
+        try {
+            HandlesStreamOutput stream = cachedEntry.cachedHandlesBytes();
 
-        stream.writeLong(requestId);
-        byte status = 0;
-        status = TransportStreams.statusSetRequest(status);
-        stream.writeByte(status); // 0 for request, 1 for response.
+            stream.writeLong(requestId);
+            byte status = 0;
+            status = TransportStreams.statusSetRequest(status);
+            stream.writeByte(status); // 0 for request, 1 for response.
 
-        stream.writeUTF(action);
-        message.writeTo(stream);
+            stream.writeUTF(action);
+            message.writeTo(stream);
 
-        final LocalTransport targetTransport = connectedNodes.get(node);
-        if (targetTransport == null) {
-            throw new NodeNotConnectedException(node, "Node not connected");
-        }
-
-        final byte[] data = ((BytesStreamOutput) stream.wrappedOut()).copiedByteArray();
-
-        transportServiceAdapter.sent(data.length);
-
-        threadPool.cached().execute(new Runnable() {
-            @Override public void run() {
-                targetTransport.messageReceived(data, action, LocalTransport.this, requestId);
+            final LocalTransport targetTransport = connectedNodes.get(node);
+            if (targetTransport == null) {
+                throw new NodeNotConnectedException(node, "Node not connected");
             }
-        });
+
+            final byte[] data = ((BytesStreamOutput) stream.wrappedOut()).copiedByteArray();
+
+            threadPool.cached().execute(new Runnable() {
+                @Override public void run() {
+                    targetTransport.messageReceived(data, action, LocalTransport.this, requestId);
+                }
+            });
+        } finally {
+            CachedStreamOutput.pushEntry(cachedEntry);
+        }
     }
 
     ThreadPool threadPool() {
@@ -166,8 +183,6 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
     }
 
     void messageReceived(byte[] data, String action, LocalTransport sourceTransport, @Nullable final Long sendRequestId) {
-        transportServiceAdapter.received(data.length);
-
         StreamInput stream = new BytesStreamInput(data);
         stream = CachedStreamInput.cachedHandles(stream);
 

@@ -22,7 +22,7 @@ package org.elasticsearch.search.facet.range;
 import org.elasticsearch.common.collect.Lists;
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
 
@@ -120,8 +120,17 @@ public class RangeScriptFacetBuilder extends AbstractFacetBuilder {
         return this;
     }
 
-    public RangeScriptFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public RangeScriptFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
+        return this;
+    }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public RangeScriptFacetBuilder nested(String nested) {
+        this.nested = nested;
         return this;
     }
 

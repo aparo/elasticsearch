@@ -2,6 +2,7 @@ dependsOn(':elasticsearch')
 
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'eclipse'
 
 archivesBaseName = "elasticsearch-river-couchdb"
 
@@ -102,7 +103,7 @@ uploadArchives {
         pom.project {
             inceptionYear '2009'
             name 'elasticsearch-plugins-river-couchdb'
-            description 'Attachments Plugin for ElasticSearch'
+            description 'CouchDB River Plugin for ElasticSearch'
             licenses {
                 license {
                     name 'The Apache Software License, Version 2.0'
@@ -121,4 +122,8 @@ uploadArchives {
             pom.dependencies = pom.dependencies.findAll {dep -> dep.scope != 'test' } // removes the test scoped ones
         }
     }
+}
+
+eclipseClasspath {
+    defaultOutputDir = file('build/eclipse-build')
 }

@@ -91,7 +91,8 @@ public class AnalysisModule extends AbstractModule {
             public void processTokenizer(String name, Class<? extends TokenizerFactory> tokenizerFactory) {
                 if (!groupSettings.containsKey(name)) {
                     if (indicesAnalysisService != null && indicesAnalysisService.hasTokenizer(name)) {
-                        binder.addBinding(name).toInstance(indicesAnalysisService.tokenizerFactoryFactory(name));
+                        // don't register it here, we will do it in AnalysisService
+                        //binder.addBinding(name).toInstance(indicesAnalysisService.tokenizerFactoryFactory(name));
                     } else {
                         binder.addBinding(name).toProvider(FactoryProvider.newFactory(TokenizerFactoryFactory.class, tokenizerFactory)).in(Scopes.SINGLETON);
                     }
@@ -117,7 +118,8 @@ public class AnalysisModule extends AbstractModule {
             public void processAnalyzer(String name, Class<? extends AnalyzerProvider> analyzerProvider) {
                 if (!groupSettings.containsKey(name)) {
                     if (indicesAnalysisService != null && indicesAnalysisService.hasAnalyzer(name)) {
-                        binder.addBinding(name).toInstance(indicesAnalysisService.analyzerProviderFactory(name));
+                        // don't register here, we will register it in the AnalysisService
+                        //binder.addBinding(name).toInstance(indicesAnalysisService.analyzerProviderFactory(name));
                     } else {
                         binder.addBinding(name).toProvider(FactoryProvider.newFactory(AnalyzerProviderFactory.class, analyzerProvider)).in(Scopes.SINGLETON);
                     }
@@ -197,7 +199,8 @@ public class AnalysisModule extends AbstractModule {
             }
             // register it as default under the name
             if (indicesAnalysisService != null && indicesAnalysisService.hasCharFilter(charFilterName)) {
-                charFilterBinder.addBinding(charFilterName).toInstance(indicesAnalysisService.charFilterFactoryFactory(charFilterName));
+                // don't register it here, we will use explicitly register it in the AnalysisService
+                //charFilterBinder.addBinding(charFilterName).toInstance(indicesAnalysisService.charFilterFactoryFactory(charFilterName));
             } else {
                 charFilterBinder.addBinding(charFilterName).toProvider(FactoryProvider.newFactory(CharFilterFactoryFactory.class, clazz)).in(Scopes.SINGLETON);
             }
@@ -248,7 +251,8 @@ public class AnalysisModule extends AbstractModule {
             }
             // register it as default under the name
             if (indicesAnalysisService != null && indicesAnalysisService.hasTokenFilter(tokenFilterName)) {
-                tokenFilterBinder.addBinding(tokenFilterName).toInstance(indicesAnalysisService.tokenFilterFactoryFactory(tokenFilterName));
+                // don't register it here, we will use explicitly register it in the AnalysisService
+                // tokenFilterBinder.addBinding(tokenFilterName).toInstance(indicesAnalysisService.tokenFilterFactoryFactory(tokenFilterName));
             } else {
                 tokenFilterBinder.addBinding(tokenFilterName).toProvider(FactoryProvider.newFactory(TokenFilterFactoryFactory.class, clazz)).in(Scopes.SINGLETON);
             }
@@ -326,12 +330,15 @@ public class AnalysisModule extends AbstractModule {
             tokenFiltersBindings.processTokenFilter("length", LengthTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("lowercase", LowerCaseTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("porter_stem", PorterStemTokenFilterFactory.class);
+            tokenFiltersBindings.processTokenFilter("kstem", KStemTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("standard", StandardTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("nGram", NGramTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("ngram", NGramTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("edgeNGram", EdgeNGramTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("edge_ngram", EdgeNGramTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("shingle", ShingleTokenFilterFactory.class);
+            tokenFiltersBindings.processTokenFilter("unique", UniqueTokenFilterFactory.class);
+            tokenFiltersBindings.processTokenFilter("truncate", TruncateTokenFilterFactory.class);
         }
 
         @Override public void processTokenizers(TokenizersBindings tokenizersBindings) {
@@ -361,6 +368,10 @@ public class AnalysisModule extends AbstractModule {
     }
 
     private static class ExtendedProcessor extends AnalysisBinderProcessor {
+        @Override public void processCharFilters(CharFiltersBindings charFiltersBindings) {
+            charFiltersBindings.processCharFilter("mapping", MappingCharFilterFactory.class);
+        }
+
         @Override public void processTokenFilters(TokenFiltersBindings tokenFiltersBindings) {
             tokenFiltersBindings.processTokenFilter("snowball", SnowballTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("stemmer", StemmerTokenFilterFactory.class);
@@ -368,6 +379,7 @@ public class AnalysisModule extends AbstractModule {
             tokenFiltersBindings.processTokenFilter("synonym", SynonymTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("elision", ElisionTokenFilterFactory.class);
 
+            tokenFiltersBindings.processTokenFilter("pattern_replace", PatternReplaceTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("phonetic", PhoneticTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("dictionary_decompounder", DictionaryCompoundWordTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("hypennation_decompounder", HyphenationCompoundWordTokenFilterFactory.class);
@@ -379,6 +391,9 @@ public class AnalysisModule extends AbstractModule {
             tokenFiltersBindings.processTokenFilter("french_stem", FrenchStemTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("german_stem", GermanStemTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("russian_stem", RussianStemTokenFilterFactory.class);
+
+            tokenFiltersBindings.processTokenFilter("keyword_marker", KeywordMarkerTokenFilterFactory.class);
+            tokenFiltersBindings.processTokenFilter("stemmer_override", StemmerOverrideTokenFilterFactory.class);
         }
 
         @Override public void processTokenizers(TokenizersBindings tokenizersBindings) {

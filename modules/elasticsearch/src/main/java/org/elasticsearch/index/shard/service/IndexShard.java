@@ -59,13 +59,13 @@ public interface IndexShard extends IndexShardComponent {
 
     void delete(Engine.Delete delete) throws ElasticSearchException;
 
-    void deleteByQuery(byte[] querySource, @Nullable String queryParserName, String... types) throws ElasticSearchException;
+    void deleteByQuery(byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
 
-    byte[] get(String type, String id) throws ElasticSearchException;
+    Engine.GetResult get(Engine.Get get) throws ElasticSearchException;
 
-    long count(float minScore, byte[] querySource, @Nullable String queryParserName, String... types) throws ElasticSearchException;
+    long count(float minScore, byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
 
-    long count(float minScore, byte[] querySource, int querySourceOffset, int querySourceLength, @Nullable String queryParserName, String... types) throws ElasticSearchException;
+    long count(float minScore, byte[] querySource, int querySourceOffset, int querySourceLength, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
 
     void refresh(Engine.Refresh refresh) throws ElasticSearchException;
 

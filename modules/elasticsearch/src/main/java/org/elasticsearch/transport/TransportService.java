@@ -60,11 +60,6 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
 
     final CopyOnWriteArrayList<TransportConnectionListener> connectionListeners = new CopyOnWriteArrayList<TransportConnectionListener>();
 
-    final AtomicLong rxBytes = new AtomicLong();
-    final AtomicLong rxCount = new AtomicLong();
-    final AtomicLong txBytes = new AtomicLong();
-    final AtomicLong txCount = new AtomicLong();
-
     // An LRU (don't really care about concurrency here) that holds the latest timed out requests so if they
     // do show up, we can print more descriptive information about them
     final Map<Long, TimeoutInfoHolder> timeoutInfoHandlers = Collections.synchronizedMap(new LinkedHashMap<Long, TimeoutInfoHolder>(100, .75F, true) {
@@ -111,7 +106,7 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
     }
 
     public TransportStats stats() {
-        return new TransportStats(rxCount.get(), rxBytes.get(), txCount.get(), txBytes.get());
+        return transport.stats();
     }
 
     public BoundTransportAddress boundAddress() {
@@ -124,6 +119,10 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
 
     public void connectToNode(DiscoveryNode node) throws ConnectTransportException {
         transport.connectToNode(node);
+    }
+
+    public void connectToNodeLight(DiscoveryNode node) throws ConnectTransportException {
+        transport.connectToNodeLight(node);
     }
 
     public void disconnectFromNode(DiscoveryNode node) {
@@ -229,16 +228,6 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
     }
 
     class Adapter implements TransportServiceAdapter {
-
-        @Override public void received(long size) {
-            rxCount.getAndIncrement();
-            rxBytes.addAndGet(size);
-        }
-
-        @Override public void sent(long size) {
-            txCount.getAndIncrement();
-            txBytes.addAndGet(size);
-        }
 
         @Override public TransportRequestHandler handler(String action) {
             return serverHandlers.get(action);

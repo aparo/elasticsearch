@@ -51,7 +51,14 @@ import org.elasticsearch.indices.IndexMissingException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.*;
+import org.elasticsearch.transport.BaseTransportRequestHandler;
+import org.elasticsearch.transport.BaseTransportResponseHandler;
+import org.elasticsearch.transport.ConnectTransportException;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportException;
+import org.elasticsearch.transport.TransportRequestOptions;
+import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.transport.VoidTransportResponseHandler;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -289,7 +296,9 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
 
             boolean foundPrimary = false;
-            for (final ShardRouting shard : shardIt) {
+            ShardRouting shardX;
+            while ((shardX = shardIt.nextOrNull()) != null) {
+                final ShardRouting shard = shardX;
                 // we only deal with primary shardIt here...
                 if (!shard.primary()) {
                     continue;
@@ -312,6 +321,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
                     } else if (consistencyLevel == WriteConsistencyLevel.ALL) {
                         requiredNumber = shardIt.size();
                     }
+
                     if (shardIt.sizeActive() < requiredNumber) {
                         retry(fromClusterEvent, shard.shardId());
                         return false;
@@ -368,13 +378,13 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
             // we should never get here, but here we go
             if (!foundPrimary) {
-                final UnavailableShardsException failure = new UnavailableShardsException(shardIt.shardId(), request.toString());
-                listener.onFailure(failure);
+                retry(fromClusterEvent, shardIt.shardId());
+                return false;
             }
             return true;
         }
 
-        private void retry(boolean fromClusterEvent, final ShardId shardId) {
+        void retry(boolean fromClusterEvent, final ShardId shardId) {
             if (!fromClusterEvent) {
                 // make it threaded operation so we fork on the discovery listener thread
                 request.beforeLocalFork();
@@ -413,7 +423,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
         }
 
-        private void performOnPrimary(int primaryShardId, boolean fromDiscoveryListener, final ShardRouting shard, ClusterState clusterState) {
+        void performOnPrimary(int primaryShardId, boolean fromDiscoveryListener, final ShardRouting shard, ClusterState clusterState) {
             try {
                 PrimaryResponse<Response> response = shardOperationOnPrimary(clusterState, new ShardOperationRequest(primaryShardId, request));
                 performReplicas(response);
@@ -432,7 +442,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
         }
 
-        private void performReplicas(final PrimaryResponse<Response> response) {
+        void performReplicas(final PrimaryResponse<Response> response) {
             if (ignoreReplicas() || shardIt.size() == 1 /* no replicas */) {
                 postPrimaryOperation(request, response);
                 listener.onResponse(response.response());
@@ -440,30 +450,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
 
             // initialize the counter
-            int replicaCounter = 0;
-
-            for (final ShardRouting shard : shardIt.reset()) {
-                // if its unassigned, nothing to do here...
-                if (shard.unassigned()) {
-                    continue;
-                }
-
-                // if the shard is primary and relocating, add one to the counter since we perform it on the replica as well
-                // (and we already did it on the primary)
-                if (shard.primary()) {
-                    if (shard.relocating()) {
-                        replicaCounter++;
-                    }
-                } else {
-                    replicaCounter++;
-                    // if we are relocating the replica, we want to perform the index operation on both the relocating
-                    // shard and the target shard. This means that we won't loose index operations between end of recovery
-                    // and reassignment of the shard by the master node
-                    if (shard.relocating()) {
-                        replicaCounter++;
-                    }
-                }
-            }
+            int replicaCounter = shardIt.assignedReplicasIncludingRelocating();
 
             if (replicaCounter == 0) {
                 postPrimaryOperation(request, response);
@@ -483,7 +470,9 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             replicaCounter++;
 
             AtomicInteger counter = new AtomicInteger(replicaCounter);
-            for (final ShardRouting shard : shardIt.reset()) {
+            shardIt.reset(); // reset the iterator
+            ShardRouting shard;
+            while ((shard = shardIt.nextOrNull()) != null) {
                 // if its unassigned, nothing to do here...
                 if (shard.unassigned()) {
                     continue;
@@ -518,7 +507,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
             }
         }
 
-        private void performOnReplica(final PrimaryResponse<Response> response, final AtomicInteger counter, final ShardRouting shard, String nodeId) {
+        void performOnReplica(final PrimaryResponse<Response> response, final AtomicInteger counter, final ShardRouting shard, String nodeId) {
             // if we don't have that node, it means that it might have failed and will be created again, in
             // this case, we don't have to do the operation, and just let it failover
             if (!nodes.nodeExists(nodeId)) {
@@ -587,7 +576,7 @@ public abstract class TransportShardReplicationOperationAction<Request extends S
         /**
          * Should an exception be ignored when the operation is performed on the replica.
          */
-        private boolean ignoreReplicaException(Throwable e) {
+        boolean ignoreReplicaException(Throwable e) {
             Throwable cause = ExceptionsHelper.unwrapCause(e);
             if (cause instanceof IllegalIndexShardStateException) {
                 return true;

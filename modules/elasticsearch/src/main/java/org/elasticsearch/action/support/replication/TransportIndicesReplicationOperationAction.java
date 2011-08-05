@@ -31,6 +31,8 @@ import org.elasticsearch.transport.BaseTransportRequestHandler;
 import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportService;
 
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
@@ -61,19 +63,24 @@ public abstract class TransportIndicesReplicationOperationAction<Request extends
     @Override protected void doExecute(final Request request, final ActionListener<Response> listener) {
         ClusterState clusterState = clusterService.state();
 
-        // update to actual indices
-        request.indices(clusterState.metaData().concreteIndices(request.indices()));
+        // get actual indices
 
-        checkBlock(request, clusterState);
+        String[] concreteIndices = clusterState.metaData().concreteIndices(request.indices());
 
-        String[] indices = request.indices();
+        checkBlock(request, concreteIndices, clusterState);
 
         final AtomicInteger indexCounter = new AtomicInteger();
-        final AtomicInteger completionCounter = new AtomicInteger(indices.length);
-        final AtomicReferenceArray<Object> indexResponses = new AtomicReferenceArray<Object>(indices.length);
+        final AtomicInteger completionCounter = new AtomicInteger(concreteIndices.length);
+        final AtomicReferenceArray<Object> indexResponses = new AtomicReferenceArray<Object>(concreteIndices.length);
 
-        for (final String index : indices) {
-            IndexRequest indexRequest = newIndexRequestInstance(request, index);
+        Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(request.routing(), request.indices());
+
+        for (final String index : concreteIndices) {
+            Set<String> routing = null;
+            if (routingMap != null) {
+                routing = routingMap.get(index);
+            }
+            IndexRequest indexRequest = newIndexRequestInstance(request, index, routing);
             // no threading needed, all is done on the index replication one
             indexRequest.listenerThreaded(false);
             indexAction.execute(indexRequest, new ActionListener<IndexResponse>() {
@@ -104,11 +111,11 @@ public abstract class TransportIndicesReplicationOperationAction<Request extends
 
     protected abstract String transportAction();
 
-    protected abstract IndexRequest newIndexRequestInstance(Request request, String index);
+    protected abstract IndexRequest newIndexRequestInstance(Request request, String index, Set<String> routing);
 
     protected abstract boolean accumulateExceptions();
 
-    protected void checkBlock(Request request, ClusterState state) {
+    protected void checkBlock(Request request, String[] concreteIndices, ClusterState state) {
 
     }
 

@@ -20,7 +20,11 @@
 package org.elasticsearch.search.controller;
 
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.ShardFieldDocSortedHitQueue;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.util.PriorityQueue;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.Iterables;
@@ -256,7 +260,13 @@ public class SearchPhaseController extends AbstractComponent {
 
         boolean sorted = false;
         int sortScoreIndex = -1;
-        QuerySearchResult querySearchResult = Iterables.get(queryResults.values(), 0).queryResult();
+        QuerySearchResult querySearchResult;
+        try {
+            querySearchResult = Iterables.get(queryResults.values(), 0).queryResult();
+        } catch (IndexOutOfBoundsException e) {
+            // no results, return an empty response
+            return InternalSearchResponse.EMPTY;
+        }
 
         if (querySearchResult.topDocs() instanceof TopFieldDocs) {
             sorted = true;
@@ -272,12 +282,10 @@ public class SearchPhaseController extends AbstractComponent {
         InternalFacets facets = null;
         if (!queryResults.isEmpty()) {
             // we rely on the fact that the order of facets is the same on all query results
-            QuerySearchResult queryResult = queryResults.values().iterator().next().queryResult();
-
-            if (queryResult.facets() != null && queryResult.facets().facets() != null && !queryResult.facets().facets().isEmpty()) {
+            if (querySearchResult.facets() != null && querySearchResult.facets().facets() != null && !querySearchResult.facets().facets().isEmpty()) {
                 List<Facet> aggregatedFacets = Lists.newArrayList();
                 List<Facet> namedFacets = Lists.newArrayList();
-                for (Facet facet : queryResult.facets()) {
+                for (Facet facet : querySearchResult.facets()) {
                     // aggregate each facet name into a single list, and aggregate it
                     namedFacets.clear();
                     for (QuerySearchResultProvider queryResultProvider : queryResults.values()) {

@@ -33,6 +33,7 @@ import org.elasticsearch.action.admin.indices.cache.clear.ClearIndicesCacheReque
 import org.elasticsearch.action.admin.indices.close.CloseIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.gateway.snapshot.GatewaySnapshotRequest;
 import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingRequest;
@@ -40,6 +41,7 @@ import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
 import org.elasticsearch.action.admin.indices.optimize.OptimizeRequest;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
+import org.elasticsearch.action.admin.indices.segments.IndicesSegmentsRequest;
 import org.elasticsearch.action.admin.indices.settings.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.status.IndicesStatusRequest;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -107,7 +109,7 @@ public class Requests {
 
     /**
      * Creates a delete by query request. Note, the query itself must be set either by setting the JSON source
-     * of the query, or by using a {@link org.elasticsearch.index.query.QueryBuilder} (using {@link org.elasticsearch.index.query.xcontent.QueryBuilders}).
+     * of the query, or by using a {@link org.elasticsearch.index.query.QueryBuilder} (using {@link org.elasticsearch.index.query.QueryBuilders}).
      *
      * @param indices The indices the delete by query against. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
      * @return The delete by query request
@@ -131,7 +133,7 @@ public class Requests {
 
     /**
      * Creates a count request which counts the hits matched against a query. Note, the query itself must be set
-     * either using the JSON source of the query, or using a {@link org.elasticsearch.index.query.QueryBuilder} (using {@link org.elasticsearch.index.query.xcontent.QueryBuilders}).
+     * either using the JSON source of the query, or using a {@link org.elasticsearch.index.query.QueryBuilder} (using {@link org.elasticsearch.index.query.QueryBuilders}).
      *
      * @param indices The indices to count matched documents against a query. Use <tt>null</tt> or <tt>_all</tt> to execute against all indices
      * @return The count request
@@ -185,6 +187,21 @@ public class Requests {
      */
     public static IndicesStatusRequest indicesStatusRequest(String... indices) {
         return new IndicesStatusRequest(indices);
+    }
+
+    public static IndicesSegmentsRequest indicesSegmentsRequest(String... indices) {
+        return new IndicesSegmentsRequest(indices);
+    }
+
+    /**
+     * Creates an indices exists request.
+     *
+     * @param indices The indices to check if they exists or not.
+     * @return The indices exists request
+     * @see org.elasticsearch.client.IndicesAdminClient#exists(org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest)
+     */
+    public static IndicesExistsRequest indicesExistsRequest(String... indices) {
+        return new IndicesExistsRequest(indices);
     }
 
     /**

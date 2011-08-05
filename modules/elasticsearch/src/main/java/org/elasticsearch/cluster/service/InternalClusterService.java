@@ -21,17 +21,26 @@ package org.elasticsearch.cluster.service;
 
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
+import org.elasticsearch.cluster.TimeoutClusterStateListener;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlocks;
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.operation.OperationRouting;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.jsr166y.LinkedTransferQueue;
+import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -72,7 +81,7 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     private volatile ClusterState clusterState = newClusterStateBuilder().build();
 
-    private final ClusterBlocks.Builder initialBlocks = ClusterBlocks.builder();
+    private final ClusterBlocks.Builder initialBlocks = ClusterBlocks.builder().addGlobalBlock(Discovery.NO_MASTER_BLOCK);
 
     private volatile ScheduledFuture reconnectToNodes;
 
@@ -189,7 +198,14 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
                 if (previousClusterState != clusterState) {
                     if (clusterState.nodes().localNodeMaster()) {
                         // only the master controls the version numbers
-                        clusterState = new ClusterState(clusterState.version() + 1, clusterState);
+                        Builder builder = ClusterState.builder().state(clusterState).version(clusterState.version() + 1);
+                        if (previousClusterState.routingTable() != clusterState.routingTable()) {
+                            builder.routingTable(RoutingTable.builder().routingTable(clusterState.routingTable()).version(clusterState.routingTable().version() + 1));
+                        }
+                        if (previousClusterState.metaData() != clusterState.metaData()) {
+                            builder.metaData(MetaData.builder().metaData(clusterState.metaData()).version(clusterState.metaData().version() + 1));
+                        }
+                        clusterState = builder.build();
                     } else {
                         // we got this cluster state from the master, filter out based on versions (don't call listeners)
                         if (clusterState.version() < previousClusterState.version()) {
@@ -325,11 +341,6 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
     }
 
     private boolean nodeRequiresConnection(DiscoveryNode node) {
-        if (localNode().clientNode()) {
-            if (node.clientNode()) {
-                return false;
-            }
-        }
-        return true;
+        return localNode().shouldConnectTo(node);
     }
 }

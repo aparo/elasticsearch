@@ -30,7 +30,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Required;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.io.FastByteArrayOutputStream;
+import org.elasticsearch.common.io.BytesStream;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -71,7 +71,6 @@ public class CountRequest extends BroadcastOperationRequest {
     private boolean querySourceUnsafe;
 
     private String[] types = Strings.EMPTY_ARRAY;
-    private String queryParserName;
 
     CountRequest() {
     }
@@ -168,10 +167,10 @@ public class CountRequest extends BroadcastOperationRequest {
     /**
      * The query source to execute.
      *
-     * @see org.elasticsearch.index.query.xcontent.QueryBuilders
+     * @see org.elasticsearch.index.query.QueryBuilders
      */
     @Required public CountRequest query(QueryBuilder queryBuilder) {
-        FastByteArrayOutputStream bos = queryBuilder.buildAsUnsafeBytes();
+        BytesStream bos = queryBuilder.buildAsUnsafeBytes();
         this.querySource = bos.unsafeByteArray();
         this.querySourceOffset = 0;
         this.querySourceLength = bos.size();
@@ -236,21 +235,6 @@ public class CountRequest extends BroadcastOperationRequest {
     }
 
     /**
-     * The query parse name to use. If not set, will use the default one.
-     */
-    String queryParserName() {
-        return queryParserName;
-    }
-
-    /**
-     * The query parse name to use. If not set, will use the default one.
-     */
-    public CountRequest queryParserName(String queryParserName) {
-        this.queryParserName = queryParserName;
-        return this;
-    }
-
-    /**
      * The types of documents the query will run against. Defaults to all types.
      */
     String[] types() {
@@ -305,9 +289,6 @@ public class CountRequest extends BroadcastOperationRequest {
         querySource = new byte[querySourceLength];
         in.readFully(querySource);
 
-        if (in.readBoolean()) {
-            queryParserName = in.readUTF();
-        }
         int typesSize = in.readVInt();
         if (typesSize > 0) {
             types = new String[typesSize];
@@ -337,12 +318,6 @@ public class CountRequest extends BroadcastOperationRequest {
         out.writeVInt(querySourceLength);
         out.writeBytes(querySource, querySourceOffset, querySourceLength);
 
-        if (queryParserName == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            out.writeUTF(queryParserName);
-        }
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);

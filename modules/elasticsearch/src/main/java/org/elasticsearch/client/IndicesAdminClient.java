@@ -33,6 +33,8 @@ import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
+import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.IndicesExistsResponse;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
 import org.elasticsearch.action.admin.indices.flush.FlushResponse;
 import org.elasticsearch.action.admin.indices.gateway.snapshot.GatewaySnapshotRequest;
@@ -47,6 +49,8 @@ import org.elasticsearch.action.admin.indices.optimize.OptimizeRequest;
 import org.elasticsearch.action.admin.indices.optimize.OptimizeResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
 import org.elasticsearch.action.admin.indices.refresh.RefreshResponse;
+import org.elasticsearch.action.admin.indices.segments.IndicesSegmentResponse;
+import org.elasticsearch.action.admin.indices.segments.IndicesSegmentsRequest;
 import org.elasticsearch.action.admin.indices.settings.UpdateSettingsRequest;
 import org.elasticsearch.action.admin.indices.settings.UpdateSettingsResponse;
 import org.elasticsearch.action.admin.indices.status.IndicesStatusRequest;
@@ -61,6 +65,7 @@ import org.elasticsearch.client.action.admin.indices.cache.clear.ClearIndicesCac
 import org.elasticsearch.client.action.admin.indices.close.CloseIndexRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.delete.DeleteIndexRequestBuilder;
+import org.elasticsearch.client.action.admin.indices.exists.IndicesExistsRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.flush.FlushRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.gateway.snapshot.GatewaySnapshotRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.mapping.delete.DeleteMappingRequestBuilder;
@@ -68,6 +73,7 @@ import org.elasticsearch.client.action.admin.indices.mapping.put.PutMappingReque
 import org.elasticsearch.client.action.admin.indices.open.OpenIndexRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.optimize.OptimizeRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.refresh.RefreshRequestBuilder;
+import org.elasticsearch.client.action.admin.indices.segments.IndicesSegmentsRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.settings.UpdateSettingsRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.status.IndicesStatusRequestBuilder;
 import org.elasticsearch.client.action.admin.indices.template.delete.DeleteIndexTemplateRequestBuilder;
@@ -80,6 +86,29 @@ import org.elasticsearch.client.action.admin.indices.template.put.PutIndexTempla
  * @see AdminClient#indices()
  */
 public interface IndicesAdminClient {
+
+    /**
+     * Indices Exists.
+     *
+     * @param request The indices exists request
+     * @return The result future
+     * @see Requests#indicesExistsRequest(String...)
+     */
+    ActionFuture<IndicesExistsResponse> exists(IndicesExistsRequest request);
+
+    /**
+     * The status of one or more indices.
+     *
+     * @param request  The indices status request
+     * @param listener A listener to be notified with a result
+     * @see Requests#indicesExistsRequest(String...)
+     */
+    void exists(IndicesExistsRequest request, ActionListener<IndicesExistsResponse> listener);
+
+    /**
+     * Indices exists.
+     */
+    IndicesExistsRequestBuilder prepareExists(String... indices);
 
     /**
      * The status of one or more indices.
@@ -103,6 +132,29 @@ public interface IndicesAdminClient {
      * The status of one or more indices.
      */
     IndicesStatusRequestBuilder prepareStatus(String... indices);
+
+    /**
+     * The segments of one or more indices.
+     *
+     * @param request The indices segments request
+     * @return The result future
+     * @see Requests#indicesSegmentsRequest(String...)
+     */
+    ActionFuture<IndicesSegmentResponse> segments(IndicesSegmentsRequest request);
+
+    /**
+     * The segments of one or more indices.
+     *
+     * @param request  The indices segments request
+     * @param listener A listener to be notified with a result
+     * @see Requests#indicesSegmentsRequest(String...)
+     */
+    void segments(IndicesSegmentsRequest request, ActionListener<IndicesSegmentResponse> listener);
+
+    /**
+     * The segments of one or more indices.
+     */
+    IndicesSegmentsRequestBuilder prepareSegments(String... indices);
 
     /**
      * Creates an index using an explicit request allowing to specify the settings of the index.

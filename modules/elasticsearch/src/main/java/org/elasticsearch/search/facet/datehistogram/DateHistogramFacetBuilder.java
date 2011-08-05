@@ -21,7 +21,7 @@ package org.elasticsearch.search.facet.datehistogram;
 
 import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
 
@@ -129,7 +129,7 @@ public class DateHistogramFacetBuilder extends AbstractFacetBuilder {
      * Should the facet run in global mode (not bounded by the search query) or not (bounded by
      * the search query). Defaults to <tt>false</tt>.
      */
-    public DateHistogramFacetBuilder global(boolean global) {
+    @Override public DateHistogramFacetBuilder global(boolean global) {
         super.global(global);
         return this;
     }
@@ -145,10 +145,20 @@ public class DateHistogramFacetBuilder extends AbstractFacetBuilder {
     /**
      * An additional filter used to further filter down the set of documents the facet will run on.
      */
-    public DateHistogramFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    @Override public DateHistogramFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
         return this;
     }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public DateHistogramFacetBuilder nested(String nested) {
+        this.nested = nested;
+        return this;
+    }
+
 
     @Override public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         if (keyFieldName == null) {

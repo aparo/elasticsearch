@@ -24,8 +24,9 @@ import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesResponse;
 import org.elasticsearch.client.IndicesAdminClient;
 import org.elasticsearch.client.action.admin.indices.support.BaseIndicesRequestBuilder;
+import org.elasticsearch.cluster.metadata.AliasAction;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 
 import java.util.Map;
 
@@ -76,12 +77,22 @@ public class IndicesAliasesRequestBuilder extends BaseIndicesRequestBuilder<Indi
     /**
      * Adds an alias to the index.
      *
-     * @param index  The index
-     * @param alias  The alias
+     * @param index         The index
+     * @param alias         The alias
      * @param filterBuilder The filter
      */
-    public IndicesAliasesRequestBuilder addAlias(String index, String alias, XContentFilterBuilder filterBuilder) {
+    public IndicesAliasesRequestBuilder addAlias(String index, String alias, FilterBuilder filterBuilder) {
         request.addAlias(index, alias, filterBuilder);
+        return this;
+    }
+
+    /**
+     * Adds an alias action to the request.
+     *
+     * @param aliasAction The alias Action
+     */
+    public IndicesAliasesRequestBuilder addAliasAction(AliasAction aliasAction) {
+        request.addAliasAction(aliasAction);
         return this;
     }
 
@@ -101,6 +112,16 @@ public class IndicesAliasesRequestBuilder extends BaseIndicesRequestBuilder<Indi
      */
     public IndicesAliasesRequestBuilder setMasterNodeTimeout(TimeValue timeout) {
         request.masterNodeTimeout(timeout);
+        return this;
+    }
+
+    /**
+     * Sets operation timeout.
+     *
+     * @param timeout
+     */
+    public IndicesAliasesRequestBuilder setTimeout(TimeValue timeout) {
+        request.timeout(timeout);
         return this;
     }
 

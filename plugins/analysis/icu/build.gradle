@@ -2,6 +2,7 @@ dependsOn(':elasticsearch')
 
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'eclipse'
 
 archivesBaseName = "elasticsearch-analysis-icu"
 
@@ -32,10 +33,10 @@ configurations {
 dependencies {
     compile project(':elasticsearch')
 
-    compile('org.apache.lucene:lucene-icu4j:3.1.0') { transitive = false }
-    distLib('org.apache.lucene:lucene-icu4j:3.1.0') { transitive = false }
-    compile('org.apache.lucene:lucene-icu:3.1.0') { transitive = false }
-    distLib('org.apache.lucene:lucene-icu:3.1.0') { transitive = false }
+    compile('org.apache.lucene:lucene-icu4j:3.2.0') { transitive = false }
+    distLib('org.apache.lucene:lucene-icu4j:3.2.0') { transitive = false }
+    compile('org.apache.lucene:lucene-icu:3.3.0') { transitive = false }
+    distLib('org.apache.lucene:lucene-icu:3.3.0') { transitive = false }
 }
 
 task explodedDist(dependsOn: [jar], description: 'Builds the plugin zip file') << {
@@ -107,7 +108,7 @@ uploadArchives {
         pom.project {
             inceptionYear '2009'
             name 'elasticsearch-plugins-analysis-icu'
-            description 'Attachments Plugin for ElasticSearch'
+            description 'ICU Analysis Plugin for ElasticSearch'
             licenses {
                 license {
                     name 'The Apache Software License, Version 2.0'
@@ -126,4 +127,8 @@ uploadArchives {
             pom.dependencies = pom.dependencies.findAll {dep -> dep.scope != 'test' } // removes the test scoped ones
         }
     }
+}
+
+eclipseClasspath {
+    defaultOutputDir = file('build/eclipse-build')
 }

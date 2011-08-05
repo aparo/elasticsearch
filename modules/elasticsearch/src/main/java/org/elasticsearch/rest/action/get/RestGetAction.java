@@ -23,13 +23,18 @@ import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.rest.*;
+import org.elasticsearch.rest.BaseRestHandler;
+import org.elasticsearch.rest.RestChannel;
+import org.elasticsearch.rest.RestController;
+import org.elasticsearch.rest.RestRequest;
+import org.elasticsearch.rest.XContentRestResponse;
+import org.elasticsearch.rest.XContentThrowableRestResponse;
 
 import java.io.IOException;
-import java.util.regex.Pattern;
 
 import static org.elasticsearch.rest.RestRequest.Method.*;
 import static org.elasticsearch.rest.RestStatus.*;
@@ -39,12 +44,6 @@ import static org.elasticsearch.rest.action.support.RestXContentBuilder.*;
  * @author kimchy (Shay Banon)
  */
 public class RestGetAction extends BaseRestHandler {
-
-    private final static Pattern fieldsPattern;
-
-    static {
-        fieldsPattern = Pattern.compile(",");
-    }
 
     @Inject public RestGetAction(Settings settings, Client client, RestController controller) {
         super(settings, client);
@@ -60,10 +59,11 @@ public class RestGetAction extends BaseRestHandler {
         getRequest.refresh(request.paramAsBoolean("refresh", getRequest.refresh()));
         getRequest.routing(request.param("routing"));
         getRequest.preference(request.param("preference"));
+        getRequest.realtime(request.paramAsBoolean("realtime", null));
 
         String sField = request.param("fields");
         if (sField != null) {
-            String[] sFields = fieldsPattern.split(sField);
+            String[] sFields = Strings.splitStringByCommaToArray(sField);
             if (sFields != null) {
                 getRequest.fields(sFields);
             }

@@ -50,8 +50,8 @@ import org.testng.annotations.Test;
 import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.common.xcontent.XContentFactory.*;
-import static org.elasticsearch.index.query.xcontent.FilterBuilders.*;
-import static org.elasticsearch.index.query.xcontent.QueryBuilders.*;
+import static org.elasticsearch.index.query.FilterBuilders.*;
+import static org.elasticsearch.index.query.QueryBuilders.*;
 import static org.elasticsearch.search.facet.FacetBuilders.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
@@ -448,6 +448,8 @@ public class SimpleFacetsTests extends AbstractNodesTests {
 
             TermsFacet facet = searchResponse.facets().facet("facet1");
             assertThat(facet.name(), equalTo("facet1"));
+            assertThat(facet.getTotalCount(), equalTo(2l));
+            assertThat(facet.getOtherCount(), equalTo(0l));
             assertThat(facet.entries().size(), equalTo(1));
             assertThat(facet.entries().get(0).term(), equalTo("111"));
             assertThat(facet.entries().get(0).count(), equalTo(2));

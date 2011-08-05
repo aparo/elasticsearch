@@ -34,6 +34,7 @@ import org.elasticsearch.client.transport.action.admin.indices.cache.clear.Clien
 import org.elasticsearch.client.transport.action.admin.indices.close.ClientTransportCloseIndexAction;
 import org.elasticsearch.client.transport.action.admin.indices.create.ClientTransportCreateIndexAction;
 import org.elasticsearch.client.transport.action.admin.indices.delete.ClientTransportDeleteIndexAction;
+import org.elasticsearch.client.transport.action.admin.indices.exists.ClientTransportIndicesExistsAction;
 import org.elasticsearch.client.transport.action.admin.indices.flush.ClientTransportFlushAction;
 import org.elasticsearch.client.transport.action.admin.indices.gateway.snapshot.ClientTransportGatewaySnapshotAction;
 import org.elasticsearch.client.transport.action.admin.indices.mapping.delete.ClientTransportDeleteMappingAction;
@@ -41,6 +42,7 @@ import org.elasticsearch.client.transport.action.admin.indices.mapping.put.Clien
 import org.elasticsearch.client.transport.action.admin.indices.open.ClientTransportOpenIndexAction;
 import org.elasticsearch.client.transport.action.admin.indices.optimize.ClientTransportOptimizeAction;
 import org.elasticsearch.client.transport.action.admin.indices.refresh.ClientTransportRefreshAction;
+import org.elasticsearch.client.transport.action.admin.indices.segments.ClientTransportIndicesSegmentsAction;
 import org.elasticsearch.client.transport.action.admin.indices.settings.ClientTransportUpdateSettingsAction;
 import org.elasticsearch.client.transport.action.admin.indices.status.ClientTransportIndicesStatusAction;
 import org.elasticsearch.client.transport.action.admin.indices.template.delete.ClientTransportDeleteIndexTemplateAction;
@@ -50,6 +52,7 @@ import org.elasticsearch.client.transport.action.count.ClientTransportCountActio
 import org.elasticsearch.client.transport.action.delete.ClientTransportDeleteAction;
 import org.elasticsearch.client.transport.action.deletebyquery.ClientTransportDeleteByQueryAction;
 import org.elasticsearch.client.transport.action.get.ClientTransportGetAction;
+import org.elasticsearch.client.transport.action.get.ClientTransportMultiGetAction;
 import org.elasticsearch.client.transport.action.index.ClientTransportIndexAction;
 import org.elasticsearch.client.transport.action.percolate.ClientTransportPercolateAction;
 import org.elasticsearch.client.transport.action.search.ClientTransportSearchAction;
@@ -66,13 +69,16 @@ public class ClientTransportActionModule extends AbstractModule {
         bind(ClientTransportDeleteAction.class).asEagerSingleton();
         bind(ClientTransportDeleteByQueryAction.class).asEagerSingleton();
         bind(ClientTransportGetAction.class).asEagerSingleton();
+        bind(ClientTransportMultiGetAction.class).asEagerSingleton();
         bind(ClientTransportCountAction.class).asEagerSingleton();
         bind(ClientTransportSearchAction.class).asEagerSingleton();
         bind(ClientTransportSearchScrollAction.class).asEagerSingleton();
         bind(ClientTransportBulkAction.class).asEagerSingleton();
         bind(ClientTransportPercolateAction.class).asEagerSingleton();
 
+        bind(ClientTransportIndicesExistsAction.class).asEagerSingleton();
         bind(ClientTransportIndicesStatusAction.class).asEagerSingleton();
+        bind(ClientTransportIndicesSegmentsAction.class).asEagerSingleton();
         bind(ClientTransportRefreshAction.class).asEagerSingleton();
         bind(ClientTransportFlushAction.class).asEagerSingleton();
         bind(ClientTransportOptimizeAction.class).asEagerSingleton();

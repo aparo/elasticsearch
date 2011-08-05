@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.gateway;
 
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -30,7 +31,12 @@ import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.engine.SnapshotFailedEngineException;
 import org.elasticsearch.index.settings.IndexSettings;
 import org.elasticsearch.index.settings.IndexSettingsService;
-import org.elasticsearch.index.shard.*;
+import org.elasticsearch.index.shard.AbstractIndexShardComponent;
+import org.elasticsearch.index.shard.IllegalIndexShardStateException;
+import org.elasticsearch.index.shard.IndexShardClosedException;
+import org.elasticsearch.index.shard.IndexShardNotStartedException;
+import org.elasticsearch.index.shard.IndexShardState;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.index.shard.service.InternalIndexShard;
 import org.elasticsearch.index.translog.Translog;
@@ -90,6 +96,10 @@ public class IndexShardGatewayService extends AbstractIndexShardComponent implem
         indexSettingsService.addListener(applySettings);
     }
 
+    static {
+        IndexMetaData.addDynamicSettings("index.gateway.snapshot_interval");
+    }
+
     class ApplySettings implements IndexSettingsService.Listener {
         @Override public void onRefreshSettings(Settings settings) {
             TimeValue snapshotInterval = settings.getAsTime("index.gateway.snapshot_interval", IndexShardGatewayService.this.snapshotInterval);
@@ -141,7 +151,7 @@ public class IndexShardGatewayService extends AbstractIndexShardComponent implem
     /**
      * Recovers the state of the shard from the gateway.
      */
-    public void recover(final RecoveryListener listener) throws IndexShardGatewayRecoveryException, IgnoreGatewayRecoveryException {
+    public void recover(final boolean indexShouldExists, final RecoveryListener listener) throws IndexShardGatewayRecoveryException, IgnoreGatewayRecoveryException {
         if (indexShard.state() == IndexShardState.CLOSED) {
             // got closed on us, just ignore this recovery
             listener.onIgnoreRecovery("shard closed");
@@ -166,7 +176,7 @@ public class IndexShardGatewayService extends AbstractIndexShardComponent implem
 
                 try {
                     logger.debug("starting recovery from {} ...", shardGateway);
-                    shardGateway.recover(recoveryStatus);
+                    shardGateway.recover(indexShouldExists, recoveryStatus);
 
                     lastIndexVersion = recoveryStatus.index().version();
                     lastTranslogId = -1;

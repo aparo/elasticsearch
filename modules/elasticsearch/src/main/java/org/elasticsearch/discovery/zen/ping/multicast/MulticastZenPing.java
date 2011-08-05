@@ -25,7 +25,14 @@ import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
-import org.elasticsearch.common.io.stream.*;
+import org.elasticsearch.common.io.stream.BytesStreamInput;
+import org.elasticsearch.common.io.stream.CachedStreamInput;
+import org.elasticsearch.common.io.stream.CachedStreamOutput;
+import org.elasticsearch.common.io.stream.HandlesStreamOutput;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.io.stream.Streamable;
+import org.elasticsearch.common.io.stream.VoidStreamable;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -34,7 +41,11 @@ import org.elasticsearch.discovery.zen.DiscoveryNodesProvider;
 import org.elasticsearch.discovery.zen.ping.ZenPing;
 import org.elasticsearch.discovery.zen.ping.ZenPingException;
 import org.elasticsearch.threadpool.ThreadPool;
-import org.elasticsearch.transport.*;
+import org.elasticsearch.transport.BaseTransportRequestHandler;
+import org.elasticsearch.transport.TransportChannel;
+import org.elasticsearch.transport.TransportException;
+import org.elasticsearch.transport.TransportService;
+import org.elasticsearch.transport.VoidTransportResponseHandler;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -219,17 +230,20 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
 
     private void sendPingRequest(int id, boolean remove) {
         synchronized (sendMutex) {
+            CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
             try {
-                HandlesStreamOutput out = CachedStreamOutput.cachedHandlesBytes();
+                HandlesStreamOutput out = cachedEntry.cachedHandlesBytes();
                 out.writeInt(id);
                 clusterName.writeTo(out);
                 nodesProvider.nodes().localNode().writeTo(out);
-                datagramPacketSend.setData(((BytesStreamOutput) out.wrappedOut()).copiedByteArray());
+                datagramPacketSend.setData(cachedEntry.bytes().copiedByteArray());
             } catch (IOException e) {
                 if (remove) {
                     receivedResponses.remove(id);
                 }
                 throw new ZenPingException("Failed to serialize ping request", e);
+            } finally {
+                CachedStreamOutput.pushEntry(cachedEntry);
             }
             try {
                 multicastSocket.send(datagramPacketSend);
@@ -239,6 +253,9 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
             } catch (IOException e) {
                 if (remove) {
                     receivedResponses.remove(id);
+                }
+                if (lifecycle.stoppedOrClosed()) {
+                    return;
                 }
                 throw new ZenPingException("Failed to send ping request over multicast on " + multicastSocket, e);
             }
@@ -259,7 +276,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
             }
             ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.get(request.id);
             if (responses == null) {
-                logger.warn("received ping response with no matching id [{}]", request.id);
+                logger.warn("received ping response {} with no matching id [{}]", request.pingResponse, request.id);
             } else {
                 responses.put(request.pingResponse.target(), request.pingResponse);
             }
@@ -334,7 +351,16 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                         continue;
                     }
                     if (!clusterName.equals(MulticastZenPing.this.clusterName)) {
-                        // not our cluster, ignore it...
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("[{}] received ping_request from [{}], but wrong cluster_name [{}], expected [{}], ignoring", id, requestingNode, clusterName, MulticastZenPing.this.clusterName);
+                        }
+                        continue;
+                    }
+                    // don't connect between two client nodes, no need for that...
+                    if (!discoveryNodes.localNode().shouldConnectTo(requestingNode)) {
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("[{}] received ping_request from [{}], both are client nodes, ignoring", id, requestingNode, clusterName);
+                        }
                         continue;
                     }
                     final MulticastPingResponse multicastPingResponse = new MulticastPingResponse();

@@ -20,7 +20,7 @@
 package org.elasticsearch.search.facet.statistical;
 
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.query.xcontent.XContentFilterBuilder;
+import org.elasticsearch.index.query.FilterBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilderException;
 import org.elasticsearch.search.facet.AbstractFacetBuilder;
 
@@ -66,8 +66,17 @@ public class StatisticalFacetBuilder extends AbstractFacetBuilder {
         return this;
     }
 
-    public StatisticalFacetBuilder facetFilter(XContentFilterBuilder filter) {
+    public StatisticalFacetBuilder facetFilter(FilterBuilder filter) {
         this.facetFilter = filter;
+        return this;
+    }
+
+    /**
+     * Sets the nested path the facet will execute on. A match (root object) will then cause all the
+     * nested objects matching the path to be computed into the facet.
+     */
+    public StatisticalFacetBuilder nested(String nested) {
+        this.nested = nested;
         return this;
     }
 

@@ -36,6 +36,7 @@ import org.elasticsearch.action.admin.indices.cache.clear.TransportClearIndicesC
 import org.elasticsearch.action.admin.indices.close.TransportCloseIndexAction;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.admin.indices.delete.TransportDeleteIndexAction;
+import org.elasticsearch.action.admin.indices.exists.TransportIndicesExistsAction;
 import org.elasticsearch.action.admin.indices.flush.TransportFlushAction;
 import org.elasticsearch.action.admin.indices.gateway.snapshot.TransportGatewaySnapshotAction;
 import org.elasticsearch.action.admin.indices.mapping.delete.TransportDeleteMappingAction;
@@ -43,6 +44,7 @@ import org.elasticsearch.action.admin.indices.mapping.put.TransportPutMappingAct
 import org.elasticsearch.action.admin.indices.open.TransportOpenIndexAction;
 import org.elasticsearch.action.admin.indices.optimize.TransportOptimizeAction;
 import org.elasticsearch.action.admin.indices.refresh.TransportRefreshAction;
+import org.elasticsearch.action.admin.indices.segments.TransportIndicesSegmentsAction;
 import org.elasticsearch.action.admin.indices.settings.TransportUpdateSettingsAction;
 import org.elasticsearch.action.admin.indices.status.TransportIndicesStatusAction;
 import org.elasticsearch.action.admin.indices.template.delete.TransportDeleteIndexTemplateAction;
@@ -57,12 +59,22 @@ import org.elasticsearch.action.deletebyquery.TransportDeleteByQueryAction;
 import org.elasticsearch.action.deletebyquery.TransportIndexDeleteByQueryAction;
 import org.elasticsearch.action.deletebyquery.TransportShardDeleteByQueryAction;
 import org.elasticsearch.action.get.TransportGetAction;
+import org.elasticsearch.action.get.TransportMultiGetAction;
+import org.elasticsearch.action.get.TransportShardMultiGetAction;
 import org.elasticsearch.action.index.TransportIndexAction;
 import org.elasticsearch.action.mlt.TransportMoreLikeThisAction;
 import org.elasticsearch.action.percolate.TransportPercolateAction;
 import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.search.TransportSearchScrollAction;
-import org.elasticsearch.action.search.type.*;
+import org.elasticsearch.action.search.type.TransportSearchCache;
+import org.elasticsearch.action.search.type.TransportSearchDfsQueryAndFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchDfsQueryThenFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchQueryAndFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchQueryThenFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchScanAction;
+import org.elasticsearch.action.search.type.TransportSearchScrollQueryAndFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchScrollQueryThenFetchAction;
+import org.elasticsearch.action.search.type.TransportSearchScrollScanAction;
 import org.elasticsearch.common.inject.AbstractModule;
 
 /**
@@ -86,10 +98,12 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportReplicationPingAction.class).asEagerSingleton();
 
         bind(TransportIndicesStatusAction.class).asEagerSingleton();
+        bind(TransportIndicesSegmentsAction.class).asEagerSingleton();
         bind(TransportCreateIndexAction.class).asEagerSingleton();
         bind(TransportDeleteIndexAction.class).asEagerSingleton();
         bind(TransportOpenIndexAction.class).asEagerSingleton();
         bind(TransportCloseIndexAction.class).asEagerSingleton();
+        bind(TransportIndicesExistsAction.class).asEagerSingleton();
         bind(TransportPutMappingAction.class).asEagerSingleton();
         bind(TransportDeleteMappingAction.class).asEagerSingleton();
         bind(TransportIndicesAliasesAction.class).asEagerSingleton();
@@ -111,6 +125,9 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportIndexDeleteAction.class).asEagerSingleton();
         bind(TransportShardDeleteAction.class).asEagerSingleton();
         bind(TransportCountAction.class).asEagerSingleton();
+
+        bind(TransportMultiGetAction.class).asEagerSingleton();
+        bind(TransportShardMultiGetAction.class).asEagerSingleton();
 
         bind(TransportBulkAction.class).asEagerSingleton();
         bind(TransportShardBulkAction.class).asEagerSingleton();

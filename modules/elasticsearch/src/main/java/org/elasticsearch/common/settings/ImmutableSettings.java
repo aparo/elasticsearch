@@ -41,7 +41,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.*;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.common.Strings.*;
@@ -231,7 +235,10 @@ public class ImmutableSettings implements Settings {
         List<String> result = Lists.newArrayList();
 
         if (get(settingPrefix) != null) {
-            Collections.addAll(result, Strings.commaDelimitedListToStringArray(get(settingPrefix)));
+            String[] strings = Strings.splitStringByCommaToArray(get(settingPrefix));
+            if (strings.length > 0) {
+                Collections.addAll(result, strings);
+            }
         }
 
         int counter = 0;
@@ -342,6 +349,10 @@ public class ImmutableSettings implements Settings {
 
         private Builder() {
 
+        }
+
+        public Map<String, String> internalMap() {
+            return this.map;
         }
 
         /**

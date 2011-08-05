@@ -21,8 +21,10 @@ package org.elasticsearch.action.admin.cluster.node.stats;
 
 import org.elasticsearch.action.support.nodes.NodeOperationResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.http.HttpStats;
 import org.elasticsearch.indices.NodeIndicesStats;
 import org.elasticsearch.monitor.jvm.JvmStats;
 import org.elasticsearch.monitor.network.NetworkStats;
@@ -51,12 +53,14 @@ public class NodeStats extends NodeOperationResponse {
 
     private TransportStats transport;
 
+    private HttpStats http;
+
     NodeStats() {
     }
 
     public NodeStats(DiscoveryNode node, NodeIndicesStats indices,
                      OsStats os, ProcessStats process, JvmStats jvm, NetworkStats network,
-                     TransportStats transport) {
+                     TransportStats transport, @Nullable HttpStats http) {
         super(node);
         this.indices = indices;
         this.os = os;
@@ -64,6 +68,7 @@ public class NodeStats extends NodeOperationResponse {
         this.jvm = jvm;
         this.network = network;
         this.transport = transport;
+        this.http = http;
     }
 
     /**
@@ -137,11 +142,19 @@ public class NodeStats extends NodeOperationResponse {
     }
 
     public TransportStats transport() {
-        return transport;
+        return this.transport;
     }
 
     public TransportStats getTransport() {
         return transport();
+    }
+
+    public HttpStats http() {
+        return this.http;
+    }
+
+    public HttpStats getHttp() {
+        return http();
     }
 
     public static NodeStats readNodeStats(StreamInput in) throws IOException {
@@ -169,6 +182,9 @@ public class NodeStats extends NodeOperationResponse {
         }
         if (in.readBoolean()) {
             transport = TransportStats.readTransportStats(in);
+        }
+        if (in.readBoolean()) {
+            http = HttpStats.readHttpStats(in);
         }
     }
 
@@ -209,6 +225,12 @@ public class NodeStats extends NodeOperationResponse {
         } else {
             out.writeBoolean(true);
             transport.writeTo(out);
+        }
+        if (http == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            http.writeTo(out);
         }
     }
 }

@@ -99,6 +99,7 @@ public class TransportIndexAction extends TransportShardReplicationOperationActi
             }
         }
         if (autoCreateIndex && !clusterService.state().metaData().hasConcreteIndex(request.index())) {
+            request.beforeLocalFork(); // we fork on another thread...
             createIndexAction.execute(new CreateIndexRequest(request.index()).cause("auto(index api)"), new ActionListener<CreateIndexResponse>() {
                 @Override public void onResponse(CreateIndexResponse result) {
                     innerExecute(request, listener);
@@ -107,7 +108,11 @@ public class TransportIndexAction extends TransportShardReplicationOperationActi
                 @Override public void onFailure(Throwable e) {
                     if (ExceptionsHelper.unwrapCause(e) instanceof IndexAlreadyExistsException) {
                         // we have the index, do it
-                        innerExecute(request, listener);
+                        try {
+                            innerExecute(request, listener);
+                        } catch (Exception e1) {
+                            listener.onFailure(e1);
+                        }
                     } else {
                         listener.onFailure(e);
                     }
@@ -120,6 +125,7 @@ public class TransportIndexAction extends TransportShardReplicationOperationActi
 
     private void innerExecute(final IndexRequest request, final ActionListener<IndexResponse> listener) {
         MetaData metaData = clusterService.state().metaData();
+        request.routing(metaData.resolveIndexRouting(request.routing(), request.index()));
         request.index(metaData.concreteIndex(request.index()));
         if (metaData.hasIndex(request.index())) {
             MappingMetaData mappingMd = metaData.index(request.index()).mapping(request.type());

@@ -20,6 +20,7 @@
 package org.elasticsearch.index.translog.fs;
 
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.io.FileSystemUtils;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.io.stream.CachedStreamOutput;
 import org.elasticsearch.common.settings.Settings;
@@ -34,12 +35,15 @@ import org.elasticsearch.index.translog.TranslogStreams;
 import java.io.File;
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * @author kimchy (shay.banon)
  */
 public class FsTranslog extends AbstractIndexShardComponent implements Translog {
 
+    private final ReadWriteLock rwl = new ReentrantReadWriteLock();
     private final File location;
 
     private volatile FsTranslogFile current;
@@ -50,13 +54,13 @@ public class FsTranslog extends AbstractIndexShardComponent implements Translog 
     @Inject public FsTranslog(ShardId shardId, @IndexSettings Settings indexSettings, NodeEnvironment nodeEnv) {
         super(shardId, indexSettings);
         this.location = new File(nodeEnv.shardLocation(shardId), "translog");
-        this.location.mkdirs();
+        FileSystemUtils.mkdirs(this.location);
     }
 
     public FsTranslog(ShardId shardId, @IndexSettings Settings indexSettings, File location) {
         super(shardId, indexSettings);
         this.location = location;
-        this.location.mkdirs();
+        FileSystemUtils.mkdirs(this.location);
     }
 
     public File location() {
@@ -92,56 +96,120 @@ public class FsTranslog extends AbstractIndexShardComponent implements Translog 
     }
 
     @Override public void clearUnreferenced() {
-        File[] files = location.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().equals("translog-" + current.id())) {
-                    continue;
-                }
-                try {
-                    file.delete();
-                } catch (Exception e) {
-                    // ignore
+        rwl.writeLock().lock();
+        try {
+            File[] files = location.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.getName().equals("translog-" + current.id())) {
+                        continue;
+                    }
+                    if (trans != null && file.getName().equals("translog-" + trans.id())) {
+                        continue;
+                    }
+                    try {
+                        file.delete();
+                    } catch (Exception e) {
+                        // ignore
+                    }
                 }
             }
+        } finally {
+            rwl.writeLock().unlock();
         }
     }
 
     @Override public void newTranslog(long id) throws TranslogException {
-        FsTranslogFile newFile;
+        rwl.writeLock().lock();
         try {
-            newFile = new FsTranslogFile(shardId, id, new RafReference(new File(location, "translog-" + id)));
-        } catch (IOException e) {
-            throw new TranslogException(shardId, "failed to create new translog file", e);
-        }
-        FsTranslogFile old = current;
-        current = newFile;
-        if (old != null) {
-            // we might create a new translog overriding the current translog id
-            boolean delete = true;
-            if (old.id() == id) {
-                delete = false;
+            FsTranslogFile newFile;
+            try {
+                newFile = new FsTranslogFile(shardId, id, new RafReference(new File(location, "translog-" + id)));
+            } catch (IOException e) {
+                throw new TranslogException(shardId, "failed to create new translog file", e);
             }
-            old.close(delete);
+            FsTranslogFile old = current;
+            current = newFile;
+            if (old != null) {
+                // we might create a new translog overriding the current translog id
+                boolean delete = true;
+                if (old.id() == id) {
+                    delete = false;
+                }
+                old.close(delete);
+            }
+        } finally {
+            rwl.writeLock().unlock();
         }
     }
 
     @Override public void newTransientTranslog(long id) throws TranslogException {
+        rwl.writeLock().lock();
         try {
+            assert this.trans == null;
             this.trans = new FsTranslogFile(shardId, id, new RafReference(new File(location, "translog-" + id)));
         } catch (IOException e) {
             throw new TranslogException(shardId, "failed to create new translog file", e);
+        } finally {
+            rwl.writeLock().unlock();
         }
     }
 
     @Override public void makeTransientCurrent() {
-        this.current = this.trans;
-        this.trans = null;
+        FsTranslogFile old;
+        rwl.writeLock().lock();
+        try {
+            assert this.trans != null;
+            old = current;
+            this.current = this.trans;
+            this.trans = null;
+        } finally {
+            rwl.writeLock().unlock();
+        }
+        old.close(true);
     }
 
-    @Override public void add(Operation operation) throws TranslogException {
+    @Override public void revertTransient() {
+        FsTranslogFile old;
+        rwl.writeLock().lock();
         try {
-            BytesStreamOutput out = CachedStreamOutput.cachedBytes();
+            old = trans;
+            this.trans = null;
+        } finally {
+            rwl.writeLock().unlock();
+        }
+        old.close(true);
+    }
+
+    public byte[] read(Location location) {
+        rwl.readLock().lock();
+        try {
+            FsTranslogFile trans = this.trans;
+            if (trans != null && trans.id() == location.translogId) {
+                try {
+                    return trans.read(location);
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+            if (current.id() == location.translogId) {
+                try {
+                    return current.read(location);
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+            return null;
+        } finally {
+            rwl.readLock().unlock();
+        }
+    }
+
+    @Override public Location add(Operation operation) throws TranslogException {
+        CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
+        rwl.readLock().lock();
+        try {
+            BytesStreamOutput out = cachedEntry.cachedBytes();
             out.writeInt(0); // marker for the size...
             TranslogStreams.writeTranslogOperation(out, operation);
             out.flush();
@@ -150,20 +218,24 @@ public class FsTranslog extends AbstractIndexShardComponent implements Translog 
             out.seek(0);
             out.writeInt(size - 4);
 
-            current.add(out.unsafeByteArray(), 0, size);
+            Location location = current.add(out.unsafeByteArray(), 0, size);
             if (syncOnEachOperation) {
                 current.sync();
             }
             FsTranslogFile trans = this.trans;
             if (trans != null) {
                 try {
-                    trans.add(out.unsafeByteArray(), 0, size);
+                    location = trans.add(out.unsafeByteArray(), 0, size);
                 } catch (ClosedChannelException e) {
                     // ignore
                 }
             }
+            return location;
         } catch (Exception e) {
             throw new TranslogException(shardId, "Failed to write operation [" + operation + "]", e);
+        } finally {
+            rwl.readLock().unlock();
+            CachedStreamOutput.pushEntry(cachedEntry);
         }
     }
 
@@ -198,13 +270,18 @@ public class FsTranslog extends AbstractIndexShardComponent implements Translog 
     }
 
     @Override public void close(boolean delete) {
-        FsTranslogFile current1 = this.current;
-        if (current1 != null) {
-            current1.close(delete);
-        }
-        current1 = this.trans;
-        if (current1 != null) {
-            current1.close(delete);
+        rwl.writeLock().lock();
+        try {
+            FsTranslogFile current1 = this.current;
+            if (current1 != null) {
+                current1.close(delete);
+            }
+            current1 = this.trans;
+            if (current1 != null) {
+                current1.close(delete);
+            }
+        } finally {
+            rwl.writeLock().unlock();
         }
     }
 }

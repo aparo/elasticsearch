@@ -42,7 +42,7 @@ import org.elasticsearch.node.internal.InternalNode;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.elasticsearch.index.query.xcontent.QueryBuilders.*;
+import static org.elasticsearch.index.query.QueryBuilders.*;
 
 /**
  * @author kimchy (shay.banon)
@@ -218,7 +218,7 @@ public class FullRestartStressTest {
         int numberOfNodes = 2;
         Settings settings = ImmutableSettings.settingsBuilder()
                 .put("index.shard.check_index", true)
-                .put("gateway.type", "fs")
+                .put("gateway.type", "local")
                 .put("gateway.recover_after_nodes", numberOfNodes)
                 .put("index.number_of_shards", 1)
                 .build();

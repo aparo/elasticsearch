@@ -38,12 +38,13 @@ import org.elasticsearch.index.percolator.PercolatorExecutor;
 import org.elasticsearch.index.query.IndexQueryParserModule;
 import org.elasticsearch.index.settings.IndexSettingsModule;
 import org.elasticsearch.index.similarity.SimilarityModule;
+import org.elasticsearch.indices.query.IndicesQueriesModule;
 import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.threadpool.ThreadPoolModule;
 
 import java.util.concurrent.CountDownLatch;
 
-import static org.elasticsearch.index.query.xcontent.QueryBuilders.*;
+import static org.elasticsearch.index.query.QueryBuilders.*;
 
 /**
  * @author kimchy (shay.banon)
@@ -62,6 +63,7 @@ public class EmbeddedPercolatorBenchmarkTest {
         Injector injector = new ModulesBuilder().add(
                 new SettingsModule(settings),
                 new ThreadPoolModule(settings),
+                new IndicesQueriesModule(),
                 new ScriptModule(settings),
                 new MapperServiceModule(),
                 new IndexSettingsModule(index, settings),

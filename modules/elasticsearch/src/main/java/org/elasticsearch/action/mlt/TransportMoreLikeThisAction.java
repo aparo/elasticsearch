@@ -36,9 +36,14 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.mapper.*;
-import org.elasticsearch.index.query.xcontent.BoolQueryBuilder;
-import org.elasticsearch.index.query.xcontent.MoreLikeThisFieldQueryBuilder;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.FieldMappers;
+import org.elasticsearch.index.mapper.InternalMapper;
+import org.elasticsearch.index.mapper.SourceToParse;
+import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.MoreLikeThisFieldQueryBuilder;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.BaseTransportRequestHandler;
@@ -51,7 +56,7 @@ import java.util.Set;
 
 import static org.elasticsearch.client.Requests.*;
 import static org.elasticsearch.common.collect.Sets.*;
-import static org.elasticsearch.index.query.xcontent.QueryBuilders.*;
+import static org.elasticsearch.index.query.QueryBuilders.*;
 import static org.elasticsearch.search.builder.SearchSourceBuilder.*;
 
 /**
@@ -84,7 +89,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
         // update to actual index name
         ClusterState clusterState = clusterService.state();
         // update to the concrete index
-        request.index(clusterState.metaData().concreteIndex(request.index()));
+        final String concreteIndex = clusterState.metaData().concreteIndex(request.index());
 
         Set<String> getFields = newHashSet();
         if (request.fields() != null) {
@@ -93,7 +98,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
         // add the source, in case we need to parse it to get fields
         getFields.add(SourceFieldMapper.NAME);
 
-        GetRequest getRequest = getRequest(request.index())
+        GetRequest getRequest = getRequest(concreteIndex)
                 .fields(getFields.toArray(new String[getFields.size()]))
                 .type(request.type())
                 .id(request.id())
@@ -109,7 +114,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
                 }
                 final BoolQueryBuilder boolBuilder = boolQuery();
                 try {
-                    DocumentMapper docMapper = indicesService.indexServiceSafe(request.index()).mapperService().documentMapper(request.type());
+                    DocumentMapper docMapper = indicesService.indexServiceSafe(concreteIndex).mapperService().documentMapper(request.type());
                     final Set<String> fields = newHashSet();
                     if (request.fields() != null) {
                         for (String field : request.fields()) {
@@ -124,7 +129,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
 
                     if (!fields.isEmpty()) {
                         // if fields are not empty, see if we got them in the response
-                        for (Iterator<String> it = fields.iterator(); it.hasNext();) {
+                        for (Iterator<String> it = fields.iterator(); it.hasNext(); ) {
                             String field = it.next();
                             GetField getField = getResponse.field(field);
                             if (getField != null) {
@@ -143,7 +148,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
                         parseSource(getResponse, boolBuilder, docMapper, fields, request);
                     }
 
-                    if (boolBuilder.clauses().isEmpty()) {
+                    if (!boolBuilder.hasClauses()) {
                         // no field added, fail
                         listener.onFailure(new ElasticSearchException("No fields found to fetch the 'likeText' from"));
                         return;
@@ -165,15 +170,19 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
                 if (searchTypes == null) {
                     searchTypes = new String[]{request.type()};
                 }
-
+                int size = request.searchSize() != 0 ? request.searchSize() : 10;
+                int from = request.searchFrom() != 0 ? request.searchFrom() : 0;
                 SearchRequest searchRequest = searchRequest(searchIndices)
                         .types(searchTypes)
                         .searchType(request.searchType())
                         .scroll(request.searchScroll())
                         .extraSource(searchSource()
                                 .query(boolBuilder)
+                                .from(from)
+                                .size(size)
                         )
                         .listenerThreaded(request.listenerThreaded());
+
                 if (request.searchSource() != null) {
                     searchRequest.source(request.searchSource(), request.searchSourceOffset(), request.searchSourceLength(), request.searchSourceUnsafe());
                 }

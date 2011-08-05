@@ -25,10 +25,6 @@ REM Enable aggressive optimizations in the JVM
 REM    - Disabled by default as it might cause the JVM to crash
 REM set JAVA_OPTS=%JAVA_OPTS% -XX:+AggressiveOpts
 
-REM Enable reference compression, reducing memory overhead on 64bit JVMs
-REM    - Disabled by default as it is not stable for Sun JVM before 6u19
-REM set JAVA_OPTS=%JAVA_OPTS% -XX:+UseCompressedOops
-
 set JAVA_OPTS=%JAVA_OPTS% -XX:+UseParNewGC
 set JAVA_OPTS=%JAVA_OPTS% -XX:+UseConcMarkSweepGC
 set JAVA_OPTS=%JAVA_OPTS% -XX:+CMSParallelRemarkEnabled
@@ -52,9 +48,7 @@ REM space for a full heap dump.
 REM JAVA_OPTS=%JAVA_OPTS% -XX:HeapDumpPath=$ES_HOME/logs/heapdump.hprof
 
 
-set JAVA_OPTS=%JAVA_OPTS% -Djline.enabled=false
-
-set ES_CLASSPATH=%CLASSPATH%;%ES_HOME%/lib/elasticsearch-0.16.0-SNAPSHOT.jar;%ES_HOME%/lib/*;%ES_HOME%/lib/sigar/*
+set ES_CLASSPATH=%CLASSPATH%;%ES_HOME%/lib/*;%ES_HOME%/lib/sigar/*
 set ES_PARAMS=-Delasticsearch -Des-foreground=yes -Des.path.home="%ES_HOME%"
 
 "%JAVA_HOME%\bin\java" %JAVA_OPTS% %ES_JAVA_OPTS% %ES_PARAMS% -cp "%ES_CLASSPATH%" "org.elasticsearch.bootstrap.ElasticSearch"

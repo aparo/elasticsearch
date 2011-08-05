@@ -22,6 +22,7 @@ package org.elasticsearch.test.integration.document;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthStatus;
 import org.elasticsearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
+import org.elasticsearch.action.admin.indices.exists.IndicesExistsResponse;
 import org.elasticsearch.action.admin.indices.flush.FlushResponse;
 import org.elasticsearch.action.admin.indices.optimize.OptimizeResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshResponse;
@@ -46,7 +47,7 @@ import java.io.IOException;
 import java.util.Map;
 
 import static org.elasticsearch.client.Requests.*;
-import static org.elasticsearch.index.query.xcontent.QueryBuilders.*;
+import static org.elasticsearch.index.query.QueryBuilders.*;
 import static org.hamcrest.MatcherAssert.*;
 import static org.hamcrest.Matchers.*;
 
@@ -119,6 +120,14 @@ public class DocumentActionsTests extends AbstractNodesTests {
         RefreshResponse refreshResponse = client1.admin().indices().prepareRefresh("test").execute().actionGet();
         assertThat(refreshResponse.successfulShards(), equalTo(10));
         assertThat(refreshResponse.failedShards(), equalTo(0));
+
+        logger.info("--> index exists?");
+        IndicesExistsResponse indicesExistsResponse = client1.admin().indices().prepareExists(getConcreteIndexName()).execute().actionGet();
+        assertThat(indicesExistsResponse.exists(), equalTo(true));
+
+        logger.info("--> index exists?, fake index");
+        indicesExistsResponse = client1.admin().indices().prepareExists("test1234565").execute().actionGet();
+        assertThat(indicesExistsResponse.exists(), equalTo(false));
 
         logger.info("Clearing cache");
         ClearIndicesCacheResponse clearIndicesCacheResponse = client1.admin().indices().clearCache(clearIndicesCacheRequest("test")).actionGet();

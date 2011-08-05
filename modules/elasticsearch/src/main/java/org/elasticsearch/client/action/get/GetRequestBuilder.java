@@ -46,9 +46,10 @@ public class GetRequestBuilder extends BaseRequestBuilder<GetRequest, GetRespons
     }
 
     /**
-     * Sets the type of the document to fetch.
+     * Sets the type of the document to fetch. If set to <tt>null</tt>, will use just the id to fetch the
+     * first document matching it.
      */
-    public GetRequestBuilder setType(String type) {
+    public GetRequestBuilder setType(@Nullable String type) {
         request.type(type);
         return this;
     }
@@ -96,6 +97,11 @@ public class GetRequestBuilder extends BaseRequestBuilder<GetRequest, GetRespons
      */
     public GetRequestBuilder setRefresh(boolean refresh) {
         request.refresh(refresh);
+        return this;
+    }
+
+    public GetRequestBuilder setRealtime(Boolean realtime) {
+        request.realtime(realtime);
         return this;
     }
 

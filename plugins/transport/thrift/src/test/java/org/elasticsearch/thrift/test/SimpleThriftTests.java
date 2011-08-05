@@ -24,10 +24,15 @@ import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
+import org.elasticsearch.common.network.NetworkUtils;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.node.Node;
-import org.elasticsearch.thrift.*;
+import org.elasticsearch.thrift.Method;
+import org.elasticsearch.thrift.Rest;
+import org.elasticsearch.thrift.RestRequest;
+import org.elasticsearch.thrift.RestResponse;
+import org.elasticsearch.thrift.Status;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -53,7 +58,9 @@ public class SimpleThriftTests {
     private Rest.Client client;
 
     @BeforeMethod public void setup() throws IOException, TTransportException {
-        node = nodeBuilder().settings(settingsBuilder().put("gateway.type", "none")).node();
+        node = nodeBuilder().settings(settingsBuilder()
+                .put("cluster.name", "test-cluster-" + NetworkUtils.getLocalAddress())
+                .put("gateway.type", "none")).node();
         transport = new TSocket("localhost", 9500);
         TProtocol protocol = new TBinaryProtocol(transport);
         client = new Rest.Client(protocol);
@@ -83,6 +90,6 @@ public class SimpleThriftTests {
     }
 
     private Map<String, Object> parseBody(RestResponse response) throws IOException {
-        return XContentFactory.xContent(XContentType.JSON).createParser(response.BufferForBody().array(), response.BufferForBody().arrayOffset(), response.BufferForBody().remaining()).map();
+        return XContentFactory.xContent(XContentType.JSON).createParser(response.bufferForBody().array(), response.bufferForBody().arrayOffset(), response.bufferForBody().remaining()).map();
     }
 }

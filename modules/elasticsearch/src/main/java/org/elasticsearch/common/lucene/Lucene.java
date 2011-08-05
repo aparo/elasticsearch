@@ -23,6 +23,8 @@ import org.apache.lucene.analysis.KeywordAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.SegmentInfo;
+import org.apache.lucene.index.SegmentReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermDocs;
 import org.apache.lucene.search.*;
@@ -33,8 +35,10 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.index.analysis.AnalyzerScope;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.field.data.FieldDataType;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -69,8 +73,12 @@ public class Lucene {
     }
 
     public static long count(IndexSearcher searcher, Query query, float minScore) throws IOException {
+        return count(searcher, query, null, minScore);
+    }
+
+    public static long count(IndexSearcher searcher, Query query, Filter filter, float minScore) throws IOException {
         CountCollector countCollector = new CountCollector(minScore);
-        searcher.search(query, countCollector);
+        searcher.search(query, filter, countCollector);
         return countCollector.count();
     }
 
@@ -182,7 +190,11 @@ public class Lucene {
                     out.writeBoolean(true);
                     out.writeUTF(sortField.getField());
                 }
-                out.writeVInt(sortField.getType());
+                if (sortField.getComparatorSource() != null) {
+                    out.writeVInt(((FieldDataType.ExtendedFieldComparatorSource) sortField.getComparatorSource()).reducedType());
+                } else {
+                    out.writeVInt(sortField.getType());
+                }
                 out.writeBoolean(sortField.getReverse());
             }
 
@@ -194,7 +206,7 @@ public class Lucene {
                 }
                 FieldDoc fieldDoc = (FieldDoc) doc;
                 out.writeVInt(fieldDoc.fields.length);
-                for (Comparable field : fieldDoc.fields) {
+                for (Object field : fieldDoc.fields) {
                     if (field == null) {
                         out.writeByte((byte) 0);
                     } else {
@@ -378,6 +390,27 @@ public class Lucene {
             }
         } else {
             throw new IOException("Can't write type [" + type + "]");
+        }
+    }
+
+    private static final Field segmentReaderSegmentInfoField;
+
+    static {
+        Field segmentReaderSegmentInfoFieldX = null;
+        try {
+            segmentReaderSegmentInfoFieldX = SegmentReader.class.getDeclaredField("si");
+            segmentReaderSegmentInfoFieldX.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        }
+        segmentReaderSegmentInfoField = segmentReaderSegmentInfoFieldX;
+    }
+
+    public static SegmentInfo getSegmentInfo(SegmentReader reader) {
+        try {
+            return (SegmentInfo) segmentReaderSegmentInfoField.get(reader);
+        } catch (IllegalAccessException e) {
+            return null;
         }
     }
 

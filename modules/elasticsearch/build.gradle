@@ -2,6 +2,7 @@ dependsOn(':test-testng')
 
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'eclipse'
 
 archivesBaseName = "$project.archivesBaseName"
 
@@ -33,15 +34,15 @@ dependencies {
 
     compile 'org.slf4j:slf4j-api:1.5.11'
     compile('org.slf4j:slf4j-log4j12:1.5.11') { transitive = false }
-    compile('log4j:log4j:1.2.15') { transitive = false }
+    compile('log4j:log4j:1.2.16') { transitive = false }
 
     compile('net.java.dev.jna:jna:3.2.7') { transitive = false }
 
-    compile('org.apache.lucene:lucene-core:3.1.0') { transitive = false }
-    compile('org.apache.lucene:lucene-analyzers:3.1.0') { transitive = false }
-    compile('org.apache.lucene:lucene-queries:3.1.0') { transitive = false }
-    compile('org.apache.lucene:lucene-memory:3.1.0') { transitive = false }
-    compile('org.apache.lucene:lucene-highlighter:3.1.0') { transitive = false }
+    compile('org.apache.lucene:lucene-core:3.3.0') { transitive = false }
+    compile('org.apache.lucene:lucene-analyzers:3.3.0') { transitive = false }
+    compile('org.apache.lucene:lucene-queries:3.3.0') { transitive = false }
+    compile('org.apache.lucene:lucene-memory:3.3.0') { transitive = false }
+    compile('org.apache.lucene:lucene-highlighter:3.3.0') { transitive = false }
 }
 
 configurations {
@@ -124,4 +125,8 @@ uploadArchives {
             pom.dependencies = pom.dependencies.findAll {dep -> !dep.artifactId.contains('jline') }
         }
     }
+}
+
+eclipseClasspath {
+    defaultOutputDir = file('build/eclipse-build')
 }

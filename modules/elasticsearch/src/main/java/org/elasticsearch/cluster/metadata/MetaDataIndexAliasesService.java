@@ -19,15 +19,31 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
+import org.elasticsearch.cluster.action.index.NodeAliasesUpdatedAction;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.collect.Lists;
+import org.elasticsearch.common.collect.Maps;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.Index;
+import org.elasticsearch.index.query.IndexQueryParserService;
+import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.indices.IndexMissingException;
+import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.InvalidAliasNameException;
+
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.elasticsearch.cluster.ClusterState.*;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.*;
@@ -40,9 +56,15 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
 
     private final ClusterService clusterService;
 
-    @Inject public MetaDataIndexAliasesService(Settings settings, ClusterService clusterService) {
+    private final IndicesService indicesService;
+
+    private final NodeAliasesUpdatedAction aliasOperationPerformedAction;
+
+    @Inject public MetaDataIndexAliasesService(Settings settings, ClusterService clusterService, IndicesService indicesService, NodeAliasesUpdatedAction aliasOperationPerformedAction) {
         super(settings);
         this.clusterService = clusterService;
+        this.indicesService = indicesService;
+        this.aliasOperationPerformedAction = aliasOperationPerformedAction;
     }
 
     public void indicesAliases(final Request request, final Listener listener) {
@@ -58,28 +80,98 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
                         listener.onFailure(new InvalidAliasNameException(new Index(aliasAction.index()), aliasAction.alias(), "an index exists with the same name as the alias"));
                         return currentState;
                     }
+                    if (aliasAction.indexRouting() != null && aliasAction.indexRouting().indexOf(',') != -1) {
+                        listener.onFailure(new ElasticSearchIllegalArgumentException("alias [" + aliasAction.alias() + "] has several routing values associated with it"));
+                        return currentState;
+                    }
                 }
 
-                MetaData.Builder builder = newMetaDataBuilder().metaData(currentState.metaData());
-                for (AliasAction aliasAction : request.actions) {
-                    IndexMetaData indexMetaData = builder.get(aliasAction.index());
-                    if (indexMetaData == null) {
-                        throw new IndexMissingException(new Index(aliasAction.index()));
-                    }
-                    IndexMetaData.Builder indexMetaDataBuilder = newIndexMetaDataBuilder(indexMetaData);
-                    if (aliasAction.actionType() == AliasAction.Type.ADD) {
-                        indexMetaDataBuilder.putAlias(AliasMetaData.newAliasMetaDataBuilder(aliasAction.alias()).filter(aliasAction.filter()).build());
-                    } else if (aliasAction.actionType() == AliasAction.Type.REMOVE) {
-                        indexMetaDataBuilder.removerAlias(aliasAction.alias());
+                List<String> indicesToClose = Lists.newArrayList();
+                Map<String, IndexService> indices = Maps.newHashMap();
+                try {
+                    boolean changed = false;
+                    MetaData.Builder builder = newMetaDataBuilder().metaData(currentState.metaData());
+                    for (AliasAction aliasAction : request.actions) {
+                        IndexMetaData indexMetaData = builder.get(aliasAction.index());
+                        if (indexMetaData == null) {
+                            throw new IndexMissingException(new Index(aliasAction.index()));
+                        }
+                        IndexMetaData.Builder indexMetaDataBuilder = newIndexMetaDataBuilder(indexMetaData);
+                        if (aliasAction.actionType() == AliasAction.Type.ADD) {
+                            String filter = aliasAction.filter();
+                            if (Strings.hasLength(filter)) {
+                                // parse the filter, in order to validate it
+                                IndexService indexService = indices.get(indexMetaData.index());
+                                if (indexService == null) {
+                                    indexService = indicesService.indexService(indexMetaData.index());
+                                    if (indexService == null) {
+                                        // temporarily create the index so we have can parse the filter
+                                        indexService = indicesService.createIndex(indexMetaData.index(), indexMetaData.settings(), currentState.nodes().localNode().id());
+                                        indicesToClose.add(indexMetaData.index());
+                                    }
+                                    indices.put(indexMetaData.index(), indexService);
+                                }
+
+                                // now, parse the filter
+                                IndexQueryParserService indexQueryParser = indexService.queryParserService();
+                                try {
+                                    XContentParser parser = XContentFactory.xContent(filter).createParser(filter);
+                                    try {
+                                        indexQueryParser.parseInnerFilter(parser);
+                                    } finally {
+                                        parser.close();
+                                    }
+                                } catch (Exception e) {
+                                    listener.onFailure(new ElasticSearchIllegalArgumentException("failed to parse filter for [" + aliasAction.alias() + "]", e));
+                                    return currentState;
+                                }
+                            }
+                            AliasMetaData newAliasMd = AliasMetaData.newAliasMetaDataBuilder(
+                                    aliasAction.alias())
+                                    .filter(filter)
+                                    .indexRouting(aliasAction.indexRouting())
+                                    .searchRouting(aliasAction.searchRouting())
+                                    .build();
+                            // Check if this alias already exists
+                            AliasMetaData aliasMd = indexMetaData.aliases().get(aliasAction.alias());
+                            if (aliasMd != null && aliasMd.equals(newAliasMd)) {
+                                // It's the same alias - ignore it
+                                continue;
+                            }
+                            indexMetaDataBuilder.putAlias(newAliasMd);
+                        } else if (aliasAction.actionType() == AliasAction.Type.REMOVE) {
+                            if (!indexMetaData.aliases().containsKey(aliasAction.alias())) {
+                                // This alias doesn't exist - ignore
+                                continue;
+                            }
+                            indexMetaDataBuilder.removerAlias(aliasAction.alias());
+                        }
+                        changed = true;
+                        builder.put(indexMetaDataBuilder);
                     }
 
-                    builder.put(indexMetaDataBuilder);
+                    if (changed) {
+                        ClusterState updatedState = newClusterStateBuilder().state(currentState).metaData(builder).build();
+                        // wait for responses from other nodes if needed
+                        int responseCount = updatedState.getNodes().size();
+                        long version = updatedState.version() + 1;
+                        logger.trace("Waiting for [{}] notifications with version [{}]", responseCount, version);
+                        aliasOperationPerformedAction.add(new CountDownListener(responseCount, listener, version), request.timeout);
+
+                        return updatedState;
+                    } else {
+                        // Nothing to do
+                        listener.onResponse(new Response(true));
+                        return currentState;
+                    }
+                } finally {
+                    for (String index : indicesToClose) {
+                        indicesService.cleanIndex(index, "created for alias processing");
+                    }
                 }
-                return newClusterStateBuilder().state(currentState).metaData(builder).build();
             }
 
             @Override public void clusterStateProcessed(ClusterState clusterState) {
-                listener.onResponse(new Response());
             }
         });
     }
@@ -95,12 +187,56 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
 
         final AliasAction[] actions;
 
-        public Request(AliasAction[] actions) {
+        final TimeValue timeout;
+
+        public Request(AliasAction[] actions, TimeValue timeout) {
             this.actions = actions;
+            this.timeout = timeout;
         }
     }
 
     public static class Response {
+        private final boolean acknowledged;
 
+        public Response(boolean acknowledged) {
+            this.acknowledged = acknowledged;
+        }
+
+        public boolean acknowledged() {
+            return acknowledged;
+        }
+    }
+
+    private class CountDownListener implements NodeAliasesUpdatedAction.Listener {
+
+        private final AtomicBoolean notified = new AtomicBoolean();
+        private final AtomicInteger countDown;
+        private final Listener listener;
+        private final long version;
+
+        public CountDownListener(int countDown, Listener listener, long version) {
+            this.countDown = new AtomicInteger(countDown);
+            this.listener = listener;
+            this.version = version;
+        }
+
+        @Override public void onAliasesUpdated(NodeAliasesUpdatedAction.NodeAliasesUpdatedResponse response) {
+            if (version <= response.version()) {
+                logger.trace("Received NodeAliasesUpdatedResponse with version [{}] from [{}]", response.version(), response.nodeId());
+                if (countDown.decrementAndGet() == 0) {
+                    aliasOperationPerformedAction.remove(this);
+                    if (notified.compareAndSet(false, true)) {
+                        listener.onResponse(new Response(true));
+                    }
+                }
+            }
+        }
+
+        @Override public void onTimeout() {
+            aliasOperationPerformedAction.remove(this);
+            if (notified.compareAndSet(false, true)) {
+                listener.onResponse(new Response(false));
+            }
+        }
     }
 }

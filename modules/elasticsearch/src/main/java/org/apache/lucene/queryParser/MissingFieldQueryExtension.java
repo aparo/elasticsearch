@@ -25,7 +25,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermRangeFilter;
 import org.elasticsearch.common.lucene.search.NotFilter;
 import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.query.xcontent.QueryParseContext;
+import org.elasticsearch.index.query.QueryParseContext;
 
 import static org.elasticsearch.index.query.support.QueryParsers.*;
 
@@ -51,10 +51,10 @@ public class MissingFieldQueryExtension implements FieldQueryExtension {
         }
 
         // we always cache this one, really does not change... (exists)
-        filter = parseContext.cacheFilter(filter);
+        filter = parseContext.cacheFilter(filter, null);
         filter = new NotFilter(filter);
         // cache the not filter as well, so it will be faster
-        filter = parseContext.cacheFilter(filter);
+        filter = parseContext.cacheFilter(filter, null);
 
         filter = wrapSmartNameFilter(filter, smartNameFieldMappers, parseContext);
 

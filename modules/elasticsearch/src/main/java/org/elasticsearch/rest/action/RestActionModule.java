@@ -38,6 +38,7 @@ import org.elasticsearch.rest.action.admin.indices.cache.clear.RestClearIndicesC
 import org.elasticsearch.rest.action.admin.indices.close.RestCloseIndexAction;
 import org.elasticsearch.rest.action.admin.indices.create.RestCreateIndexAction;
 import org.elasticsearch.rest.action.admin.indices.delete.RestDeleteIndexAction;
+import org.elasticsearch.rest.action.admin.indices.exists.RestIndicesExistsAction;
 import org.elasticsearch.rest.action.admin.indices.flush.RestFlushAction;
 import org.elasticsearch.rest.action.admin.indices.gateway.snapshot.RestGatewaySnapshotAction;
 import org.elasticsearch.rest.action.admin.indices.mapping.delete.RestDeleteMappingAction;
@@ -46,6 +47,7 @@ import org.elasticsearch.rest.action.admin.indices.mapping.put.RestPutMappingAct
 import org.elasticsearch.rest.action.admin.indices.open.RestOpenIndexAction;
 import org.elasticsearch.rest.action.admin.indices.optimize.RestOptimizeAction;
 import org.elasticsearch.rest.action.admin.indices.refresh.RestRefreshAction;
+import org.elasticsearch.rest.action.admin.indices.segments.RestIndicesSegmentsAction;
 import org.elasticsearch.rest.action.admin.indices.settings.RestGetSettingsAction;
 import org.elasticsearch.rest.action.admin.indices.settings.RestUpdateSettingsAction;
 import org.elasticsearch.rest.action.admin.indices.status.RestIndicesStatusAction;
@@ -57,6 +59,7 @@ import org.elasticsearch.rest.action.count.RestCountAction;
 import org.elasticsearch.rest.action.delete.RestDeleteAction;
 import org.elasticsearch.rest.action.deletebyquery.RestDeleteByQueryAction;
 import org.elasticsearch.rest.action.get.RestGetAction;
+import org.elasticsearch.rest.action.get.RestMultiGetAction;
 import org.elasticsearch.rest.action.index.RestIndexAction;
 import org.elasticsearch.rest.action.main.RestMainAction;
 import org.elasticsearch.rest.action.mlt.RestMoreLikeThisAction;
@@ -94,7 +97,9 @@ public class RestActionModule extends AbstractModule {
         bind(RestBroadcastPingAction.class).asEagerSingleton();
         bind(RestReplicationPingAction.class).asEagerSingleton();
 
+        bind(RestIndicesExistsAction.class).asEagerSingleton();
         bind(RestIndicesStatusAction.class).asEagerSingleton();
+        bind(RestIndicesSegmentsAction.class).asEagerSingleton();
         bind(RestGetIndicesAliasesAction.class).asEagerSingleton();
         bind(RestIndicesAliasesAction.class).asEagerSingleton();
         bind(RestCreateIndexAction.class).asEagerSingleton();
@@ -124,6 +129,7 @@ public class RestActionModule extends AbstractModule {
         bind(RestIndexAction.class).asEagerSingleton();
 
         bind(RestGetAction.class).asEagerSingleton();
+        bind(RestMultiGetAction.class).asEagerSingleton();
 
         bind(RestDeleteAction.class).asEagerSingleton();
 

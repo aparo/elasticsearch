@@ -24,6 +24,7 @@ import org.apache.lucene.index.LogByteSizeMergePolicy;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.elasticsearch.ElasticSearchException;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Preconditions;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -34,6 +35,7 @@ import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.store.Store;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -77,7 +79,7 @@ public class LogByteSizeMergePolicyProvider extends AbstractIndexShardComponent 
     @Override public LogByteSizeMergePolicy newMergePolicy() {
         CustomLogByteSizeMergePolicy mergePolicy;
         if (asyncMerge) {
-            mergePolicy = new CustomLogByteSizeMergePolicy(this);
+            mergePolicy = new EnableMergeLogByteSizeMergePolicy(this);
         } else {
             mergePolicy = new CustomLogByteSizeMergePolicy(this);
         }
@@ -94,6 +96,16 @@ public class LogByteSizeMergePolicyProvider extends AbstractIndexShardComponent 
 
     @Override public void close(boolean delete) throws ElasticSearchException {
         indexSettingsService.removeListener(applySettings);
+    }
+
+    static {
+        IndexMetaData.addDynamicSettings(
+                "index.merge.policy.min_merge_size",
+                "index.merge.policy.max_merge_size",
+                "index.merge.policy.max_merge_docs",
+                "index.merge.policy.merge_factor",
+                "index.compound_format"
+        );
     }
 
     class ApplySettings implements IndexSettingsService.Listener {
@@ -203,7 +215,7 @@ public class LogByteSizeMergePolicyProvider extends AbstractIndexShardComponent 
             return super.findMergesToExpungeDeletes(segmentInfos);
         }
 
-        @Override public MergeSpecification findMergesForOptimize(SegmentInfos infos, int maxNumSegments, Set<SegmentInfo> segmentsToOptimize) throws IOException {
+        @Override public MergeSpecification findMergesForOptimize(SegmentInfos infos, int maxNumSegments, Map<SegmentInfo, Boolean> segmentsToOptimize) throws IOException {
             if (enableMerge.get() == Boolean.FALSE) {
                 return null;
             }

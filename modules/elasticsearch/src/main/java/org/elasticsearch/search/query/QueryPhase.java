@@ -20,7 +20,14 @@
 package org.elasticsearch.search.query;
 
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.Collector;
+import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.FilteredQuery;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.TopDocs;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.inject.Inject;
@@ -54,8 +61,6 @@ public class QueryPhase implements SearchPhase {
     @Override public Map<String, ? extends SearchParseElement> parseElements() {
         ImmutableMap.Builder<String, SearchParseElement> parseElements = ImmutableMap.builder();
         parseElements.put("from", new FromParseElement()).put("size", new SizeParseElement())
-                .put("query_parser_name", new QueryParserNameParseElement())
-                .put("queryParserName", new QueryParserNameParseElement())
                 .put("indices_boost", new IndicesBoostParseElement())
                 .put("indicesBoost", new IndicesBoostParseElement())
                 .put("query", new QueryParseElement())
@@ -164,8 +169,9 @@ public class QueryPhase implements SearchPhase {
             searchContext.queryResult().size(searchContext.size());
 
             Query query = searchContext.query();
-            if (searchContext.types().length > 0) {
-                query = new FilteredQuery(query, searchContext.filterCache().cache(searchContext.mapperService().typesFilter(searchContext.types())));
+            Filter searchFilter = searchContext.mapperService().searchFilter(searchContext.types());
+            if (searchFilter != null) {
+                query = new FilteredQuery(query, searchContext.filterCache().cache(searchFilter));
             }
 
             TopDocs topDocs;
@@ -198,7 +204,7 @@ public class QueryPhase implements SearchPhase {
                 }
                 topDocs = countCollector.topDocs();
             } else if (searchContext.searchType() == SearchType.SCAN) {
-                ScanCollector scanCollector = new ScanCollector(searchContext.from(), searchContext.size());
+                ScanCollector scanCollector = new ScanCollector(searchContext.from(), searchContext.size(), searchContext.trackScores());
                 try {
                     searchContext.searcher().search(query, scanCollector);
                 } catch (ScanCollector.StopCollectingException e) {
@@ -253,13 +259,18 @@ public class QueryPhase implements SearchPhase {
 
         private final ArrayList<ScoreDoc> docs;
 
+        private final boolean trackScores;
+
+        private Scorer scorer;
+
         private int docBase;
 
         private int counter;
 
-        ScanCollector(int from, int size) {
+        ScanCollector(int from, int size, boolean trackScores) {
             this.from = from;
             this.to = from + size;
+            this.trackScores = trackScores;
             this.docs = new ArrayList<ScoreDoc>(size);
         }
 
@@ -268,11 +279,12 @@ public class QueryPhase implements SearchPhase {
         }
 
         @Override public void setScorer(Scorer scorer) throws IOException {
+            this.scorer = scorer;
         }
 
         @Override public void collect(int doc) throws IOException {
             if (counter >= from) {
-                docs.add(new ScoreDoc(docBase + doc, 0f));
+                docs.add(new ScoreDoc(docBase + doc, trackScores ? scorer.score() : 0f));
             }
             counter++;
             if (counter >= to) {

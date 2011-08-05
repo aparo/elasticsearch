@@ -21,7 +21,13 @@ package org.elasticsearch.common.http.client;
 
 import org.elasticsearch.common.Nullable;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
@@ -143,6 +149,7 @@ public class HttpDownloadHelper {
          * begin a download
          */
         public void beginDownload() {
+            out.print("Downloading ");
             dots = 0;
         }
 
@@ -161,6 +168,7 @@ public class HttpDownloadHelper {
          * end a download
          */
         public void endDownload() {
+            out.println("DONE");
             out.flush();
         }
     }
@@ -218,14 +226,15 @@ public class HttpDownloadHelper {
 
 
         private boolean redirectionAllowed(URL aSource, URL aDest) throws IOException {
-            if (!(aSource.getProtocol().equals(aDest.getProtocol()) || ("http"
-                    .equals(aSource.getProtocol()) && "https".equals(aDest
-                    .getProtocol())))) {
-                String message = "Redirection detected from "
-                        + aSource.getProtocol() + " to " + aDest.getProtocol()
-                        + ". Protocol switch unsafe, not allowed.";
-                throw new IOException(message);
-            }
+            // Argh, github does this...
+//            if (!(aSource.getProtocol().equals(aDest.getProtocol()) || ("http"
+//                    .equals(aSource.getProtocol()) && "https".equals(aDest
+//                    .getProtocol())))) {
+//                String message = "Redirection detected from "
+//                        + aSource.getProtocol() + " to " + aDest.getProtocol()
+//                        + ". Protocol switch unsafe, not allowed.";
+//                throw new IOException(message);
+//            }
 
             redirections++;
             if (redirections > 5) {
@@ -250,6 +259,7 @@ public class HttpDownloadHelper {
             if (connection instanceof HttpURLConnection) {
                 ((HttpURLConnection) connection).setInstanceFollowRedirects(false);
                 ((HttpURLConnection) connection).setUseCaches(true);
+                ((HttpURLConnection) connection).setConnectTimeout(5000);
             }
             // connect to the remote site (may take some time)
             connection.connect();

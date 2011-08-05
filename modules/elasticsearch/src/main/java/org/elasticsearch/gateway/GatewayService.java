@@ -20,11 +20,19 @@
 package org.elasticsearch.gateway;
 
 import org.elasticsearch.ElasticSearchException;
-import org.elasticsearch.cluster.*;
+import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.ClusterStateListener;
+import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.metadata.*;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.IndexTemplateMetaData;
+import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.metadata.MetaDataCreateIndexService;
+import org.elasticsearch.cluster.metadata.MetaDataStateIndexService;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
@@ -34,6 +42,7 @@ import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -104,7 +113,9 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
             ClusterState clusterState = clusterService.state();
             DiscoveryNodes nodes = clusterState.nodes();
             if (clusterState.nodes().localNodeMaster() && clusterState.blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)) {
-                if (recoverAfterNodes != -1 && (nodes.masterAndDataNodes().size()) < recoverAfterNodes) {
+                if (clusterState.blocks().hasGlobalBlock(Discovery.NO_MASTER_BLOCK)) {
+                    logger.debug("not recovering from gateway, no master elected yet");
+                } else if (recoverAfterNodes != -1 && (nodes.masterAndDataNodes().size()) < recoverAfterNodes) {
                     logger.debug("not recovering from gateway, nodes_size (data+master) [" + nodes.masterAndDataNodes().size() + "] < recover_after_nodes [" + recoverAfterNodes + "]");
                 } else if (recoverAfterDataNodes != -1 && nodes.dataNodes().size() < recoverAfterDataNodes) {
                     logger.debug("not recovering from gateway, nodes_size (data) [" + nodes.dataNodes().size() + "] < recover_after_data_nodes [" + recoverAfterDataNodes + "]");
@@ -150,10 +161,18 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
         if (lifecycle.stoppedOrClosed()) {
             return;
         }
+        if (event.state().blocks().hasGlobalBlock(Discovery.NO_MASTER_BLOCK)) {
+            // we need to clear those flags, since we might need to recover again in case we disconnect
+            // from the cluster and then reconnect
+            recovered.set(false);
+            scheduledRecovery.set(false);
+        }
         if (event.localNodeMaster() && event.state().blocks().hasGlobalBlock(STATE_NOT_RECOVERED_BLOCK)) {
             ClusterState clusterState = event.state();
             DiscoveryNodes nodes = clusterState.nodes();
-            if (recoverAfterNodes != -1 && (nodes.masterAndDataNodes().size()) < recoverAfterNodes) {
+            if (event.state().blocks().hasGlobalBlock(Discovery.NO_MASTER_BLOCK)) {
+                logger.debug("not recovering from gateway, no master elected yet");
+            } else if (recoverAfterNodes != -1 && (nodes.masterAndDataNodes().size()) < recoverAfterNodes) {
                 logger.debug("not recovering from gateway, nodes_size (data+master) [" + nodes.masterAndDataNodes().size() + "] < recover_after_nodes [" + recoverAfterNodes + "]");
             } else if (recoverAfterDataNodes != -1 && nodes.dataNodes().size() < recoverAfterDataNodes) {
                 logger.debug("not recovering from gateway, nodes_size (data) [" + nodes.dataNodes().size() + "] < recover_after_data_nodes [" + recoverAfterDataNodes + "]");
@@ -229,6 +248,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
 
                     MetaData.Builder metaDataBuilder = newMetaDataBuilder()
                             .metaData(currentState.metaData());
+                    metaDataBuilder.version(recoveredState.version());
 
                     // add the index templates
                     for (Map.Entry<String, IndexTemplateMetaData> entry : recoveredState.metaData().templates().entrySet()) {
@@ -258,6 +278,7 @@ public class GatewayService extends AbstractLifecycleComponent<GatewayService> i
                             routingTableBuilder.add(indexRoutingBuilder);
                         }
                     }
+                    routingTableBuilder.version(recoveredState.version());
 
                     // now, reroute
                     RoutingAllocation.Result routingResult = shardsAllocation.reroute(newClusterStateBuilder().state(updatedState).routingTable(routingTableBuilder).build());

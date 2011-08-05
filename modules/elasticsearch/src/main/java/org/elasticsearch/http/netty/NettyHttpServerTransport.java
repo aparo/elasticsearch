@@ -24,10 +24,19 @@ import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.netty.OpenChannelsHandler;
 import org.elasticsearch.common.netty.bootstrap.ServerBootstrap;
-import org.elasticsearch.common.netty.channel.*;
+import org.elasticsearch.common.netty.channel.Channel;
+import org.elasticsearch.common.netty.channel.ChannelHandlerContext;
+import org.elasticsearch.common.netty.channel.ChannelPipeline;
+import org.elasticsearch.common.netty.channel.ChannelPipelineFactory;
+import org.elasticsearch.common.netty.channel.Channels;
+import org.elasticsearch.common.netty.channel.ExceptionEvent;
 import org.elasticsearch.common.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.elasticsearch.common.netty.channel.socket.oio.OioServerSocketChannelFactory;
-import org.elasticsearch.common.netty.handler.codec.http.*;
+import org.elasticsearch.common.netty.handler.codec.http.HttpChunkAggregator;
+import org.elasticsearch.common.netty.handler.codec.http.HttpContentCompressor;
+import org.elasticsearch.common.netty.handler.codec.http.HttpContentDecompressor;
+import org.elasticsearch.common.netty.handler.codec.http.HttpRequestDecoder;
+import org.elasticsearch.common.netty.handler.codec.http.HttpResponseEncoder;
 import org.elasticsearch.common.netty.handler.timeout.ReadTimeoutException;
 import org.elasticsearch.common.netty.logging.InternalLogger;
 import org.elasticsearch.common.netty.logging.InternalLoggerFactory;
@@ -40,8 +49,12 @@ import org.elasticsearch.common.transport.NetworkExceptionHelper;
 import org.elasticsearch.common.transport.PortsRange;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
-import org.elasticsearch.http.*;
+import org.elasticsearch.http.BindHttpException;
+import org.elasticsearch.http.HttpChannel;
 import org.elasticsearch.http.HttpRequest;
+import org.elasticsearch.http.HttpServerAdapter;
+import org.elasticsearch.http.HttpServerTransport;
+import org.elasticsearch.http.HttpStats;
 import org.elasticsearch.transport.BindTransportException;
 import org.elasticsearch.transport.netty.NettyInternalESLoggerFactory;
 
@@ -69,15 +82,20 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
 
     private final NetworkService networkService;
 
-    private final ByteSizeValue maxContentLength;
+    final ByteSizeValue maxContentLength;
+    final ByteSizeValue maxInitialLineLength;
+    final ByteSizeValue maxHeaderSize;
+    final ByteSizeValue maxChunkSize;
 
     private final int workerCount;
 
     private final boolean blockingServer;
 
-    private final boolean compression;
+    final boolean compression;
 
     private final int compressionLevel;
+
+    final boolean resetCookies;
 
     private final String port;
 
@@ -101,7 +119,7 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
 
     private volatile Channel serverChannel;
 
-    private volatile OpenChannelsHandler serverOpenChannels;
+    OpenChannelsHandler serverOpenChannels;
 
     private volatile HttpServerAdapter httpServerAdapter;
 
@@ -109,6 +127,12 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
         super(settings);
         this.networkService = networkService;
         ByteSizeValue maxContentLength = componentSettings.getAsBytesSize("max_content_length", settings.getAsBytesSize("http.max_content_length", new ByteSizeValue(100, ByteSizeUnit.MB)));
+        this.maxChunkSize = componentSettings.getAsBytesSize("max_chunk_size", settings.getAsBytesSize("http.max_chunk_size", new ByteSizeValue(8, ByteSizeUnit.KB)));
+        this.maxHeaderSize = componentSettings.getAsBytesSize("max_header_size", settings.getAsBytesSize("http.max_header_size", new ByteSizeValue(8, ByteSizeUnit.KB)));
+        this.maxInitialLineLength = componentSettings.getAsBytesSize("max_initial_line_length", settings.getAsBytesSize("http.max_initial_line_length", new ByteSizeValue(4, ByteSizeUnit.KB)));
+        // don't reset cookies by default, since I don't think we really need to, and parsing of cookies with netty is slow
+        // and requires a large stack allocation because of the use of regex
+        this.resetCookies = componentSettings.getAsBoolean("reset_cookies", settings.getAsBoolean("http.reset_cookies", false));
         this.workerCount = componentSettings.getAsInt("worker_count", Runtime.getRuntime().availableProcessors() * 2);
         this.blockingServer = settings.getAsBoolean("http.blocking_server", settings.getAsBoolean(TCP_BLOCKING_SERVER, settings.getAsBoolean(TCP_BLOCKING, false)));
         this.port = componentSettings.get("port", settings.get("http.port", "9200-9300"));
@@ -129,6 +153,9 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
             maxContentLength = new ByteSizeValue(100, ByteSizeUnit.MB);
         }
         this.maxContentLength = maxContentLength;
+
+        logger.debug("using max_chunk_size[{}], max_header_size[{}], max_initial_line_length[{}], max_content_length[{}]",
+                maxChunkSize, maxHeaderSize, maxInitialLineLength, this.maxContentLength);
     }
 
     public void httpServerAdapter(HttpServerAdapter httpServerAdapter) {
@@ -150,27 +177,7 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
                     workerCount));
         }
 
-        final HttpRequestHandler requestHandler = new HttpRequestHandler(this);
-
-        ChannelPipelineFactory pipelineFactory = new ChannelPipelineFactory() {
-            @Override public ChannelPipeline getPipeline() throws Exception {
-                ChannelPipeline pipeline = Channels.pipeline();
-                pipeline.addLast("openChannels", serverOpenChannels);
-                pipeline.addLast("decoder", new HttpRequestDecoder());
-                if (compression) {
-                    pipeline.addLast("decoder_compress", new HttpContentDecompressor());
-                }
-                pipeline.addLast("aggregator", new HttpChunkAggregator((int) maxContentLength.bytes()));
-                pipeline.addLast("encoder", new HttpResponseEncoder());
-                if (compression) {
-                    pipeline.addLast("encoder_compress", new HttpContentCompressor(compressionLevel));
-                }
-                pipeline.addLast("handler", requestHandler);
-                return pipeline;
-            }
-        };
-
-        serverBootstrap.setPipelineFactory(pipelineFactory);
+        serverBootstrap.setPipelineFactory(new MyChannelPipelineFactory(this));
 
         if (tcpNoDelay != null) {
             serverBootstrap.setOption("child.tcpNoDelay", tcpNoDelay);
@@ -249,6 +256,10 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
         return this.boundAddress;
     }
 
+    @Override public HttpStats stats() {
+        return new HttpStats(serverOpenChannels.numberOfOpenChannels());
+    }
+
     void dispatchRequest(HttpRequest request, HttpChannel channel) {
         httpServerAdapter.dispatchRequest(request, channel);
     }
@@ -268,6 +279,38 @@ public class NettyHttpServerTransport extends AbstractLifecycleComponent<HttpSer
                 logger.warn("Caught exception while handling client http traffic, closing connection", e.getCause());
                 ctx.getChannel().disconnect();
             }
+        }
+    }
+
+    static class MyChannelPipelineFactory implements ChannelPipelineFactory {
+
+        private final NettyHttpServerTransport transport;
+
+        private final HttpRequestHandler requestHandler;
+
+        MyChannelPipelineFactory(NettyHttpServerTransport transport) {
+            this.transport = transport;
+            this.requestHandler = new HttpRequestHandler(transport);
+        }
+
+        @Override public ChannelPipeline getPipeline() throws Exception {
+            ChannelPipeline pipeline = Channels.pipeline();
+            pipeline.addLast("openChannels", transport.serverOpenChannels);
+            pipeline.addLast("decoder", new HttpRequestDecoder(
+                    (int) transport.maxInitialLineLength.bytes(),
+                    (int) transport.maxHeaderSize.bytes(),
+                    (int) transport.maxChunkSize.bytes()
+            ));
+            if (transport.compression) {
+                pipeline.addLast("decoder_compress", new HttpContentDecompressor());
+            }
+            pipeline.addLast("aggregator", new HttpChunkAggregator((int) transport.maxContentLength.bytes()));
+            pipeline.addLast("encoder", new HttpResponseEncoder());
+            if (transport.compression) {
+                pipeline.addLast("encoder_compress", new HttpContentCompressor(transport.compressionLevel));
+            }
+            pipeline.addLast("handler", requestHandler);
+            return pipeline;
         }
     }
 }

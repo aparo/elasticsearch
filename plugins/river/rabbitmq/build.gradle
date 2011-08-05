@@ -2,6 +2,7 @@ dependsOn(':elasticsearch')
 
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'eclipse'
 
 archivesBaseName = "elasticsearch-river-rabbitmq"
 
@@ -32,9 +33,9 @@ configurations {
 dependencies {
     compile project(':elasticsearch')
 
-    compile('com.rabbitmq:amqp-client:2.3.1') { transitive = false }
+    compile('com.rabbitmq:amqp-client:2.5.1') { transitive = false }
     compile("commons-io:commons-io:1.2") { transitive = false }
-    distLib('com.rabbitmq:amqp-client:2.3.1') { transitive = false }
+    distLib('com.rabbitmq:amqp-client:2.5.1') { transitive = false }
     distLib("commons-io:commons-io:1.2") { transitive = false }
 }
 
@@ -107,7 +108,7 @@ uploadArchives {
         pom.project {
             inceptionYear '2009'
             name 'elasticsearch-plugins-river-rabbitmq'
-            description 'Attachments Plugin for ElasticSearch'
+            description 'RabbitMQ River Plugin for ElasticSearch'
             licenses {
                 license {
                     name 'The Apache Software License, Version 2.0'
@@ -126,4 +127,8 @@ uploadArchives {
             pom.dependencies = pom.dependencies.findAll {dep -> dep.scope != 'test' } // removes the test scoped ones
         }
     }
+}
+
+eclipseClasspath {
+    defaultOutputDir = file('build/eclipse-build')
 }

@@ -61,9 +61,11 @@ public class JvmMonitorService extends AbstractLifecycleComponent<JvmMonitorServ
         this.threadPool = threadPool;
         this.dumpMonitorService = dumpMonitorService;
 
-        this.enabled = componentSettings.getAsBoolean("enabled", true);
+        this.enabled = componentSettings.getAsBoolean("enabled", JvmStats.isLastGcEnabled());
         this.interval = componentSettings.getAsTime("interval", timeValueSeconds(1));
         this.gcThreshold = componentSettings.getAsTime("gc_threshold", timeValueMillis(5000));
+
+        logger.debug("enabled [{}], last_gc_enabled [{}], interval [{}], gc_threshold [{}]", enabled, JvmStats.isLastGcEnabled(), interval, gcThreshold);
     }
 
     @Override protected void doStart() throws ElasticSearchException {
@@ -106,6 +108,10 @@ public class JvmMonitorService extends AbstractLifecycleComponent<JvmMonitorServ
                     GarbageCollector.LastGc lastGc = gc.lastGc();
                     if (lastGc.startTime == lastJvmStats.gc.collectors()[i].lastGc().startTime()) {
                         // we already handled this one...
+                        continue;
+                    }
+                    // Ignore any duration > 1hr; getLastGcInfo occasionally returns total crap
+                    if (lastGc.duration().hoursFrac() > 1) {
                         continue;
                     }
                     if (lastGc.duration().millis() > gcThreshold.millis()) {

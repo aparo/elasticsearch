@@ -20,7 +20,11 @@
 package org.elasticsearch.action.search.type;
 
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.search.*;
+import org.elasticsearch.action.search.ReduceSearchPhaseException;
+import org.elasticsearch.action.search.SearchOperationThreading;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.search.ShardSearchFailure;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -87,6 +91,7 @@ public class TransportSearchQueryThenFetchAction extends TransportSearchTypeActi
 
             if (docIdsToLoad.isEmpty()) {
                 finishHim();
+                return;
             }
 
             final AtomicInteger counter = new AtomicInteger(docIdsToLoad.size());
@@ -136,7 +141,7 @@ public class TransportSearchQueryThenFetchAction extends TransportSearchTypeActi
             }
         }
 
-        private void executeFetch(final SearchShardTarget shardTarget, final AtomicInteger counter, final FetchSearchRequest fetchSearchRequest, DiscoveryNode node) {
+        void executeFetch(final SearchShardTarget shardTarget, final AtomicInteger counter, final FetchSearchRequest fetchSearchRequest, DiscoveryNode node) {
             searchService.sendExecuteFetch(node, fetchSearchRequest, new SearchServiceListener<FetchSearchResult>() {
                 @Override public void onResult(FetchSearchResult result) {
                     result.shardTarget(shardTarget);
@@ -159,7 +164,7 @@ public class TransportSearchQueryThenFetchAction extends TransportSearchTypeActi
             });
         }
 
-        private void finishHim() {
+        void finishHim() {
             try {
                 innerFinishHim();
             } catch (Exception e) {
@@ -175,7 +180,7 @@ public class TransportSearchQueryThenFetchAction extends TransportSearchTypeActi
             }
         }
 
-        private void innerFinishHim() throws Exception {
+        void innerFinishHim() throws Exception {
             InternalSearchResponse internalResponse = searchPhaseController.merge(sortedShardList, queryResults, fetchResults);
             String scrollId = null;
             if (request.scroll() != null) {

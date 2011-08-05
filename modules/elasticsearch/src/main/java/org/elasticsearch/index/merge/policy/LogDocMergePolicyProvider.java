@@ -24,6 +24,7 @@ import org.apache.lucene.index.LogDocMergePolicy;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.elasticsearch.ElasticSearchException;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.Preconditions;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -32,6 +33,7 @@ import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.store.Store;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -88,6 +90,15 @@ public class LogDocMergePolicyProvider extends AbstractIndexShardComponent imple
         mergePolicy.setUseCompoundFile(compoundFormat);
         policies.add(mergePolicy);
         return mergePolicy;
+    }
+
+    static {
+        IndexMetaData.addDynamicSettings(
+                "index.merge.policy.min_merge_docs",
+                "index.merge.policy.max_merge_docs",
+                "index.merge.policy.merge_factor",
+                "index.compound_format"
+        );
     }
 
     class ApplySettings implements IndexSettingsService.Listener {
@@ -188,7 +199,7 @@ public class LogDocMergePolicyProvider extends AbstractIndexShardComponent imple
             return super.findMergesToExpungeDeletes(segmentInfos);
         }
 
-        @Override public MergeSpecification findMergesForOptimize(SegmentInfos infos, int maxNumSegments, Set<SegmentInfo> segmentsToOptimize) throws IOException {
+        @Override public MergeSpecification findMergesForOptimize(SegmentInfos infos, int maxNumSegments, Map<SegmentInfo, Boolean> segmentsToOptimize) throws IOException {
             if (enableMerge.get() == Boolean.FALSE) {
                 return null;
             }

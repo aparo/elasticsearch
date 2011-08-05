@@ -3,27 +3,22 @@ apply plugin: 'java'
 archivesBaseName = "$project.archivesBaseName"
 
 dependencies {
-    runtime 'aopalliance:aopalliance:1.0'
-    // We are still using Guice 2 since it uses much less memory compared to 3
-    runtime 'com.google.inject:guice:2.0'
-    runtime 'com.google.inject.extensions:guice-assisted-inject:2.0'
-    runtime 'com.google.inject.extensions:guice-multibindings:2.0'
-
     runtime 'com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru:1.2'
     runtime 'com.google.guava:guava:r09'
-    runtime 'org.elasticsearch:es-trove:3.0.0rc1'
-    runtime 'org.elasticsearch:es-jsr166y:20110209'
+    runtime 'org.elasticsearch:es-trove:3.0.0rc2'
+    runtime 'org.elasticsearch:es-jsr166y:20110710'
 
     runtime 'commons-codec:commons-codec:1.5'
 
-    runtime 'joda-time:joda-time:1.6.1'
-    runtime 'org.mvel:mvel2:2.1.Beta3'
+    // joda 2.0 moved to using volatile fields for datetime, which hurts performance for facets!
+    runtime 'joda-time:joda-time:1.6.2'
+    runtime 'org.mvel:mvel2:2.1.Beta5'
 
-    runtime 'org.codehaus.jackson:jackson-core-asl:1.8.1'
-    runtime 'org.codehaus.jackson:jackson-smile:1.8.1'
+    runtime 'org.codehaus.jackson:jackson-core-asl:1.8.2'
+    runtime 'org.codehaus.jackson:jackson-smile:1.8.2'
     runtime 'org.yaml:snakeyaml:1.6'
 
-    runtime('org.jboss.netty:netty:3.2.4.Final') { transitive = false }
+    runtime('org.jboss.netty:netty:3.2.5.Final') { transitive = false }
 }
 
 configurations {
