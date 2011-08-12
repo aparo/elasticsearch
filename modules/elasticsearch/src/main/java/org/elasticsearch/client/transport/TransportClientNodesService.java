@@ -20,6 +20,8 @@
 package org.elasticsearch.client.transport;
 
 import org.elasticsearch.ElasticSearchException;
+import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.admin.cluster.node.info.NodeInfo;
 import org.elasticsearch.action.admin.cluster.node.info.NodesInfoResponse;
@@ -143,15 +145,81 @@ public class TransportClientNodesService extends AbstractComponent {
             throw new NoNodeAvailableException();
         }
         int index = randomNodeGenerator.incrementAndGet();
+        if (index < 0) {
+            index = 0;
+            randomNodeGenerator.set(0);
+        }
         for (int i = 0; i < nodes.size(); i++) {
             DiscoveryNode node = nodes.get((index + i) % nodes.size());
             try {
                 return callback.doWithNode(node);
-            } catch (ConnectTransportException e) {
-                // retry in this case
+            } catch (ElasticSearchException e) {
+                if (!(e.unwrapCause() instanceof ConnectTransportException)) {
+                    throw e;
+                }
             }
         }
         throw new NoNodeAvailableException();
+    }
+
+    public <Response> void execute(NodeListenerCallback<Response> callback, ActionListener<Response> listener) throws ElasticSearchException {
+        ImmutableList<DiscoveryNode> nodes = this.nodes;
+        if (nodes.isEmpty()) {
+            throw new NoNodeAvailableException();
+        }
+        int index = randomNodeGenerator.incrementAndGet();
+        if (index < 0) {
+            index = 0;
+            randomNodeGenerator.set(0);
+        }
+        RetryListener<Response> retryListener = new RetryListener<Response>(callback, listener, nodes, index);
+        try {
+            callback.doWithNode(nodes.get((index) % nodes.size()), retryListener);
+        } catch (ElasticSearchException e) {
+            if (e.unwrapCause() instanceof ConnectTransportException) {
+                retryListener.onFailure(e);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    public static class RetryListener<Response> implements ActionListener<Response> {
+        private final NodeListenerCallback<Response> callback;
+        private final ActionListener<Response> listener;
+        private final ImmutableList<DiscoveryNode> nodes;
+        private final int index;
+
+        private volatile int i;
+
+        public RetryListener(NodeListenerCallback<Response> callback, ActionListener<Response> listener, ImmutableList<DiscoveryNode> nodes, int index) {
+            this.callback = callback;
+            this.listener = listener;
+            this.nodes = nodes;
+            this.index = index;
+        }
+
+        @Override public void onResponse(Response response) {
+            listener.onResponse(response);
+        }
+
+        @Override public void onFailure(Throwable e) {
+            if (ExceptionsHelper.unwrapCause(e) instanceof ConnectTransportException) {
+                int i = ++this.i;
+                if (i == nodes.size()) {
+                    listener.onFailure(new NoNodeAvailableException());
+                } else {
+                    try {
+                        callback.doWithNode(nodes.get((index + i) % nodes.size()), this);
+                    } catch (Exception e1) {
+                        // retry the next one...
+                        onFailure(e);
+                    }
+                }
+            } else {
+                listener.onFailure(e);
+            }
+        }
     }
 
     public void close() {
@@ -291,5 +359,10 @@ public class TransportClientNodesService extends AbstractComponent {
     public static interface NodeCallback<T> {
 
         T doWithNode(DiscoveryNode node) throws ElasticSearchException;
+    }
+
+    public static interface NodeListenerCallback<Response> {
+
+        void doWithNode(DiscoveryNode node, ActionListener<Response> listener) throws ElasticSearchException;
     }
 }
