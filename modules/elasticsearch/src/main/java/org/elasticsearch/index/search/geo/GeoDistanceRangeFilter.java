@@ -37,24 +37,28 @@ import java.io.IOException;
 public class GeoDistanceRangeFilter extends Filter {
 
     private final double lat;
-
     private final double lon;
 
     private final double inclusiveLowerPoint; // in miles
     private final double inclusiveUpperPoint; // in miles
 
     private final GeoDistance geoDistance;
+    private final GeoDistance.FixedSourceDistance fixedSourceDistance;
+    private final GeoDistance.DistanceBoundingCheck distanceBoundingCheck;
 
     private final String fieldName;
 
     private final FieldDataCache fieldDataCache;
 
-    public GeoDistanceRangeFilter(double lat, double lon, Double lowerVal, Double upperVal, boolean includeLower, boolean includeUpper, GeoDistance geoDistance, String fieldName, FieldDataCache fieldDataCache) {
+    public GeoDistanceRangeFilter(double lat, double lon, Double lowerVal, Double upperVal, boolean includeLower, boolean includeUpper, GeoDistance geoDistance, String fieldName, FieldDataCache fieldDataCache,
+                                  boolean optimizeBbox) {
         this.lat = lat;
         this.lon = lon;
         this.geoDistance = geoDistance;
         this.fieldName = fieldName;
         this.fieldDataCache = fieldDataCache;
+
+        this.fixedSourceDistance = geoDistance.fixedSourceDistance(lat, lon, DistanceUnit.MILES);
 
         if (lowerVal != null) {
             double f = lowerVal.doubleValue();
@@ -69,7 +73,10 @@ public class GeoDistanceRangeFilter extends Filter {
             inclusiveUpperPoint = NumericUtils.sortableLongToDouble(includeUpper ? i : (i - 1L));
         } else {
             inclusiveUpperPoint = Double.POSITIVE_INFINITY;
+            optimizeBbox = false;
         }
+
+        this.distanceBoundingCheck = optimizeBbox ? GeoDistance.distanceBoundingCheck(lat, lon, inclusiveUpperPoint, DistanceUnit.MILES) : GeoDistance.ALWAYS_INSTANCE;
     }
 
     public double lat() {
@@ -90,39 +97,7 @@ public class GeoDistanceRangeFilter extends Filter {
 
     @Override public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
         final GeoPointFieldData fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, reader, fieldName);
-        return new GetDocSet(reader.maxDoc()) {
-
-            @Override public boolean isCacheable() {
-                // not cacheable for several reasons:
-                // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
-                // 2. Its already fast without in mem bitset, since it works with field data
-                return false;
-            }
-
-            @Override public boolean get(int doc) throws IOException {
-                if (!fieldData.hasValue(doc)) {
-                    return false;
-                }
-
-                if (fieldData.multiValued()) {
-                    double[] lats = fieldData.latValues(doc);
-                    double[] lons = fieldData.lonValues(doc);
-                    for (int i = 0; i < lats.length; i++) {
-                        double d = geoDistance.calculate(lat, lon, lats[i], lons[i], DistanceUnit.MILES);
-                        if (d >= inclusiveLowerPoint && d <= inclusiveUpperPoint) {
-                            return true;
-                        }
-                    }
-                    return false;
-                } else {
-                    double d = geoDistance.calculate(lat, lon, fieldData.latValue(doc), fieldData.lonValue(doc), DistanceUnit.MILES);
-                    if (d >= inclusiveLowerPoint && d <= inclusiveUpperPoint) {
-                        return true;
-                    }
-                    return false;
-                }
-            }
-        };
+        return new GeoDistanceRangeDocSet(reader.maxDoc(), fieldData, fixedSourceDistance, distanceBoundingCheck, inclusiveLowerPoint, inclusiveUpperPoint);
     }
 
     @Override
@@ -157,5 +132,63 @@ public class GeoDistanceRangeFilter extends Filter {
         result = 31 * result + (geoDistance != null ? geoDistance.hashCode() : 0);
         result = 31 * result + (fieldName != null ? fieldName.hashCode() : 0);
         return result;
+    }
+
+    public static class GeoDistanceRangeDocSet extends GetDocSet {
+
+        private final GeoPointFieldData fieldData;
+        private final GeoDistance.FixedSourceDistance fixedSourceDistance;
+        private final GeoDistance.DistanceBoundingCheck distanceBoundingCheck;
+        private final double inclusiveLowerPoint; // in miles
+        private final double inclusiveUpperPoint; // in miles
+
+        public GeoDistanceRangeDocSet(int maxDoc, GeoPointFieldData fieldData, GeoDistance.FixedSourceDistance fixedSourceDistance, GeoDistance.DistanceBoundingCheck distanceBoundingCheck,
+                                      double inclusiveLowerPoint, double inclusiveUpperPoint) {
+            super(maxDoc);
+            this.fieldData = fieldData;
+            this.fixedSourceDistance = fixedSourceDistance;
+            this.distanceBoundingCheck = distanceBoundingCheck;
+            this.inclusiveLowerPoint = inclusiveLowerPoint;
+            this.inclusiveUpperPoint = inclusiveUpperPoint;
+        }
+
+        @Override public boolean isCacheable() {
+            // not cacheable for several reasons:
+            // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
+            // 2. Its already fast without in mem bitset, since it works with field data
+            return false;
+        }
+
+        @Override public boolean get(int doc) throws IOException {
+            if (!fieldData.hasValue(doc)) {
+                return false;
+            }
+
+            if (fieldData.multiValued()) {
+                double[] lats = fieldData.latValues(doc);
+                double[] lons = fieldData.lonValues(doc);
+                for (int i = 0; i < lats.length; i++) {
+                    double lat = lats[i];
+                    double lon = lons[i];
+                    if (distanceBoundingCheck.isWithin(lat, lon)) {
+                        double d = fixedSourceDistance.calculate(lat, lon);
+                        if (d >= inclusiveLowerPoint && d <= inclusiveUpperPoint) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } else {
+                double lat = fieldData.latValue(doc);
+                double lon = fieldData.lonValue(doc);
+                if (distanceBoundingCheck.isWithin(lat, lon)) {
+                    double d = fixedSourceDistance.calculate(lat, lon);
+                    if (d >= inclusiveLowerPoint && d <= inclusiveUpperPoint) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
     }
 }

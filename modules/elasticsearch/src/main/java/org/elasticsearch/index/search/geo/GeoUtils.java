@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -17,24 +17,39 @@
  * under the License.
  */
 
-package org.elasticsearch.index.shard.service;
-
-import org.elasticsearch.index.engine.Engine;
+package org.elasticsearch.index.search.geo;
 
 /**
- * @author kimchy (shay.banon)
  */
-public abstract class OperationListener {
+public class GeoUtils {
 
-    public Engine.Create beforeCreate(Engine.Create create) {
-        return create;
+    public static double normalizeLon(double lon) {
+        double delta = 0;
+        if (lon < 0) {
+            delta = 360;
+        } else if (lon >= 0) {
+            delta = -360;
+        }
+
+        double newLng = lon;
+        while (newLng < -180 || newLng > 180) {
+            newLng += delta;
+        }
+        return newLng;
     }
 
-    public Engine.Index beforeIndex(Engine.Index index) {
-        return index;
-    }
+    public static double normalizeLat(double lat) {
+        double delta = 0;
+        if (lat < 0) {
+            delta = 180;
+        } else if (lat >= 0) {
+            delta = -180;
+        }
 
-    public Engine.Delete beforeDelete(Engine.Delete delete) {
-        return delete;
+        double newLat = lat;
+        while (newLat < -90 || newLat > 90) {
+            newLat += delta;
+        }
+        return newLat;
     }
 }

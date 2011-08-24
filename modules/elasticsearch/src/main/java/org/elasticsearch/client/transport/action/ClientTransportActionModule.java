@@ -27,6 +27,7 @@ import org.elasticsearch.client.transport.action.admin.cluster.node.stats.Client
 import org.elasticsearch.client.transport.action.admin.cluster.ping.broadcast.ClientTransportBroadcastPingAction;
 import org.elasticsearch.client.transport.action.admin.cluster.ping.replication.ClientTransportReplicationPingAction;
 import org.elasticsearch.client.transport.action.admin.cluster.ping.single.ClientTransportSinglePingAction;
+import org.elasticsearch.client.transport.action.admin.cluster.settings.ClientTransportClusterUpdateSettingsAction;
 import org.elasticsearch.client.transport.action.admin.cluster.state.ClientTransportClusterStateAction;
 import org.elasticsearch.client.transport.action.admin.indices.alias.ClientTransportIndicesAliasesAction;
 import org.elasticsearch.client.transport.action.admin.indices.analyze.ClientTransportAnalyzeAction;
@@ -44,6 +45,7 @@ import org.elasticsearch.client.transport.action.admin.indices.optimize.ClientTr
 import org.elasticsearch.client.transport.action.admin.indices.refresh.ClientTransportRefreshAction;
 import org.elasticsearch.client.transport.action.admin.indices.segments.ClientTransportIndicesSegmentsAction;
 import org.elasticsearch.client.transport.action.admin.indices.settings.ClientTransportUpdateSettingsAction;
+import org.elasticsearch.client.transport.action.admin.indices.stats.ClientTransportIndicesStatsAction;
 import org.elasticsearch.client.transport.action.admin.indices.status.ClientTransportIndicesStatusAction;
 import org.elasticsearch.client.transport.action.admin.indices.template.delete.ClientTransportDeleteIndexTemplateAction;
 import org.elasticsearch.client.transport.action.admin.indices.template.put.ClientTransportPutIndexTemplateAction;
@@ -77,6 +79,7 @@ public class ClientTransportActionModule extends AbstractModule {
         bind(ClientTransportPercolateAction.class).asEagerSingleton();
 
         bind(ClientTransportIndicesExistsAction.class).asEagerSingleton();
+        bind(ClientTransportIndicesStatsAction.class).asEagerSingleton();
         bind(ClientTransportIndicesStatusAction.class).asEagerSingleton();
         bind(ClientTransportIndicesSegmentsAction.class).asEagerSingleton();
         bind(ClientTransportRefreshAction.class).asEagerSingleton();
@@ -105,5 +108,6 @@ public class ClientTransportActionModule extends AbstractModule {
         bind(ClientTransportBroadcastPingAction.class).asEagerSingleton();
         bind(ClientTransportClusterStateAction.class).asEagerSingleton();
         bind(ClientTransportClusterHealthAction.class).asEagerSingleton();
+        bind(ClientTransportClusterUpdateSettingsAction.class).asEagerSingleton();
     }
 }

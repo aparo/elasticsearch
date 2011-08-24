@@ -24,6 +24,7 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.collect.ImmutableSet;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.node.settings.NodeSettingsService;
 
 import java.util.Set;
 
@@ -36,11 +37,11 @@ public class NodeAllocations extends NodeAllocation {
 
     private final NodeAllocation[] allocations;
 
-    public NodeAllocations(Settings settings) {
+    public NodeAllocations(Settings settings, NodeSettingsService nodeSettingsService) {
         this(settings, ImmutableSet.<NodeAllocation>builder()
                 .add(new SameShardNodeAllocation(settings))
                 .add(new ReplicaAfterPrimaryActiveNodeAllocation(settings))
-                .add(new ThrottlingNodeAllocation(settings))
+                .add(new ThrottlingNodeAllocation(settings, nodeSettingsService))
                 .add(new RebalanceOnlyWhenActiveNodeAllocation(settings))
                 .add(new ClusterRebalanceNodeAllocation(settings))
                 .add(new ConcurrentRebalanceNodeAllocation(settings))

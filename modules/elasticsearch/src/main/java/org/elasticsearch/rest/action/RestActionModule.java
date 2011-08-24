@@ -30,6 +30,8 @@ import org.elasticsearch.rest.action.admin.cluster.node.stats.RestNodesStatsActi
 import org.elasticsearch.rest.action.admin.cluster.ping.broadcast.RestBroadcastPingAction;
 import org.elasticsearch.rest.action.admin.cluster.ping.replication.RestReplicationPingAction;
 import org.elasticsearch.rest.action.admin.cluster.ping.single.RestSinglePingAction;
+import org.elasticsearch.rest.action.admin.cluster.settings.RestClusterGetSettingsAction;
+import org.elasticsearch.rest.action.admin.cluster.settings.RestClusterUpdateSettingsAction;
 import org.elasticsearch.rest.action.admin.cluster.state.RestClusterStateAction;
 import org.elasticsearch.rest.action.admin.indices.alias.RestGetIndicesAliasesAction;
 import org.elasticsearch.rest.action.admin.indices.alias.RestIndicesAliasesAction;
@@ -50,6 +52,7 @@ import org.elasticsearch.rest.action.admin.indices.refresh.RestRefreshAction;
 import org.elasticsearch.rest.action.admin.indices.segments.RestIndicesSegmentsAction;
 import org.elasticsearch.rest.action.admin.indices.settings.RestGetSettingsAction;
 import org.elasticsearch.rest.action.admin.indices.settings.RestUpdateSettingsAction;
+import org.elasticsearch.rest.action.admin.indices.stats.RestIndicesStatsAction;
 import org.elasticsearch.rest.action.admin.indices.status.RestIndicesStatusAction;
 import org.elasticsearch.rest.action.admin.indices.template.delete.RestDeleteIndexTemplateAction;
 import org.elasticsearch.rest.action.admin.indices.template.get.RestGetIndexTemplateAction;
@@ -92,12 +95,15 @@ public class RestActionModule extends AbstractModule {
         bind(RestNodesRestartAction.class).asEagerSingleton();
         bind(RestClusterStateAction.class).asEagerSingleton();
         bind(RestClusterHealthAction.class).asEagerSingleton();
+        bind(RestClusterUpdateSettingsAction.class).asEagerSingleton();
+        bind(RestClusterGetSettingsAction.class).asEagerSingleton();
 
         bind(RestSinglePingAction.class).asEagerSingleton();
         bind(RestBroadcastPingAction.class).asEagerSingleton();
         bind(RestReplicationPingAction.class).asEagerSingleton();
 
         bind(RestIndicesExistsAction.class).asEagerSingleton();
+        bind(RestIndicesStatsAction.class).asEagerSingleton();
         bind(RestIndicesStatusAction.class).asEagerSingleton();
         bind(RestIndicesSegmentsAction.class).asEagerSingleton();
         bind(RestGetIndicesAliasesAction.class).asEagerSingleton();

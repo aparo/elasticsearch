@@ -59,6 +59,7 @@ public class TransportActions {
             public static final String REFRESH = "indices/refresh";
             public static final String OPTIMIZE = "indices/optimize";
             public static final String STATUS = "indices/status";
+            public static final String STATS = "indices/stats";
             public static final String SEGMENTS = "indices/segments";
             public static final String EXISTS = "indices/exists";
             public static final String ALIASES = "indices/aliases";
@@ -85,6 +86,7 @@ public class TransportActions {
 
             public static final String STATE = "/cluster/state";
             public static final String HEALTH = "/cluster/health";
+            public static final String UPDATE_SETTINGS = "/cluster/updateSettings";
 
             public static class Node {
                 public static final String INFO = "/cluster/nodes/info";

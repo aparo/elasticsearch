@@ -29,6 +29,7 @@ import org.elasticsearch.action.admin.cluster.ping.replication.TransportIndexRep
 import org.elasticsearch.action.admin.cluster.ping.replication.TransportReplicationPingAction;
 import org.elasticsearch.action.admin.cluster.ping.replication.TransportShardReplicationPingAction;
 import org.elasticsearch.action.admin.cluster.ping.single.TransportSinglePingAction;
+import org.elasticsearch.action.admin.cluster.settings.TransportClusterUpdateSettingsAction;
 import org.elasticsearch.action.admin.cluster.state.TransportClusterStateAction;
 import org.elasticsearch.action.admin.indices.alias.TransportIndicesAliasesAction;
 import org.elasticsearch.action.admin.indices.analyze.TransportAnalyzeAction;
@@ -46,6 +47,7 @@ import org.elasticsearch.action.admin.indices.optimize.TransportOptimizeAction;
 import org.elasticsearch.action.admin.indices.refresh.TransportRefreshAction;
 import org.elasticsearch.action.admin.indices.segments.TransportIndicesSegmentsAction;
 import org.elasticsearch.action.admin.indices.settings.TransportUpdateSettingsAction;
+import org.elasticsearch.action.admin.indices.stats.TransportIndicesStatsAction;
 import org.elasticsearch.action.admin.indices.status.TransportIndicesStatusAction;
 import org.elasticsearch.action.admin.indices.template.delete.TransportDeleteIndexTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.TransportPutIndexTemplateAction;
@@ -90,6 +92,7 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportNodesRestartAction.class).asEagerSingleton();
         bind(TransportClusterStateAction.class).asEagerSingleton();
         bind(TransportClusterHealthAction.class).asEagerSingleton();
+        bind(TransportClusterUpdateSettingsAction.class).asEagerSingleton();
 
         bind(TransportSinglePingAction.class).asEagerSingleton();
         bind(TransportBroadcastPingAction.class).asEagerSingleton();
@@ -97,6 +100,7 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportIndexReplicationPingAction.class).asEagerSingleton();
         bind(TransportReplicationPingAction.class).asEagerSingleton();
 
+        bind(TransportIndicesStatsAction.class).asEagerSingleton();
         bind(TransportIndicesStatusAction.class).asEagerSingleton();
         bind(TransportIndicesSegmentsAction.class).asEagerSingleton();
         bind(TransportCreateIndexAction.class).asEagerSingleton();

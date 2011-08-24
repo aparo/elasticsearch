@@ -26,6 +26,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.ImmutableSet;
 import org.elasticsearch.common.collect.UnmodifiableIterator;
+import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.Injectors;
@@ -49,6 +50,7 @@ import org.elasticsearch.index.engine.IndexEngine;
 import org.elasticsearch.index.gateway.IndexGateway;
 import org.elasticsearch.index.gateway.IndexShardGatewayModule;
 import org.elasticsearch.index.gateway.IndexShardGatewayService;
+import org.elasticsearch.index.indexing.ShardIndexingModule;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.merge.policy.MergePolicyModule;
 import org.elasticsearch.index.merge.policy.MergePolicyProvider;
@@ -56,6 +58,7 @@ import org.elasticsearch.index.merge.scheduler.MergeSchedulerModule;
 import org.elasticsearch.index.percolator.PercolatorService;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.settings.IndexSettings;
+import org.elasticsearch.index.shard.IndexShardCreationException;
 import org.elasticsearch.index.shard.IndexShardManagement;
 import org.elasticsearch.index.shard.IndexShardModule;
 import org.elasticsearch.index.shard.ShardId;
@@ -277,6 +280,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         ModulesBuilder modules = new ModulesBuilder();
         modules.add(new ShardsPluginsModule(indexSettings, pluginsService));
         modules.add(new IndexShardModule(shardId));
+        modules.add(new ShardIndexingModule());
         modules.add(new StoreModule(indexSettings, injector.getInstance(IndexStore.class)));
         modules.add(new DeletionPolicyModule(indexSettings));
         modules.add(new MergePolicyModule(indexSettings));
@@ -285,7 +289,12 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         modules.add(new EngineModule(indexSettings));
         modules.add(new IndexShardGatewayModule(injector.getInstance(IndexGateway.class)));
 
-        Injector shardInjector = modules.createChildInjector(injector);
+        Injector shardInjector;
+        try {
+            shardInjector = modules.createChildInjector(injector);
+        } catch (CreationException e) {
+            throw new IndexShardCreationException(shardId, Injectors.getFirstErrorFailure(e));
+        }
 
         shardsInjectors = newMapBuilder(shardsInjectors).put(shardId.id(), shardInjector).immutableMap();
 

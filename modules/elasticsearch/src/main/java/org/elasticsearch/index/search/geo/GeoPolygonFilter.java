@@ -56,67 +56,63 @@ public class GeoPolygonFilter extends Filter {
 
     @Override public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
         final GeoPointFieldData fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, reader, fieldName);
+        return new GeoPolygonDocSet(reader.maxDoc(), fieldData, points);
+    }
 
-        return new GetDocSet(reader.maxDoc()) {
+    public static class GeoPolygonDocSet extends GetDocSet {
+        private final GeoPointFieldData fieldData;
+        private final Point[] points;
 
-            @Override public boolean isCacheable() {
-                // not cacheable for several reasons:
-                // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
-                // 2. Its already fast without in mem bitset, since it works with field data
+        public GeoPolygonDocSet(int maxDoc, GeoPointFieldData fieldData, Point[] points) {
+            super(maxDoc);
+            this.fieldData = fieldData;
+            this.points = points;
+        }
+
+        @Override public boolean isCacheable() {
+            // not cacheable for several reasons:
+            // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
+            // 2. Its already fast without in mem bitset, since it works with field data
+            return false;
+        }
+
+        @Override public boolean get(int doc) throws IOException {
+            if (!fieldData.hasValue(doc)) {
                 return false;
             }
 
-            @Override public boolean get(int doc) throws IOException {
-                if (!fieldData.hasValue(doc)) {
-                    return false;
-                }
-
-                if (fieldData.multiValued()) {
-                    double[] lats = fieldData.latValues(doc);
-                    double[] lons = fieldData.lonValues(doc);
-                    for (int i = 0; i < lats.length; i++) {
-                        if (pointInPolygon(points, lats[i], lons[i])) {
-                            return true;
-                        }
+            if (fieldData.multiValued()) {
+                double[] lats = fieldData.latValues(doc);
+                double[] lons = fieldData.lonValues(doc);
+                for (int i = 0; i < lats.length; i++) {
+                    if (pointInPolygon(points, lats[i], lons[i])) {
+                        return true;
                     }
-                } else {
-                    double lat = fieldData.latValue(doc);
-                    double lon = fieldData.lonValue(doc);
-                    return pointInPolygon(points, lat, lon);
                 }
-                return false;
+            } else {
+                double lat = fieldData.latValue(doc);
+                double lon = fieldData.lonValue(doc);
+                return pointInPolygon(points, lat, lon);
             }
-        };
-    }
-
-    private static boolean pointInPolygon(Point[] points, double lat, double lon) {
-        int i;
-        int j = points.length - 1;
-        boolean inPoly = false;
-
-        for (i = 0; i < points.length; i++) {
-            if (points[i].lon < lon && points[j].lon >= lon
-                    || points[j].lon < lon && points[i].lon >= lon) {
-                if (points[i].lat + (lon - points[i].lon) /
-                        (points[j].lon - points[i].lon) * (points[j].lat - points[i].lat) < lat) {
-                    inPoly = !inPoly;
-                }
-            }
-            j = i;
-        }
-        return inPoly;
-    }
-
-    public static class Point {
-        public double lat;
-        public double lon;
-
-        public Point() {
+            return false;
         }
 
-        public Point(double lat, double lon) {
-            this.lat = lat;
-            this.lon = lon;
+        private static boolean pointInPolygon(Point[] points, double lat, double lon) {
+            int i;
+            int j = points.length - 1;
+            boolean inPoly = false;
+
+            for (i = 0; i < points.length; i++) {
+                if (points[i].lon < lon && points[j].lon >= lon
+                        || points[j].lon < lon && points[i].lon >= lon) {
+                    if (points[i].lat + (lon - points[i].lon) /
+                            (points[j].lon - points[i].lon) * (points[j].lat - points[i].lat) < lat) {
+                        inPoly = !inPoly;
+                    }
+                }
+                j = i;
+            }
+            return inPoly;
         }
     }
 }

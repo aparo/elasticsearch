@@ -31,6 +31,7 @@ import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
 import org.elasticsearch.index.search.geo.GeoDistance;
 import org.elasticsearch.index.search.geo.GeoDistanceRangeFilter;
 import org.elasticsearch.index.search.geo.GeoHashUtils;
+import org.elasticsearch.index.search.geo.GeoUtils;
 
 import java.io.IOException;
 
@@ -75,6 +76,9 @@ public class GeoDistanceRangeFilterParser implements FilterParser {
         boolean includeUpper = true;
         DistanceUnit unit = DistanceUnit.KILOMETERS; // default unit
         GeoDistance geoDistance = GeoDistance.ARC;
+        boolean optimizeBbox = true;
+        boolean normalizeLon = true;
+        boolean normalizeLat = true;
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
@@ -181,6 +185,11 @@ public class GeoDistanceRangeFilterParser implements FilterParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else if ("optimize_bbox".equals(currentFieldName) || "optimizeBbox".equals(currentFieldName)) {
+                    optimizeBbox = parser.booleanValue();
+                } else if ("normalize".equals(currentFieldName)) {
+                    normalizeLat = parser.booleanValue();
+                    normalizeLon = parser.booleanValue();
                 } else {
                     // assume the value is the actual value
                     String value = parser.text();
@@ -205,10 +214,19 @@ public class GeoDistanceRangeFilterParser implements FilterParser {
         } else {
             from = DistanceUnit.parse((String) vFrom, unit, DistanceUnit.MILES);
         }
+        from = geoDistance.normalize(from, DistanceUnit.MILES);
         if (vTo instanceof Number) {
             to = unit.toMiles(((Number) vTo).doubleValue());
         } else {
             to = DistanceUnit.parse((String) vTo, unit, DistanceUnit.MILES);
+        }
+        to = geoDistance.normalize(to, DistanceUnit.MILES);
+
+        if (normalizeLat) {
+            lat = GeoUtils.normalizeLat(lat);
+        }
+        if (normalizeLon) {
+            lon = GeoUtils.normalizeLon(lon);
         }
 
         MapperService mapperService = parseContext.mapperService();
@@ -221,7 +239,7 @@ public class GeoDistanceRangeFilterParser implements FilterParser {
         }
         fieldName = mapper.names().indexName();
 
-        Filter filter = new GeoDistanceRangeFilter(lat, lon, from, to, includeLower, includeUpper, geoDistance, fieldName, parseContext.indexCache().fieldData());
+        Filter filter = new GeoDistanceRangeFilter(lat, lon, from, to, includeLower, includeUpper, geoDistance, fieldName, parseContext.indexCache().fieldData(), optimizeBbox);
         if (cache) {
             filter = parseContext.cacheFilter(filter, cacheKey);
         }

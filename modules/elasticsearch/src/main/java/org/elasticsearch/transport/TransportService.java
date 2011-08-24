@@ -26,6 +26,7 @@ import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.Streamable;
+import org.elasticsearch.common.metrics.MeanMetric;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.BoundTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
@@ -69,6 +70,7 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
     });
 
     private boolean throwConnectException = false;
+    private TransportService.Adapter adapter;
 
     public TransportService(Transport transport, ThreadPool threadPool) {
         this(EMPTY_SETTINGS, transport, threadPool);
@@ -82,7 +84,8 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
 
     @Override protected void doStart() throws ElasticSearchException {
         // register us as an adapter for the transport service
-        transport.transportServiceAdapter(new Adapter());
+        adapter = new Adapter();
+        transport.transportServiceAdapter(adapter);
         transport.start();
         if (transport.boundAddress() != null && logger.isInfoEnabled()) {
             logger.info("{}", transport.boundAddress());
@@ -106,7 +109,7 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
     }
 
     public TransportStats stats() {
-        return transport.stats();
+        return new TransportStats(transport.serverOpen(), adapter.rxMetric.count(), adapter.rxMetric.sum(), adapter.txMetric.count(), adapter.txMetric.sum());
     }
 
     public BoundTransportAddress boundAddress() {
@@ -228,6 +231,17 @@ public class TransportService extends AbstractLifecycleComponent<TransportServic
     }
 
     class Adapter implements TransportServiceAdapter {
+
+        final MeanMetric rxMetric = new MeanMetric();
+        final MeanMetric txMetric = new MeanMetric();
+
+        @Override public void received(long size) {
+            rxMetric.inc(size);
+        }
+
+        @Override public void sent(long size) {
+            txMetric.inc(size);
+        }
 
         @Override public TransportRequestHandler handler(String action) {
             return serverHandlers.get(action);

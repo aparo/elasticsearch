@@ -42,6 +42,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.jsr166y.LinkedTransferQueue;
 import org.elasticsearch.discovery.Discovery;
 import org.elasticsearch.discovery.DiscoveryService;
+import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -70,6 +71,8 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     private final TransportService transportService;
 
+    private final NodeSettingsService nodeSettingsService;
+
     private final TimeValue reconnectInterval;
 
     private volatile ExecutorService updateTasksExecutor;
@@ -85,14 +88,22 @@ public class InternalClusterService extends AbstractLifecycleComponent<ClusterSe
 
     private volatile ScheduledFuture reconnectToNodes;
 
-    @Inject public InternalClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService, ThreadPool threadPool) {
+    @Inject public InternalClusterService(Settings settings, DiscoveryService discoveryService, OperationRouting operationRouting, TransportService transportService,
+                                          NodeSettingsService nodeSettingsService, ThreadPool threadPool) {
         super(settings);
         this.operationRouting = operationRouting;
         this.transportService = transportService;
         this.discoveryService = discoveryService;
         this.threadPool = threadPool;
+        this.nodeSettingsService = nodeSettingsService;
+
+        this.nodeSettingsService.setClusterService(this);
 
         this.reconnectInterval = componentSettings.getAsTime("reconnect_interval", TimeValue.timeValueSeconds(10));
+    }
+
+    public NodeSettingsService settingsService() {
+        return this.nodeSettingsService;
     }
 
     public void addInitialStateBlock(ClusterBlock block) throws ElasticSearchIllegalStateException {

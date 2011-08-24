@@ -47,13 +47,20 @@ public class GeoDistanceFilter extends Filter {
 
     private final FieldDataCache fieldDataCache;
 
-    public GeoDistanceFilter(double lat, double lon, double distance, GeoDistance geoDistance, String fieldName, FieldDataCache fieldDataCache) {
+    private final GeoDistance.FixedSourceDistance fixedSourceDistance;
+    private final GeoDistance.DistanceBoundingCheck distanceBoundingCheck;
+
+    public GeoDistanceFilter(double lat, double lon, double distance, GeoDistance geoDistance, String fieldName, FieldDataCache fieldDataCache,
+                             boolean optimizeBbox) {
         this.lat = lat;
         this.lon = lon;
         this.distance = distance;
         this.geoDistance = geoDistance;
         this.fieldName = fieldName;
         this.fieldDataCache = fieldDataCache;
+
+        this.fixedSourceDistance = geoDistance.fixedSourceDistance(lat, lon, DistanceUnit.MILES);
+        this.distanceBoundingCheck = optimizeBbox ? GeoDistance.distanceBoundingCheck(lat, lon, distance, DistanceUnit.MILES) : GeoDistance.ALWAYS_INSTANCE;
     }
 
     public double lat() {
@@ -78,36 +85,7 @@ public class GeoDistanceFilter extends Filter {
 
     @Override public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
         final GeoPointFieldData fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, reader, fieldName);
-        return new GetDocSet(reader.maxDoc()) {
-
-            @Override public boolean isCacheable() {
-                // not cacheable for several reasons:
-                // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
-                // 2. Its already fast without in mem bitset, since it works with field data
-                return false;
-            }
-
-            @Override public boolean get(int doc) throws IOException {
-                if (!fieldData.hasValue(doc)) {
-                    return false;
-                }
-
-                if (fieldData.multiValued()) {
-                    double[] lats = fieldData.latValues(doc);
-                    double[] lons = fieldData.lonValues(doc);
-                    for (int i = 0; i < lats.length; i++) {
-                        double d = geoDistance.calculate(lat, lon, lats[i], lons[i], DistanceUnit.MILES);
-                        if (d < distance) {
-                            return true;
-                        }
-                    }
-                    return false;
-                } else {
-                    double d = geoDistance.calculate(lat, lon, fieldData.latValue(doc), fieldData.lonValue(doc), DistanceUnit.MILES);
-                    return d < distance;
-                }
-            }
-        };
+        return new GeoDistanceDocSet(reader.maxDoc(), fieldData, fixedSourceDistance, distanceBoundingCheck, distance);
     }
 
     @Override
@@ -139,5 +117,58 @@ public class GeoDistanceFilter extends Filter {
         result = 31 * result + (geoDistance != null ? geoDistance.hashCode() : 0);
         result = 31 * result + (fieldName != null ? fieldName.hashCode() : 0);
         return result;
+    }
+
+    public static class GeoDistanceDocSet extends GetDocSet {
+        private final double distance; // in miles
+        private final GeoPointFieldData fieldData;
+        private final GeoDistance.FixedSourceDistance fixedSourceDistance;
+        private final GeoDistance.DistanceBoundingCheck distanceBoundingCheck;
+
+        public GeoDistanceDocSet(int maxDoc, GeoPointFieldData fieldData, GeoDistance.FixedSourceDistance fixedSourceDistance, GeoDistance.DistanceBoundingCheck distanceBoundingCheck,
+                                 double distance) {
+            super(maxDoc);
+            this.fieldData = fieldData;
+            this.fixedSourceDistance = fixedSourceDistance;
+            this.distanceBoundingCheck = distanceBoundingCheck;
+            this.distance = distance;
+        }
+
+        @Override public boolean isCacheable() {
+            // not cacheable for several reasons:
+            // 1. It is only relevant when _cache is set to true, and then, we really want to create in mem bitset
+            // 2. Its already fast without in mem bitset, since it works with field data
+            return false;
+        }
+
+        @Override public boolean get(int doc) throws IOException {
+            if (!fieldData.hasValue(doc)) {
+                return false;
+            }
+
+            if (fieldData.multiValued()) {
+                double[] lats = fieldData.latValues(doc);
+                double[] lons = fieldData.lonValues(doc);
+                for (int i = 0; i < lats.length; i++) {
+                    double lat = lats[i];
+                    double lon = lons[i];
+                    if (distanceBoundingCheck.isWithin(lat, lon)) {
+                        double d = fixedSourceDistance.calculate(lat, lon);
+                        if (d < distance) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } else {
+                double lat = fieldData.latValue(doc);
+                double lon = fieldData.lonValue(doc);
+                if (distanceBoundingCheck.isWithin(lat, lon)) {
+                    double d = fixedSourceDistance.calculate(lat, lon);
+                    return d < distance;
+                }
+            }
+            return false;
+        }
     }
 }
