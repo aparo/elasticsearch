@@ -25,7 +25,10 @@ import org.elasticsearch.action.support.master.TransportMasterNodeOperationActio
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
+import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.cluster.routing.allocation.AllocationService;
+import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -36,13 +39,19 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.elasticsearch.cluster.ClusterState.*;
+
 /**
  * @author kimchy (shay.banon)
  */
 public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOperationAction<ClusterUpdateSettingsRequest, ClusterUpdateSettingsResponse> {
 
-    @Inject public TransportClusterUpdateSettingsAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool) {
+    private final AllocationService allocationService;
+
+    @Inject public TransportClusterUpdateSettingsAction(Settings settings, TransportService transportService, ClusterService clusterService, ThreadPool threadPool,
+                                                        AllocationService allocationService) {
         super(settings, transportService, clusterService, threadPool);
+        this.allocationService = allocationService;
     }
 
     @Override protected String executor() {
@@ -65,14 +74,14 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
         final AtomicReference<Throwable> failureRef = new AtomicReference<Throwable>();
         final CountDownLatch latch = new CountDownLatch(1);
 
-        clusterService.submitStateUpdateTask("cluster_update_settings", new ClusterStateUpdateTask() {
+        clusterService.submitStateUpdateTask("cluster_update_settings", new ProcessedClusterStateUpdateTask() {
             @Override public ClusterState execute(ClusterState currentState) {
                 try {
                     boolean changed = false;
                     ImmutableSettings.Builder transientSettings = ImmutableSettings.settingsBuilder();
                     transientSettings.put(currentState.metaData().transientSettings());
                     for (Map.Entry<String, String> entry : request.transientSettings().getAsMap().entrySet()) {
-                        if (MetaData.dynamicSettings().contains(entry.getKey()) || entry.getKey().startsWith("logger.")) {
+                        if (MetaData.hasDynamicSetting(entry.getKey()) || entry.getKey().startsWith("logger.")) {
                             transientSettings.put(entry.getKey(), entry.getValue());
                             changed = true;
                         } else {
@@ -83,7 +92,7 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
                     ImmutableSettings.Builder persistentSettings = ImmutableSettings.settingsBuilder();
                     persistentSettings.put(currentState.metaData().persistentSettings());
                     for (Map.Entry<String, String> entry : request.persistentSettings().getAsMap().entrySet()) {
-                        if (MetaData.dynamicSettings().contains(entry.getKey()) || entry.getKey().startsWith("logger.")) {
+                        if (MetaData.hasDynamicSetting(entry.getKey()) || entry.getKey().startsWith("logger.")) {
                             changed = true;
                             persistentSettings.put(entry.getKey(), entry.getValue());
                         } else {
@@ -101,9 +110,28 @@ public class TransportClusterUpdateSettingsAction extends TransportMasterNodeOpe
 
 
                     return ClusterState.builder().state(currentState).metaData(metaData).build();
-                } finally {
+                } catch (Exception e) {
                     latch.countDown();
+                    logger.warn("failed to update cluster settings", e);
+                    return currentState;
+                } finally {
+                    // we don't release the latch here, only after we rerouted
                 }
+            }
+
+            @Override public void clusterStateProcessed(ClusterState clusterState) {
+                // now, reroute
+                clusterService.submitStateUpdateTask("reroute_after_cluster_update_settings", new ClusterStateUpdateTask() {
+                    @Override public ClusterState execute(ClusterState currentState) {
+                        try {
+                            // now, reroute in case things change that require it (like number of replicas)
+                            RoutingAllocation.Result routingResult = allocationService.reroute(currentState);
+                            return newClusterStateBuilder().state(currentState).routingResult(routingResult).build();
+                        } finally {
+                            latch.countDown();
+                        }
+                    }
+                });
             }
         });
 

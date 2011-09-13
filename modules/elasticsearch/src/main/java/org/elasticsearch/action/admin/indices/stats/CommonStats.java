@@ -26,9 +26,11 @@ import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.flush.FlushStats;
+import org.elasticsearch.index.get.GetStats;
 import org.elasticsearch.index.indexing.IndexingStats;
 import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.refresh.RefreshStats;
+import org.elasticsearch.index.search.stats.SearchStats;
 import org.elasticsearch.index.shard.DocsStats;
 import org.elasticsearch.index.store.StoreStats;
 
@@ -43,6 +45,10 @@ public class CommonStats implements Streamable, ToXContent {
     @Nullable StoreStats store;
 
     @Nullable IndexingStats indexing;
+
+    @Nullable GetStats get;
+
+    @Nullable SearchStats search;
 
     @Nullable MergeStats merge;
 
@@ -74,6 +80,22 @@ public class CommonStats implements Streamable, ToXContent {
             }
         } else {
             indexing.add(stats.indexing());
+        }
+        if (get == null) {
+            if (stats.get() != null) {
+                get = new GetStats();
+                get.add(stats.get());
+            }
+        } else {
+            get.add(stats.get());
+        }
+        if (search == null) {
+            if (stats.search() != null) {
+                search = new SearchStats();
+                search.add(stats.search());
+            }
+        } else {
+            search.add(stats.search());
         }
         if (merge == null) {
             if (stats.merge() != null) {
@@ -125,6 +147,22 @@ public class CommonStats implements Streamable, ToXContent {
         return indexing;
     }
 
+    @Nullable public GetStats get() {
+        return get;
+    }
+
+    @Nullable public GetStats getGet() {
+        return get;
+    }
+
+    @Nullable public SearchStats search() {
+        return search;
+    }
+
+    @Nullable public SearchStats getSearch() {
+        return search;
+    }
+
     @Nullable public MergeStats merge() {
         return merge;
     }
@@ -166,6 +204,12 @@ public class CommonStats implements Streamable, ToXContent {
             indexing = IndexingStats.readIndexingStats(in);
         }
         if (in.readBoolean()) {
+            get = GetStats.readGetStats(in);
+        }
+        if (in.readBoolean()) {
+            search = SearchStats.readSearchStats(in);
+        }
+        if (in.readBoolean()) {
             merge = MergeStats.readMergeStats(in);
         }
         if (in.readBoolean()) {
@@ -194,6 +238,18 @@ public class CommonStats implements Streamable, ToXContent {
         } else {
             out.writeBoolean(true);
             indexing.writeTo(out);
+        }
+        if (get == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            get.writeTo(out);
+        }
+        if (search == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            search.writeTo(out);
         }
         if (merge == null) {
             out.writeBoolean(false);
@@ -225,6 +281,12 @@ public class CommonStats implements Streamable, ToXContent {
         }
         if (indexing != null) {
             indexing.toXContent(builder, params);
+        }
+        if (get != null) {
+            get.toXContent(builder, params);
+        }
+        if (search != null) {
+            search.toXContent(builder, params);
         }
         if (merge != null) {
             merge.toXContent(builder, params);

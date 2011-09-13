@@ -33,7 +33,6 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.BytesHolder;
 import org.elasticsearch.common.Preconditions;
 import org.elasticsearch.common.Unicode;
 import org.elasticsearch.common.bloom.BloomFilter;
@@ -304,7 +303,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                     byte[] data = translog.read(versionValue.translogLocation());
                     if (data != null) {
                         try {
-                            BytesHolder source = TranslogStreams.readSource(data);
+                            Translog.Source source = TranslogStreams.readSource(data);
                             return new GetResult(true, versionValue.version(), source);
                         } catch (IOException e) {
                             // switched on us, read it from the reader
@@ -799,7 +798,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                         indexWriter.close(false);
                         indexWriter = createWriter();
 
-                        if (flushNeeded) {
+                        if (flushNeeded || flush.force()) {
                             flushNeeded = false;
                             long translogId = translogIdGenerator.incrementAndGet();
                             indexWriter.commit(MapBuilder.<String, String>newMapBuilder().put(Translog.TRANSLOG_ID_KEY, Long.toString(translogId)).map());
@@ -828,7 +827,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                         throw new FlushNotAllowedEngineException(shardId, "Recovery is in progress, flush is not allowed");
                     }
 
-                    if (flushNeeded) {
+                    if (flushNeeded || flush.force()) {
                         flushNeeded = false;
                         try {
                             long translogId = translogIdGenerator.incrementAndGet();
@@ -914,7 +913,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
 
     @Override public void optimize(Optimize optimize) throws EngineException {
         if (optimize.flush()) {
-            flush(new Flush());
+            flush(new Flush().force(true));
         }
         if (optimizeMutex.compareAndSet(false, true)) {
             rwl.readLock().lock();
@@ -951,7 +950,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             indexWriter.waitForMerges();
         }
         if (optimize.flush()) {
-            flush(new Flush());
+            flush(new Flush().force(true));
         }
         if (optimize.refresh()) {
             refresh(new Refresh(false).force(true));

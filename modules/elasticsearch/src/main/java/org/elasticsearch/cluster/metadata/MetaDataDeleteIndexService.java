@@ -25,8 +25,8 @@ import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.action.index.NodeIndexDeletedAction;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
-import org.elasticsearch.cluster.routing.allocation.ShardsAllocation;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -51,23 +51,36 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     private final ClusterService clusterService;
 
-    private final ShardsAllocation shardsAllocation;
+    private final AllocationService allocationService;
 
     private final NodeIndexDeletedAction nodeIndexDeletedAction;
 
-    @Inject public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, ShardsAllocation shardsAllocation,
-                                              NodeIndexDeletedAction nodeIndexDeletedAction) {
+    private final MetaDataService metaDataService;
+
+    @Inject public MetaDataDeleteIndexService(Settings settings, ThreadPool threadPool, ClusterService clusterService, AllocationService allocationService,
+                                              NodeIndexDeletedAction nodeIndexDeletedAction, MetaDataService metaDataService) {
         super(settings);
         this.threadPool = threadPool;
         this.clusterService = clusterService;
-        this.shardsAllocation = shardsAllocation;
+        this.allocationService = allocationService;
         this.nodeIndexDeletedAction = nodeIndexDeletedAction;
+        this.metaDataService = metaDataService;
     }
 
     public void deleteIndex(final Request request, final Listener userListener) {
+        // we lock here, and not within the cluster service callback since we don't want to
+        // block the whole cluster state handling
+        MetaDataService.MdLock mdLock = metaDataService.indexMetaDataLock(request.index);
+        try {
+            mdLock.lock();
+        } catch (InterruptedException e) {
+            userListener.onFailure(e);
+            return;
+        }
+
+        final DeleteIndexListener listener = new DeleteIndexListener(mdLock, request, userListener);
         clusterService.submitStateUpdateTask("delete-index [" + request.index + "]", new ClusterStateUpdateTask() {
             @Override public ClusterState execute(ClusterState currentState) {
-                final DeleteIndexListener listener = new DeleteIndexListener(request, userListener);
                 try {
                     if (!currentState.metaData().hasConcreteIndex(request.index)) {
                         listener.onFailure(new IndexMissingException(new Index(request.index)));
@@ -84,7 +97,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
                             .remove(request.index)
                             .build();
 
-                    RoutingAllocation.Result routingResult = shardsAllocation.reroute(
+                    RoutingAllocation.Result routingResult = allocationService.reroute(
                             newClusterStateBuilder().state(currentState).routingTable(routingTableBuilder).metaData(newMetaData).build());
 
                     ClusterBlocks blocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeIndexBlocks(request.index).build();
@@ -121,7 +134,9 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
     class DeleteIndexListener implements Listener {
 
-        private AtomicBoolean notified = new AtomicBoolean();
+        private final AtomicBoolean notified = new AtomicBoolean();
+
+        private final MetaDataService.MdLock mdLock;
 
         private final Request request;
 
@@ -129,13 +144,15 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
         volatile ScheduledFuture future;
 
-        private DeleteIndexListener(Request request, Listener listener) {
+        private DeleteIndexListener(MetaDataService.MdLock mdLock, Request request, Listener listener) {
+            this.mdLock = mdLock;
             this.request = request;
             this.listener = listener;
         }
 
         @Override public void onResponse(final Response response) {
             if (notified.compareAndSet(false, true)) {
+                mdLock.unlock();
                 if (future != null) {
                     future.cancel(false);
                 }
@@ -145,6 +162,7 @@ public class MetaDataDeleteIndexService extends AbstractComponent {
 
         @Override public void onFailure(Throwable t) {
             if (notified.compareAndSet(false, true)) {
+                mdLock.unlock();
                 if (future != null) {
                     future.cancel(false);
                 }

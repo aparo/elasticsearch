@@ -26,12 +26,16 @@ import org.elasticsearch.common.util.concurrent.ThreadSafe;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.flush.FlushStats;
+import org.elasticsearch.index.get.GetStats;
+import org.elasticsearch.index.get.ShardGetService;
 import org.elasticsearch.index.indexing.IndexingStats;
 import org.elasticsearch.index.indexing.ShardIndexingService;
 import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.index.mapper.SourceToParse;
 import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.refresh.RefreshStats;
+import org.elasticsearch.index.search.stats.SearchStats;
+import org.elasticsearch.index.search.stats.ShardSearchService;
 import org.elasticsearch.index.shard.DocsStats;
 import org.elasticsearch.index.shard.IndexShardComponent;
 import org.elasticsearch.index.shard.IndexShardState;
@@ -45,6 +49,10 @@ public interface IndexShard extends IndexShardComponent {
 
     ShardIndexingService indexingService();
 
+    ShardGetService getService();
+
+    ShardSearchService searchService();
+
     ShardRouting routingEntry();
 
     DocsStats docStats();
@@ -52,6 +60,10 @@ public interface IndexShard extends IndexShardComponent {
     StoreStats storeStats();
 
     IndexingStats indexingStats(String... types);
+
+    SearchStats searchStats(String... groups);
+
+    GetStats getStats();
 
     MergeStats mergeStats();
 

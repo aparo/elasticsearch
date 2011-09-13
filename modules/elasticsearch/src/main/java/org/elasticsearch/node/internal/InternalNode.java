@@ -61,6 +61,7 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.cache.filter.IndicesNodeFilterCache;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.memory.IndexingMemoryBufferController;
+import org.elasticsearch.indices.ttl.IndicesTTLService;
 import org.elasticsearch.jmx.JmxModule;
 import org.elasticsearch.jmx.JmxService;
 import org.elasticsearch.monitor.MonitorModule;
@@ -174,6 +175,7 @@ public final class InternalNode implements Node {
         injector.getInstance(IndicesService.class).start();
         injector.getInstance(IndexingMemoryBufferController.class).start();
         injector.getInstance(IndicesClusterStateService.class).start();
+        injector.getInstance(IndicesTTLService.class).start();
         injector.getInstance(RiversManager.class).start();
         injector.getInstance(ClusterService.class).start();
         injector.getInstance(RoutingService.class).start();
@@ -206,10 +208,14 @@ public final class InternalNode implements Node {
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).stop();
         }
+
+        injector.getInstance(RiversManager.class).stop();
+
         // stop any changes happening as a result of cluster state changes
         injector.getInstance(IndicesClusterStateService.class).stop();
         // we close indices first, so operations won't be allowed on it
         injector.getInstance(IndexingMemoryBufferController.class).stop();
+        injector.getInstance(IndicesTTLService.class).stop();
         injector.getInstance(IndicesService.class).stop();
         // sleep a bit to let operations finish with indices service
 //        try {
@@ -223,7 +229,6 @@ public final class InternalNode implements Node {
         injector.getInstance(MonitorService.class).stop();
         injector.getInstance(GatewayService.class).stop();
         injector.getInstance(SearchService.class).stop();
-        injector.getInstance(RiversManager.class).stop();
         injector.getInstance(RestController.class).stop();
         injector.getInstance(TransportService.class).stop();
         injector.getInstance(JmxService.class).close();
@@ -253,6 +258,10 @@ public final class InternalNode implements Node {
         if (settings.getAsBoolean("http.enabled", true)) {
             injector.getInstance(HttpServer.class).close();
         }
+
+        stopWatch.stop().start("rivers");
+        injector.getInstance(RiversManager.class).close();
+
         stopWatch.stop().start("client");
         injector.getInstance(Client.class).close();
         stopWatch.stop().start("indices_cluster");
@@ -260,6 +269,7 @@ public final class InternalNode implements Node {
         stopWatch.stop().start("indices");
         injector.getInstance(IndicesNodeFilterCache.class).close();
         injector.getInstance(IndexingMemoryBufferController.class).close();
+        injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();
         stopWatch.stop().start("routing");
         injector.getInstance(RoutingService.class).close();
@@ -273,8 +283,6 @@ public final class InternalNode implements Node {
         injector.getInstance(GatewayService.class).close();
         stopWatch.stop().start("search");
         injector.getInstance(SearchService.class).close();
-        stopWatch.stop().start("indexers");
-        injector.getInstance(RiversManager.class).close();
         stopWatch.stop().start("rest");
         injector.getInstance(RestController.class).close();
         stopWatch.stop().start("transport");

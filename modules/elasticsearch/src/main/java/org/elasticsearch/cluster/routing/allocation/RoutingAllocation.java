@@ -19,9 +19,11 @@
 
 package org.elasticsearch.cluster.routing.allocation;
 
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingNodes;
 import org.elasticsearch.cluster.routing.RoutingTable;
+import org.elasticsearch.cluster.routing.allocation.decider.AllocationDeciders;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.util.HashMap;
@@ -59,6 +61,8 @@ public class RoutingAllocation {
         }
     }
 
+    private final AllocationDeciders deciders;
+
     private final RoutingNodes routingNodes;
 
     private final DiscoveryNodes nodes;
@@ -67,9 +71,14 @@ public class RoutingAllocation {
 
     private Map<ShardId, String> ignoredShardToNodes = null;
 
-    public RoutingAllocation(RoutingNodes routingNodes, DiscoveryNodes nodes) {
+    public RoutingAllocation(AllocationDeciders deciders, RoutingNodes routingNodes, DiscoveryNodes nodes) {
+        this.deciders = deciders;
         this.routingNodes = routingNodes;
         this.nodes = nodes;
+    }
+
+    public AllocationDeciders deciders() {
+        return this.deciders;
     }
 
     public RoutingTable routingTable() {
@@ -78,6 +87,10 @@ public class RoutingAllocation {
 
     public RoutingNodes routingNodes() {
         return routingNodes;
+    }
+
+    public MetaData metaData() {
+        return routingNodes.metaData();
     }
 
     public DiscoveryNodes nodes() {

@@ -66,13 +66,6 @@ public final class XContentBuilder {
     }
 
     /**
-     * Constructs a new cached builder over a cached (thread local) {@link FastByteArrayOutputStream}.
-     */
-    public static XContentBuilder cachedBuilder(XContent xContent) throws IOException {
-        return new XContentBuilder(xContent, FastByteArrayOutputStream.Cached.cached());
-    }
-
-    /**
      * Constructs a new builder using a fresh {@link FastByteArrayOutputStream}.
      */
     public static XContentBuilder builder(XContent xContent) throws IOException {
@@ -149,6 +142,12 @@ public final class XContentBuilder {
 
     public XContentBuilder startObject(XContentBuilderString name) throws IOException {
         field(name);
+        startObject();
+        return this;
+    }
+
+    public XContentBuilder startObject(XContentBuilderString name, FieldCaseConversion conversion) throws IOException {
+        field(name, conversion);
         startObject();
         return this;
     }
@@ -238,6 +237,17 @@ public final class XContentBuilder {
         return this;
     }
 
+    public XContentBuilder field(XContentBuilderString name, FieldCaseConversion conversion) throws IOException {
+        if (conversion == FieldCaseConversion.UNDERSCORE) {
+            generator.writeFieldName(name.underscore());
+        } else if (conversion == FieldCaseConversion.CAMELCASE) {
+            generator.writeFieldName(name.camelCase());
+        } else {
+            generator.writeFieldName(name.underscore());
+        }
+        return this;
+    }
+
     public XContentBuilder field(String name) throws IOException {
         if (fieldCaseConversion == FieldCaseConversion.UNDERSCORE) {
             if (cachedStringBuilder == null) {
@@ -300,8 +310,28 @@ public final class XContentBuilder {
         return this;
     }
 
+    public XContentBuilder field(String name, String value, FieldCaseConversion conversion) throws IOException {
+        field(name, conversion);
+        if (value == null) {
+            generator.writeNull();
+        } else {
+            generator.writeString(value);
+        }
+        return this;
+    }
+
     public XContentBuilder field(XContentBuilderString name, String value) throws IOException {
         field(name);
+        if (value == null) {
+            generator.writeNull();
+        } else {
+            generator.writeString(value);
+        }
+        return this;
+    }
+
+    public XContentBuilder field(XContentBuilderString name, String value, FieldCaseConversion conversion) throws IOException {
+        field(name, conversion);
         if (value == null) {
             generator.writeNull();
         } else {
@@ -483,9 +513,28 @@ public final class XContentBuilder {
         return this;
     }
 
+
     public XContentBuilder field(XContentBuilderString name, String... value) throws IOException {
         startArray(name);
         for (String o : value) {
+            value(o);
+        }
+        endArray();
+        return this;
+    }
+
+    public XContentBuilder field(String name, Object... value) throws IOException {
+        startArray(name);
+        for (Object o : value) {
+            value(o);
+        }
+        endArray();
+        return this;
+    }
+
+    public XContentBuilder field(XContentBuilderString name, Object... value) throws IOException {
+        startArray(name);
+        for (Object o : value) {
             value(o);
         }
         endArray();
@@ -945,22 +994,22 @@ public final class XContentBuilder {
 
     /**
      * Returns the unsafe bytes (thread local bound). Make sure to use it with
-     * {@link #unsafeBytesLength()}.
+     * {@link #underlyingBytesLength()}.
      *
      * <p>Only applicable when the builder is constructed with {@link FastByteArrayOutputStream}.
      */
-    public byte[] unsafeBytes() throws IOException {
+    public byte[] underlyingBytes() throws IOException {
         close();
-        return ((BytesStream) bos).unsafeByteArray();
+        return ((BytesStream) bos).underlyingBytes();
     }
 
     /**
      * Returns the unsafe bytes length (thread local bound). Make sure to use it with
-     * {@link #unsafeBytes()}.
+     * {@link #underlyingBytes()}.
      *
      * <p>Only applicable when the builder is constructed with {@link FastByteArrayOutputStream}.
      */
-    public int unsafeBytesLength() throws IOException {
+    public int underlyingBytesLength() throws IOException {
         close();
         return ((BytesStream) bos).size();
     }
@@ -968,7 +1017,7 @@ public final class XContentBuilder {
     /**
      * Returns the actual stream used.
      */
-    public BytesStream unsafeStream() throws IOException {
+    public BytesStream underlyingStream() throws IOException {
         close();
         return (BytesStream) bos;
     }
@@ -990,6 +1039,6 @@ public final class XContentBuilder {
      */
     public String string() throws IOException {
         close();
-        return Unicode.fromBytes(unsafeBytes(), 0, unsafeBytesLength());
+        return Unicode.fromBytes(underlyingBytes(), 0, underlyingBytesLength());
     }
 }

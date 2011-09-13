@@ -19,7 +19,7 @@
 
 package org.elasticsearch.gateway.blobstore;
 
-import org.elasticsearch.cluster.routing.allocation.ShardAllocationModule;
+import org.elasticsearch.cluster.routing.allocation.allocator.ShardsAllocatorModule;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Module;
 import org.elasticsearch.common.inject.PreProcessModule;
@@ -30,8 +30,8 @@ import org.elasticsearch.common.inject.PreProcessModule;
 public abstract class BlobStoreGatewayModule extends AbstractModule implements PreProcessModule {
 
     @Override public void processModule(Module module) {
-        if (module instanceof ShardAllocationModule) {
-            ((ShardAllocationModule) module).addNodeAllocation(BlobReuseExistingNodeAllocation.class);
+        if (module instanceof ShardsAllocatorModule) {
+            ((ShardsAllocatorModule) module).setGatewayAllocator(BlobReuseExistingGatewayAllocator.class);
         }
     }
 }

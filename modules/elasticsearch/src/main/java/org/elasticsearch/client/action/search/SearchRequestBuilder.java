@@ -214,6 +214,30 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
     }
 
     /**
+     * Constructs a new search source builder with a raw search query.
+     */
+    public SearchRequestBuilder setQuery(byte[] queryBinary, int queryBinaryOffset, int queryBinaryLength) {
+        sourceBuilder().query(queryBinary, queryBinaryOffset, queryBinaryLength);
+        return this;
+    }
+
+    /**
+     * Constructs a new search source builder with a raw search query.
+     */
+    public SearchRequestBuilder setQuery(XContentBuilder query) {
+        sourceBuilder().query(query);
+        return this;
+    }
+
+    /**
+     * Constructs a new search source builder with a raw search query.
+     */
+    public SearchRequestBuilder setQuery(Map query) {
+        sourceBuilder().query(query);
+        return this;
+    }
+
+    /**
      * Sets a filter on the query executed that only applies to the search query
      * (and not facets for example).
      */
@@ -236,6 +260,33 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
      * (and not facets for example).
      */
     public SearchRequestBuilder setFilter(byte[] filter) {
+        sourceBuilder().filter(filter);
+        return this;
+    }
+
+    /**
+     * Sets a filter on the query executed that only applies to the search query
+     * (and not facets for example).
+     */
+    public SearchRequestBuilder setFilter(byte[] filter, int filterOffset, int filterLength) {
+        sourceBuilder().filter(filter, filterOffset, filterLength);
+        return this;
+    }
+
+    /**
+     * Sets a filter on the query executed that only applies to the search query
+     * (and not facets for example).
+     */
+    public SearchRequestBuilder setFilter(XContentBuilder filter) {
+        sourceBuilder().filter(filter);
+        return this;
+    }
+
+    /**
+     * Sets a filter on the query executed that only applies to the search query
+     * (and not facets for example).
+     */
+    public SearchRequestBuilder setFilter(Map filter) {
         sourceBuilder().filter(filter);
         return this;
     }
@@ -290,6 +341,14 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
      */
     public SearchRequestBuilder addIndexBoost(String index, float indexBoost) {
         sourceBuilder().indexBoost(index, indexBoost);
+        return this;
+    }
+
+    /**
+     * The stats groups this request will be aggregated under.
+     */
+    public SearchRequestBuilder setStats(String... statsGroups) {
+        sourceBuilder().stats(statsGroups);
         return this;
     }
 
@@ -405,6 +464,30 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
     }
 
     /**
+     * Sets a raw (xcontent) binary representation of facets to use.
+     */
+    public SearchRequestBuilder setFacets(byte[] facets, int facetsOffset, int facetsLength) {
+        sourceBuilder().facets(facets, facetsOffset, facetsLength);
+        return this;
+    }
+
+    /**
+     * Sets a raw (xcontent) binary representation of facets to use.
+     */
+    public SearchRequestBuilder setFacets(XContentBuilder facets) {
+        sourceBuilder().facets(facets);
+        return this;
+    }
+
+    /**
+     * Sets a raw (xcontent) binary representation of facets to use.
+     */
+    public SearchRequestBuilder setFacets(Map facets) {
+        sourceBuilder().facets(facets);
+        return this;
+    }
+
+    /**
      * Adds a field to be highlighted with default fragment size of 100 characters, and
      * default number of fragments of 5.
      *
@@ -414,6 +497,7 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
         highlightBuilder().field(name);
         return this;
     }
+
 
     /**
      * Adds a field to be highlighted with a provided fragment size (in characters), and
@@ -440,7 +524,7 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
         return this;
     }
 
-     /**
+    /**
      * Adds a field to be highlighted with a provided fragment size (in characters),
      * a provided (maximum) number of fragments and an offset for the highlight.
      *
@@ -491,6 +575,15 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
         return this;
     }
 
+
+    /**
+     * The encoder to set for highlighting
+     */
+    public SearchRequestBuilder setEncoder(String encoder) {
+        highlightBuilder().encoder(encoder);
+        return this;
+    }
+
     /**
      * Sets the source of the request as a json string. Note, settings anything other
      * than the search type will cause this source to be overridden, consider using
@@ -511,7 +604,7 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
 
     /**
      * Sets the source of the request as a json string. Note, settings anything other
-     * than the search type will cause this source to be overridden, consifer using
+     * than the search type will cause this source to be overridden, consider using
      * {@link #setExtraSource(byte[])}.
      */
     public SearchRequestBuilder setSource(byte[] source) {
@@ -529,7 +622,7 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
 
     /**
      * Sets the source of the request as a json string. Note, settings anything other
-     * than the search type will cause this source to be overridden, consifer using
+     * than the search type will cause this source to be overridden, consider using
      * {@link #setExtraSource(byte[])}.
      */
     public SearchRequestBuilder setSource(byte[] source, int offset, int length) {
@@ -547,7 +640,7 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
 
     /**
      * Sets the source of the request as a json string. Note, settings anything other
-     * than the search type will cause this source to be overridden, consifer using
+     * than the search type will cause this source to be overridden, consider using
      * {@link #setExtraSource(byte[])}.
      */
     public SearchRequestBuilder setSource(XContentBuilder builder) {
@@ -560,6 +653,21 @@ public class SearchRequestBuilder extends BaseRequestBuilder<SearchRequest, Sear
      */
     public SearchRequestBuilder setExtraSource(XContentBuilder builder) {
         request.extraSource(builder);
+        return this;
+    }
+
+    /**
+     * Sets the source of the request as a map. Note, setting anything other than the
+     * search type will cause this source to be overridden, consider using
+     * {@link #setExtraSource(java.util.Map)}.
+     */
+    public SearchRequestBuilder setSource(Map source) {
+        request.source(source);
+        return this;
+    }
+
+    public SearchRequestBuilder setExtraSource(Map source) {
+        request.extraSource(source);
         return this;
     }
 

@@ -44,9 +44,12 @@ import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineClosedException;
 import org.elasticsearch.index.engine.EngineException;
+import org.elasticsearch.index.engine.IgnoreOnRecoveryEngineException;
 import org.elasticsearch.index.engine.OptimizeFailedEngineException;
 import org.elasticsearch.index.engine.RefreshFailedEngineException;
 import org.elasticsearch.index.flush.FlushStats;
+import org.elasticsearch.index.get.GetStats;
+import org.elasticsearch.index.get.ShardGetService;
 import org.elasticsearch.index.indexing.IndexingStats;
 import org.elasticsearch.index.indexing.ShardIndexingService;
 import org.elasticsearch.index.mapper.DocumentMapper;
@@ -58,15 +61,17 @@ import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.merge.scheduler.MergeSchedulerProvider;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.refresh.RefreshStats;
+import org.elasticsearch.index.search.stats.SearchStats;
+import org.elasticsearch.index.search.stats.ShardSearchService;
 import org.elasticsearch.index.settings.IndexSettings;
 import org.elasticsearch.index.settings.IndexSettingsService;
 import org.elasticsearch.index.shard.*;
-import org.elasticsearch.index.shard.recovery.RecoveryStatus;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.store.StoreStats;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.InternalIndicesLifecycle;
+import org.elasticsearch.indices.recovery.RecoveryStatus;
 import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
@@ -107,6 +112,10 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
     private final ShardIndexingService indexingService;
 
+    private final ShardSearchService searchService;
+
+    private final ShardGetService getService;
+
     private final Object mutex = new Object();
 
 
@@ -131,7 +140,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
     private final MeanMetric flushMetric = new MeanMetric();
 
     @Inject public InternalIndexShard(ShardId shardId, @IndexSettings Settings indexSettings, IndexSettingsService indexSettingsService, IndicesLifecycle indicesLifecycle, Store store, Engine engine, MergeSchedulerProvider mergeScheduler, Translog translog,
-                                      ThreadPool threadPool, MapperService mapperService, IndexQueryParserService queryParserService, IndexCache indexCache, IndexAliasesService indexAliasesService, ShardIndexingService indexingService) {
+                                      ThreadPool threadPool, MapperService mapperService, IndexQueryParserService queryParserService, IndexCache indexCache, IndexAliasesService indexAliasesService, ShardIndexingService indexingService, ShardGetService getService, ShardSearchService searchService) {
         super(shardId, indexSettings);
         this.indicesLifecycle = (InternalIndicesLifecycle) indicesLifecycle;
         this.indexSettingsService = indexSettingsService;
@@ -145,6 +154,8 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         this.indexCache = indexCache;
         this.indexAliasesService = indexAliasesService;
         this.indexingService = indexingService;
+        this.getService = getService.setIndexShard(this);
+        this.searchService = searchService;
         state = IndexShardState.CREATED;
 
         this.refreshInterval = indexSettings.getAsTime("engine.robin.refresh_interval", indexSettings.getAsTime("index.refresh_interval", engine.defaultRefreshInterval()));
@@ -175,6 +186,14 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
     public ShardIndexingService indexingService() {
         return this.indexingService;
+    }
+
+    @Override public ShardGetService getService() {
+        return this.getService;
+    }
+
+    @Override public ShardSearchService searchService() {
+        return this.searchService;
     }
 
     @Override public ShardRouting routingEntry() {
@@ -404,6 +423,14 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         return indexingService.stats(types);
     }
 
+    @Override public SearchStats searchStats(String... groups) {
+        return searchService.stats(groups);
+    }
+
+    @Override public GetStats getStats() {
+        return getService.stats();
+    }
+
     @Override public StoreStats storeStats() {
         try {
             return store.stats();
@@ -516,31 +543,50 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         if (state != IndexShardState.RECOVERING) {
             throw new IndexShardNotRecoveringException(shardId, state);
         }
-        switch (operation.opType()) {
-            case CREATE:
-                Translog.Create create = (Translog.Create) operation;
-                engine.create(prepareCreate(source(create.source()).type(create.type()).id(create.id())
-                        .routing(create.routing()).parent(create.parent())).version(create.version())
-                        .origin(Engine.Operation.Origin.RECOVERY));
-                break;
-            case SAVE:
-                Translog.Index index = (Translog.Index) operation;
-                engine.index(prepareIndex(source(index.source()).type(index.type()).id(index.id())
-                        .routing(index.routing()).parent(index.parent())).version(index.version())
-                        .origin(Engine.Operation.Origin.RECOVERY));
-                break;
-            case DELETE:
-                Translog.Delete delete = (Translog.Delete) operation;
-                Uid uid = Uid.createUid(delete.uid().text());
-                engine.delete(new Engine.Delete(uid.type(), uid.id(), delete.uid()).version(delete.version())
-                        .origin(Engine.Operation.Origin.RECOVERY));
-                break;
-            case DELETE_BY_QUERY:
-                Translog.DeleteByQuery deleteByQuery = (Translog.DeleteByQuery) operation;
-                engine.delete(prepareDeleteByQuery(deleteByQuery.source(), deleteByQuery.filteringAliases(), deleteByQuery.types()));
-                break;
-            default:
-                throw new ElasticSearchIllegalStateException("No operation defined for [" + operation + "]");
+        try {
+            switch (operation.opType()) {
+                case CREATE:
+                    Translog.Create create = (Translog.Create) operation;
+                    engine.create(prepareCreate(source(create.source(), create.sourceOffset(), create.sourceLength()).type(create.type()).id(create.id())
+                            .routing(create.routing()).parent(create.parent()).timestamp(create.timestamp()).ttl(create.ttl())).version(create.version())
+                            .origin(Engine.Operation.Origin.RECOVERY));
+                    break;
+                case SAVE:
+                    Translog.Index index = (Translog.Index) operation;
+                    engine.index(prepareIndex(source(index.source(), index.sourceOffset(), index.sourceLength()).type(index.type()).id(index.id())
+                            .routing(index.routing()).parent(index.parent()).timestamp(index.timestamp()).ttl(index.ttl())).version(index.version())
+                            .origin(Engine.Operation.Origin.RECOVERY));
+                    break;
+                case DELETE:
+                    Translog.Delete delete = (Translog.Delete) operation;
+                    Uid uid = Uid.createUid(delete.uid().text());
+                    engine.delete(new Engine.Delete(uid.type(), uid.id(), delete.uid()).version(delete.version())
+                            .origin(Engine.Operation.Origin.RECOVERY));
+                    break;
+                case DELETE_BY_QUERY:
+                    Translog.DeleteByQuery deleteByQuery = (Translog.DeleteByQuery) operation;
+                    engine.delete(prepareDeleteByQuery(deleteByQuery.source(), deleteByQuery.filteringAliases(), deleteByQuery.types()));
+                    break;
+                default:
+                    throw new ElasticSearchIllegalStateException("No operation defined for [" + operation + "]");
+            }
+        } catch (ElasticSearchException e) {
+            boolean hasIgnoreOnRecoveryException = false;
+            ElasticSearchException current = e;
+            while (true) {
+                if (current instanceof IgnoreOnRecoveryEngineException) {
+                    hasIgnoreOnRecoveryException = true;
+                    break;
+                }
+                if (current.getCause() instanceof ElasticSearchException) {
+                    current = (ElasticSearchException) current.getCause();
+                } else {
+                    break;
+                }
+            }
+            if (!hasIgnoreOnRecoveryException) {
+                throw e;
+            }
         }
     }
 
@@ -646,10 +692,14 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                         } else if (e.getCause() instanceof ThreadInterruptedException) {
                             // ignore, we are being shutdown
                         } else {
-                            logger.warn("Failed to perform scheduled engine refresh", e);
+                            if (state != IndexShardState.CLOSED) {
+                                logger.warn("Failed to perform scheduled engine refresh", e);
+                            }
                         }
                     } catch (Exception e) {
-                        logger.warn("Failed to perform scheduled engine refresh", e);
+                        if (state != IndexShardState.CLOSED) {
+                            logger.warn("Failed to perform scheduled engine refresh", e);
+                        }
                     }
                     synchronized (mutex) {
                         if (state != IndexShardState.CLOSED) {
@@ -687,10 +737,14 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                         } else if (e.getCause() instanceof ThreadInterruptedException) {
                             // ignore, we are being shutdown
                         } else {
-                            logger.warn("Failed to perform scheduled engine optimize/merge", e);
+                            if (state != IndexShardState.CLOSED) {
+                                logger.warn("Failed to perform scheduled engine optimize/merge", e);
+                            }
                         }
                     } catch (Exception e) {
-                        logger.warn("Failed to perform scheduled engine optimize/merge", e);
+                        if (state != IndexShardState.CLOSED) {
+                            logger.warn("Failed to perform scheduled engine optimize/merge", e);
+                        }
                     }
                     synchronized (mutex) {
                         if (state != IndexShardState.CLOSED) {
@@ -718,13 +772,13 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                     // ignore if closed....
                     return;
                 }
-                logger.warn("check index [failure]\n{}", new String(os.unsafeByteArray(), 0, os.size()));
+                logger.warn("check index [failure]\n{}", new String(os.underlyingBytes(), 0, os.size()));
                 if (throwException) {
                     throw new IndexShardException(shardId, "index check failure");
                 }
             } else {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("check index [success]\n{}", new String(os.unsafeByteArray(), 0, os.size()));
+                    logger.debug("check index [success]\n{}", new String(os.underlyingBytes(), 0, os.size()));
                 }
             }
         } catch (Exception e) {

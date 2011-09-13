@@ -31,8 +31,10 @@ import org.elasticsearch.action.support.replication.ReplicationType;
 import org.elasticsearch.action.support.replication.ShardReplicationOperationRequest;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Required;
+import org.elasticsearch.common.UUID;
 import org.elasticsearch.common.Unicode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -42,6 +44,7 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.VersionType;
+import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -115,12 +118,13 @@ public class IndexRequest extends ShardReplicationOperationRequest {
     private String id;
     @Nullable private String routing;
     @Nullable private String parent;
+    @Nullable private String timestamp;
+    private long ttl = -1;
 
     private byte[] source;
     private int sourceOffset;
     private int sourceLength;
     private boolean sourceUnsafe;
-    private boolean sourceFromBuilder;
 
     private OpType opType = OpType.INDEX;
 
@@ -170,14 +174,10 @@ public class IndexRequest extends ShardReplicationOperationRequest {
      * Before we fork on a local thread, make sure we copy over the bytes if they are unsafe
      */
     @Override public void beforeLocalFork() {
-        source();
-    }
-
-    /**
-     * Need this in case builders are used, we need to copy after adding...
-     */
-    public boolean sourceFromBuilder() {
-        return sourceFromBuilder;
+        // only fork if copy over if source is unsafe
+        if (sourceUnsafe) {
+            source();
+        }
     }
 
     /**
@@ -277,10 +277,35 @@ public class IndexRequest extends ShardReplicationOperationRequest {
     }
 
     /**
+     * Sets the timestamp either as millis since the epoch, or, in the configured date format.
+     */
+    public IndexRequest timestamp(String timestamp) {
+        this.timestamp = timestamp;
+        return this;
+    }
+
+    public String timestamp() {
+        return this.timestamp;
+    }
+
+    // Sets the relative ttl value. It musts be > 0 as it makes little sense otherwise.
+    public IndexRequest ttl(long ttl) throws ElasticSearchGenerationException {
+        if (ttl <= 0) {
+            throw new ElasticSearchIllegalArgumentException("TTL value must be > 0. Illegal value provided [" + ttl + "]");
+        }
+        this.ttl  = ttl;
+        return this;
+    }
+
+    public long ttl() {
+        return this.ttl;
+    }
+
+    /**
      * The source of the document to index, recopied to a new array if it has an offset or unsafe.
      */
     public byte[] source() {
-        if (sourceUnsafe || sourceOffset > 0) {
+        if (sourceUnsafe || sourceOffset > 0 || source.length != sourceLength) {
             source = Arrays.copyOfRange(source, sourceOffset, sourceOffset + sourceLength);
             sourceOffset = 0;
             sourceUnsafe = false;
@@ -288,15 +313,15 @@ public class IndexRequest extends ShardReplicationOperationRequest {
         return source;
     }
 
-    public byte[] unsafeSource() {
+    public byte[] underlyingSource() {
         return this.source;
     }
 
-    public int unsafeSourceOffset() {
+    public int underlyingSourceOffset() {
         return this.sourceOffset;
     }
 
-    public int unsafeSourceLength() {
+    public int underlyingSourceLength() {
         return this.sourceLength;
     }
 
@@ -344,11 +369,10 @@ public class IndexRequest extends ShardReplicationOperationRequest {
      */
     @Required public IndexRequest source(XContentBuilder sourceBuilder) {
         try {
-            source = sourceBuilder.unsafeBytes();
+            source = sourceBuilder.underlyingBytes();
             sourceOffset = 0;
-            sourceLength = sourceBuilder.unsafeBytesLength();
-            sourceUnsafe = true;
-            this.sourceFromBuilder = true;
+            sourceLength = sourceBuilder.underlyingBytesLength();
+            sourceUnsafe = false;
         } catch (IOException e) {
             throw new ElasticSearchGenerationException("Failed to generate [" + sourceBuilder + "]", e);
         }
@@ -562,24 +586,60 @@ public class IndexRequest extends ShardReplicationOperationRequest {
         return this.percolate;
     }
 
-    public void processRouting(MappingMetaData mappingMd) throws ElasticSearchException {
-        if (routing == null && mappingMd.routing().hasPath()) {
-            XContentParser parser = null;
-            try {
-                parser = XContentFactory.xContent(source, sourceOffset, sourceLength)
-                        .createParser(source, sourceOffset, sourceLength);
-                routing = mappingMd.parseRouting(parser);
-            } catch (Exception e) {
-                throw new ElasticSearchParseException("failed to parse doc to extract routing", e);
-            } finally {
-                if (parser != null) {
-                    parser.close();
+    public void process(MetaData metaData, String aliasOrIndex, @Nullable MappingMetaData mappingMd, boolean allowIdGeneration) throws ElasticSearchException {
+        // resolve the routing if needed
+        routing(metaData.resolveIndexRouting(routing, aliasOrIndex));
+        // resolve timestamp if provided externally
+        if (timestamp != null) {
+            timestamp = MappingMetaData.Timestamp.parseStringTimestamp(timestamp,
+                    mappingMd != null ? mappingMd.timestamp().dateTimeFormatter() : TimestampFieldMapper.Defaults.DATE_TIME_FORMATTER);
+        }
+        // extract values if needed
+        if (mappingMd != null) {
+            MappingMetaData.ParseContext parseContext = mappingMd.createParseContext(id, routing, timestamp);
+
+            if (parseContext.shouldParse()) {
+                XContentParser parser = null;
+                try {
+                    parser = XContentFactory.xContent(source, sourceOffset, sourceLength).createParser(source, sourceOffset, sourceLength);
+                    mappingMd.parse(parser, parseContext);
+                    if (parseContext.shouldParseId()) {
+                        id = parseContext.id();
+                    }
+                    if (parseContext.shouldParseRouting()) {
+                        routing = parseContext.routing();
+                    }
+                    if (parseContext.shouldParseTimestamp()) {
+                        timestamp = parseContext.timestamp();
+                        timestamp = MappingMetaData.Timestamp.parseStringTimestamp(timestamp, mappingMd.timestamp().dateTimeFormatter());
+                    }
+                } catch (Exception e) {
+                    throw new ElasticSearchParseException("failed to parse doc to extract routing/timestamp", e);
+                } finally {
+                    if (parser != null) {
+                        parser.close();
+                    }
                 }
             }
+
+            // might as well check for routing here
+            if (mappingMd.routing().required() && routing == null) {
+                throw new RoutingMissingException(index, type, id);
+            }
         }
-        // might as well check for routing here
-        if (mappingMd.routing().required() && routing == null) {
-            throw new RoutingMissingException(index, type, id);
+
+        // generate id if not already provided and id generation is allowed
+        if (allowIdGeneration) {
+            if (id == null) {
+                id(UUID.randomBase64UUID());
+                // since we generate the id, change it to CREATE
+                opType(IndexRequest.OpType.CREATE);
+            }
+        }
+
+        // generate timestamp if not provided, we always have one post this stage...
+        if (timestamp == null) {
+            timestamp = String.valueOf(System.currentTimeMillis());
         }
     }
 
@@ -595,7 +655,10 @@ public class IndexRequest extends ShardReplicationOperationRequest {
         if (in.readBoolean()) {
             parent = in.readUTF();
         }
-
+        if (in.readBoolean()) {
+            timestamp = in.readUTF();
+        }
+        ttl = in.readLong();
         sourceUnsafe = false;
         sourceOffset = 0;
         sourceLength = in.readVInt();
@@ -632,6 +695,13 @@ public class IndexRequest extends ShardReplicationOperationRequest {
             out.writeBoolean(true);
             out.writeUTF(parent);
         }
+        if (timestamp == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeUTF(timestamp);
+        }
+        out.writeLong(ttl);
         out.writeVInt(sourceLength);
         out.writeBytes(source, sourceOffset, sourceLength);
         out.writeByte(opType.id());

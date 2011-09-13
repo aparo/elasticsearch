@@ -20,12 +20,15 @@
 package org.elasticsearch.cluster.metadata;
 
 import org.elasticsearch.ElasticSearchIllegalStateException;
+import org.elasticsearch.cluster.node.DiscoveryNodeFilters;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Preconditions;
 import org.elasticsearch.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.ImmutableSet;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.Immutable;
@@ -54,6 +57,15 @@ public class IndexMetaData {
 
     public static ImmutableSet<String> dynamicSettings() {
         return dynamicSettings;
+    }
+
+    public static boolean hasDynamicSetting(String key) {
+        for (String dynamicSetting : dynamicSettings) {
+            if (Regex.simpleMatch(dynamicSetting, key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static synchronized void addDynamicSettings(String... settings) {
@@ -113,6 +125,9 @@ public class IndexMetaData {
 
     private transient final int totalNumberOfShards;
 
+    private final DiscoveryNodeFilters includeFilters;
+    private final DiscoveryNodeFilters excludeFilters;
+
     private IndexMetaData(String index, State state, Settings settings, ImmutableMap<String, MappingMetaData> mappings, ImmutableMap<String, AliasMetaData> aliases) {
         Preconditions.checkArgument(settings.getAsInt(SETTING_NUMBER_OF_SHARDS, -1) != -1, "must specify numberOfShards for index [" + index + "]");
         Preconditions.checkArgument(settings.getAsInt(SETTING_NUMBER_OF_REPLICAS, -1) != -1, "must specify numberOfReplicas for index [" + index + "]");
@@ -123,6 +138,19 @@ public class IndexMetaData {
         this.totalNumberOfShards = numberOfShards() * (numberOfReplicas() + 1);
 
         this.aliases = aliases;
+
+        ImmutableMap<String, String> includeMap = settings.getByPrefix("index.routing.allocation.include.").getAsMap();
+        if (includeMap.isEmpty()) {
+            includeFilters = null;
+        } else {
+            includeFilters = DiscoveryNodeFilters.buildFromKeyValue(includeMap);
+        }
+        ImmutableMap<String, String> excludeMap = settings.getByPrefix("index.routing.allocation.exclude.").getAsMap();
+        if (excludeMap.isEmpty()) {
+            excludeFilters = null;
+        } else {
+            excludeFilters = DiscoveryNodeFilters.buildFromKeyValue(excludeMap);
+        }
     }
 
     public String index() {
@@ -191,6 +219,14 @@ public class IndexMetaData {
 
     public MappingMetaData mapping(String mappingType) {
         return mappings.get(mappingType);
+    }
+
+    @Nullable public DiscoveryNodeFilters includeFilters() {
+        return includeFilters;
+    }
+
+    @Nullable public DiscoveryNodeFilters excludeFilters() {
+        return excludeFilters;
     }
 
     public static Builder newIndexMetaDataBuilder(String index) {

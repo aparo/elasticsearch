@@ -39,10 +39,13 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
     private boolean docs = true;
     private boolean store = true;
     private boolean indexing = true;
+    private boolean get = true;
+    private boolean search = true;
     private boolean merge = false;
     private boolean refresh = false;
     private boolean flush = false;
     private String[] types = null;
+    private String[] groups = null;
 
     public IndicesStatsRequest indices(String... indices) {
         this.indices = indices;
@@ -55,10 +58,14 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
     public IndicesStatsRequest clear() {
         docs = false;
         store = false;
+        get = false;
         indexing = false;
+        search = false;
         merge = false;
         refresh = false;
         flush = false;
+        types = null;
+        groups = null;
         return this;
     }
 
@@ -77,6 +84,19 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
      */
     public String[] types() {
         return this.types;
+    }
+
+    /**
+     * Sets specific search group stats to retrieve the stats for. Mainly affects search
+     * when enabled.
+     */
+    public IndicesStatsRequest groups(String... groups) {
+        this.groups = groups;
+        return this;
+    }
+
+    public String[] groups() {
+        return this.groups;
     }
 
     public IndicesStatsRequest docs(boolean docs) {
@@ -104,6 +124,24 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
 
     public boolean indexing() {
         return this.indexing;
+    }
+
+    public IndicesStatsRequest get(boolean get) {
+        this.get = get;
+        return this;
+    }
+
+    public boolean get() {
+        return this.get;
+    }
+
+    public IndicesStatsRequest search(boolean search) {
+        this.search = search;
+        return this;
+    }
+
+    public boolean search() {
+        return this.search;
     }
 
     public IndicesStatsRequest merge(boolean merge) {
@@ -138,6 +176,8 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         out.writeBoolean(docs);
         out.writeBoolean(store);
         out.writeBoolean(indexing);
+        out.writeBoolean(get);
+        out.writeBoolean(search);
         out.writeBoolean(merge);
         out.writeBoolean(flush);
         out.writeBoolean(refresh);
@@ -149,6 +189,14 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
                 out.writeUTF(type);
             }
         }
+        if (groups == null) {
+            out.writeVInt(0);
+        } else {
+            out.writeVInt(groups.length);
+            for (String group : groups) {
+                out.writeUTF(group);
+            }
+        }
     }
 
     @Override public void readFrom(StreamInput in) throws IOException {
@@ -156,6 +204,8 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         docs = in.readBoolean();
         store = in.readBoolean();
         indexing = in.readBoolean();
+        get = in.readBoolean();
+        search = in.readBoolean();
         merge = in.readBoolean();
         flush = in.readBoolean();
         refresh = in.readBoolean();
@@ -164,6 +214,13 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
             types = new String[size];
             for (int i = 0; i < size; i++) {
                 types[i] = in.readUTF();
+            }
+        }
+        size = in.readVInt();
+        if (size > 0) {
+            groups = new String[size];
+            for (int i = 0; i < size; i++) {
+                groups[i] = in.readUTF();
             }
         }
     }

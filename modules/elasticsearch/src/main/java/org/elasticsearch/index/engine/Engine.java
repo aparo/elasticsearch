@@ -27,7 +27,6 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.ElasticSearchException;
-import org.elasticsearch.common.BytesHolder;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.CloseableComponent;
 import org.elasticsearch.common.lease.Releasable;
@@ -186,6 +185,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
         private boolean full = false;
         private boolean refresh = false;
+        private boolean force = false;
 
         /**
          * Should a refresh be performed after flushing. Defaults to <tt>false</tt>.
@@ -217,8 +217,17 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this;
         }
 
+        public boolean force() {
+            return this.force;
+        }
+
+        public Flush force(boolean force) {
+            this.force = force;
+            return this;
+        }
+
         @Override public String toString() {
-            return "full[" + full + "], refresh[" + refresh + "]";
+            return "full[" + full + "], refresh[" + refresh + "], force[" + force + "]";
         }
     }
 
@@ -363,6 +372,14 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.doc.routing();
         }
 
+        public long timestamp() {
+            return this.doc.timestamp();
+        }
+
+        public long ttl() {
+            return this.doc.ttl();
+        }
+
         public long version() {
             return this.version;
         }
@@ -395,6 +412,14 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
         public byte[] source() {
             return this.doc.source();
+        }
+
+        public int sourceOffset() {
+            return this.doc.sourceOffset();
+        }
+
+        public int sourceLength() {
+            return this.doc.sourceLength();
         }
 
         public UidField uidField() {
@@ -511,8 +536,24 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.doc.parent();
         }
 
+        public long timestamp() {
+            return this.doc.timestamp();
+        }
+
+        public long ttl() {
+            return this.doc.ttl();
+        }
+
         public byte[] source() {
             return this.doc.source();
+        }
+
+        public int sourceOffset() {
+            return this.doc.sourceOffset();
+        }
+
+        public int sourceLength() {
+            return this.doc.sourceLength();
         }
 
         public UidField uidField() {
@@ -735,13 +776,13 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
     static class GetResult {
         private final boolean exists;
         private final long version;
-        private final BytesHolder source;
+        private final Translog.Source source;
         private final UidField.DocIdAndVersion docIdAndVersion;
         private final Searcher searcher;
 
         public static final GetResult NOT_EXISTS = new GetResult(false, -1, null);
 
-        public GetResult(boolean exists, long version, @Nullable BytesHolder source) {
+        public GetResult(boolean exists, long version, @Nullable Translog.Source source) {
             this.source = source;
             this.exists = exists;
             this.version = version;
@@ -765,7 +806,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.version;
         }
 
-        @Nullable public BytesHolder source() {
+        @Nullable public Translog.Source source() {
             return source;
         }
 

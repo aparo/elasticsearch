@@ -30,11 +30,17 @@ public class SourceToParse {
         return new SourceToParse(source);
     }
 
+    public static SourceToParse source(byte[] source, int offset, int length) {
+        return new SourceToParse(source, offset, length);
+    }
+
     public static SourceToParse source(XContentParser parser) {
         return new SourceToParse(parser);
     }
 
     private final byte[] source;
+    private final int sourceOffset;
+    private final int sourceLength;
 
     private final XContentParser parser;
 
@@ -48,13 +54,28 @@ public class SourceToParse {
 
     private String parentId;
 
+    private long timestamp;
+
+    private long ttl;
+
     public SourceToParse(XContentParser parser) {
         this.parser = parser;
         this.source = null;
+        this.sourceOffset = 0;
+        this.sourceLength = 0;
     }
 
     public SourceToParse(byte[] source) {
         this.source = source;
+        this.sourceOffset = 0;
+        this.sourceLength = source.length;
+        this.parser = null;
+    }
+
+    public SourceToParse(byte[] source, int offset, int length) {
+        this.source = source;
+        this.sourceOffset = offset;
+        this.sourceLength = length;
         this.parser = null;
     }
 
@@ -64,6 +85,14 @@ public class SourceToParse {
 
     public byte[] source() {
         return this.source;
+    }
+
+    public int sourceOffset() {
+        return this.sourceOffset;
+    }
+
+    public int sourceLength() {
+        return this.sourceLength;
     }
 
     public String type() {
@@ -108,6 +137,29 @@ public class SourceToParse {
 
     public SourceToParse routing(String routing) {
         this.routing = routing;
+        return this;
+    }
+
+    public long timestamp() {
+        return this.timestamp;
+    }
+
+    public SourceToParse timestamp(String timestamp) {
+        this.timestamp = Long.parseLong(timestamp);
+        return this;
+    }
+
+    public SourceToParse timestamp(long timestamp) {
+        this.timestamp = timestamp;
+        return this;
+    }
+
+    public long ttl() {
+        return this.ttl;
+    }
+
+    public SourceToParse ttl(long ttl) {
+        this.ttl = ttl;
         return this;
     }
 }
