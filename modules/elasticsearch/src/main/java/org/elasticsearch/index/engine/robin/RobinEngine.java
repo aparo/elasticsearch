@@ -248,6 +248,8 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             }
 
             try {
+                // commit on a just opened writer will commit even if there are no changes done to it
+                // we rely on that for the commit data translog id key
                 if (IndexReader.indexExists(store.directory())) {
                     Map<String, String> commitUserData = IndexReader.getCommitUserData(store.directory());
                     if (commitUserData.containsKey(Translog.TRANSLOG_ID_KEY)) {
@@ -654,11 +656,15 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                 }
 
                 if (currentVersion == -1) {
-                    // if the doc does not exists, just update with doc 0
-                    delete.version(0).notFound(true);
+                    // doc does not exists and no prior deletes
+                    delete.version(updatedVersion).notFound(true);
+                    Translog.Location translogLocation = translog.add(new Translog.Delete(delete));
+                    versionMap.put(delete.uid().text(), new VersionValue(updatedVersion, true, threadPool.estimatedTimeInMillis(), translogLocation));
                 } else if (versionValue != null && versionValue.delete()) {
-                    // if its a delete on delete and we have the current delete version, return it
-                    delete.version(versionValue.version()).notFound(true);
+                    // a "delete on delete", in this case, we still increment the version, log it, and return that version
+                    delete.version(updatedVersion).notFound(true);
+                    Translog.Location translogLocation = translog.add(new Translog.Delete(delete));
+                    versionMap.put(delete.uid().text(), new VersionValue(updatedVersion, true, threadPool.estimatedTimeInMillis(), translogLocation));
                 } else {
                     delete.version(updatedVersion);
                     writer.deleteDocuments(delete.uid());
@@ -779,7 +785,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
         }
 
         try {
-
+            boolean makeTransientCurrent = false;
             if (flush.full()) {
                 rwl.writeLock().lock();
                 try {
@@ -798,6 +804,8 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                         indexWriter.close(false);
                         indexWriter = createWriter();
 
+                        // commit on a just opened writer will commit even if there are no changes done to it
+                        // we rely on that for the commit data translog id key
                         if (flushNeeded || flush.force()) {
                             flushNeeded = false;
                             long translogId = translogIdGenerator.incrementAndGet();
@@ -808,6 +816,8 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                         AcquirableResource<ReaderSearcherHolder> current = nrtResource;
                         nrtResource = buildNrtResource(indexWriter);
                         current.markForClose();
+
+                        refreshVersioningTable(threadPool.estimatedTimeInMillis());
                     } catch (Exception e) {
                         throw new FlushFailedEngineException(shardId, e);
                     } catch (OutOfMemoryError e) {
@@ -841,9 +851,16 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                                     // we did not commit anything, revert to the old translog
                                     translog.revertTransient();
                                 } else {
-                                    translog.makeTransientCurrent();
+                                    makeTransientCurrent = true;
                                 }
                             } else {
+                                makeTransientCurrent = true;
+                            }
+                            if (makeTransientCurrent) {
+                                refreshVersioningTable(threadPool.estimatedTimeInMillis());
+                                // we need to move transient to current only after we refresh
+                                // so items added to current will still be around for realtime get
+                                // when tans overrides it
                                 translog.makeTransientCurrent();
                             }
                         } catch (Exception e) {
@@ -859,13 +876,14 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                     rwl.readLock().unlock();
                 }
             }
-            refreshVersioningTable(threadPool.estimatedTimeInMillis());
             try {
                 SegmentInfos infos = new SegmentInfos();
                 infos.read(store.directory());
                 lastCommittedSegmentInfos = infos;
             } catch (Exception e) {
-                logger.warn("failed to read latest segment infos on flush", e);
+                if (!closed) {
+                    logger.warn("failed to read latest segment infos on flush", e);
+                }
             }
         } finally {
             flushing.set(false);
