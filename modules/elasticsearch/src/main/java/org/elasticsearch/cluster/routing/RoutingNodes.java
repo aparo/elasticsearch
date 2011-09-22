@@ -23,11 +23,10 @@ import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlocks;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.common.trove.map.hash.TObjectIntHashMap;
 import org.elasticsearch.common.util.concurrent.NotThreadSafe;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +51,8 @@ public class RoutingNodes implements Iterable<RoutingNode> {
     private final List<MutableShardRouting> unassigned = newArrayList();
 
     private final List<MutableShardRouting> ignoredUnassigned = newArrayList();
+
+    private final Map<String, TObjectIntHashMap<String>> nodesPerAttributeNames = new HashMap<String, TObjectIntHashMap<String>>();
 
     public RoutingNodes(ClusterState clusterState) {
         this.metaData = clusterState.metaData();
@@ -158,6 +159,20 @@ public class RoutingNodes implements Iterable<RoutingNode> {
         return nodesToShards.get(nodeId);
     }
 
+    public TObjectIntHashMap<String> nodesPerAttributesCounts(String attributeName) {
+        TObjectIntHashMap<String> nodesPerAttributesCounts = nodesPerAttributeNames.get(attributeName);
+        if (nodesPerAttributesCounts != null) {
+            return nodesPerAttributesCounts;
+        }
+        nodesPerAttributesCounts = new TObjectIntHashMap<String>();
+        for (RoutingNode routingNode : this) {
+            String attrValue = routingNode.node().attributes().get(attributeName);
+            nodesPerAttributesCounts.adjustOrPutValue(attrValue, 1, 1);
+        }
+        nodesPerAttributeNames.put(attributeName, nodesPerAttributesCounts);
+        return nodesPerAttributesCounts;
+    }
+
     public MutableShardRouting findPrimaryForReplica(ShardRouting shard) {
         assert !shard.primary();
         for (RoutingNode routingNode : nodesToShards.values()) {
@@ -213,22 +228,6 @@ public class RoutingNodes implements Iterable<RoutingNode> {
             shards.addAll(routingNode.shardsWithState(index, state));
         }
         return shards;
-    }
-
-    public List<RoutingNode> sortedNodesLeastToHigh() {
-        return nodesToShardsSorted(new Comparator<RoutingNode>() {
-            @Override public int compare(RoutingNode o1, RoutingNode o2) {
-                return o1.shards().size() - o2.shards().size();
-            }
-        });
-    }
-
-    public List<RoutingNode> nodesToShardsSorted(Comparator<RoutingNode> comparator) {
-        List<RoutingNode> nodes = new ArrayList<RoutingNode>(nodesToShards.values());
-        if (comparator != null) {
-            Collections.sort(nodes, comparator);
-        }
-        return nodes;
     }
 
     public String prettyPrint() {

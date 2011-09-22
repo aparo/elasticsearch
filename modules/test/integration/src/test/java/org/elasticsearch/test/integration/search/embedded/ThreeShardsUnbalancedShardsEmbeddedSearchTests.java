@@ -25,6 +25,7 @@ import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.cluster.routing.allocation.decider.AwarenessAllocationDecider;
 import org.elasticsearch.cluster.routing.operation.OperationRouting;
 import org.elasticsearch.cluster.routing.operation.plain.PlainOperationRouting;
 import org.elasticsearch.common.collect.ImmutableMap;
@@ -35,6 +36,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.trove.ExtTIntArrayList;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.node.internal.InternalNode;
+import org.elasticsearch.node.settings.NodeSettingsService;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
@@ -399,7 +401,7 @@ public class ThreeShardsUnbalancedShardsEmbeddedSearchTests extends AbstractNode
     public static class UnevenOperationRoutingStrategy extends PlainOperationRouting {
 
         @Inject public UnevenOperationRoutingStrategy(Settings settings) {
-            super(settings, null);
+            super(settings, null, new AwarenessAllocationDecider(Builder.EMPTY_SETTINGS, new NodeSettingsService(Builder.EMPTY_SETTINGS)));
         }
 
         @Override protected int hash(String routing) {
