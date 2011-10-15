@@ -20,6 +20,7 @@
 package org.elasticsearch.action.admin.indices.refresh;
 
 import org.elasticsearch.ElasticSearchException;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ShardOperationFailedException;
 import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.DefaultShardOperationFailedException;
@@ -32,7 +33,9 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.engine.Engine;
+import org.elasticsearch.index.shard.IllegalIndexShardStateException;
 import org.elasticsearch.index.shard.service.IndexShard;
+import org.elasticsearch.indices.IndexMissingException;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -75,6 +78,17 @@ public class TransportRefreshAction extends TransportBroadcastOperationAction<Re
 
     @Override protected boolean ignoreNonActiveExceptions() {
         return true;
+    }
+
+    @Override protected boolean ignoreException(Throwable t) {
+        Throwable actual = ExceptionsHelper.unwrapCause(t);
+        if (actual instanceof IllegalIndexShardStateException) {
+            return true;
+        }
+        if (actual instanceof IndexMissingException) {
+            return true;
+        }
+        return false;
     }
 
     @Override protected RefreshResponse newResponse(RefreshRequest request, AtomicReferenceArray shardsResponses, ClusterState clusterState) {
@@ -120,6 +134,6 @@ public class TransportRefreshAction extends TransportBroadcastOperationAction<Re
      * The refresh request works against *all* shards.
      */
     @Override protected GroupShardsIterator shards(RefreshRequest request, String[] concreteIndices, ClusterState clusterState) {
-        return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true);
+        return clusterState.routingTable().allAssignedShardsGrouped(concreteIndices, true);
     }
 }

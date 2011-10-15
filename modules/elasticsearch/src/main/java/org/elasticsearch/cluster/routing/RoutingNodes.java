@@ -176,7 +176,9 @@ public class RoutingNodes implements Iterable<RoutingNode> {
     public MutableShardRouting findPrimaryForReplica(ShardRouting shard) {
         assert !shard.primary();
         for (RoutingNode routingNode : nodesToShards.values()) {
-            for (MutableShardRouting shardRouting : routingNode) {
+            List<MutableShardRouting> shards = routingNode.shards();
+            for (int i = 0; i < shards.size(); i++) {
+                MutableShardRouting shardRouting = shards.get(i);
                 if (shardRouting.shardId().equals(shard.shardId()) && shardRouting.primary()) {
                     return shardRouting;
                 }
@@ -192,13 +194,16 @@ public class RoutingNodes implements Iterable<RoutingNode> {
     public List<MutableShardRouting> shardsRoutingFor(String index, int shardId) {
         List<MutableShardRouting> shards = newArrayList();
         for (RoutingNode routingNode : this) {
-            for (MutableShardRouting shardRouting : routingNode) {
+            List<MutableShardRouting> nShards = routingNode.shards();
+            for (int i = 0; i < nShards.size(); i++) {
+                MutableShardRouting shardRouting = nShards.get(i);
                 if (shardRouting.index().equals(index) && shardRouting.id() == shardId) {
                     shards.add(shardRouting);
                 }
             }
         }
-        for (MutableShardRouting shardRouting : unassigned) {
+        for (int i = 0; i < unassigned.size(); i++) {
+            MutableShardRouting shardRouting = unassigned.get(i);
             if (shardRouting.index().equals(index) && shardRouting.id() == shardId) {
                 shards.add(shardRouting);
             }

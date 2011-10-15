@@ -19,6 +19,7 @@
 
 package org.elasticsearch.cluster.routing.allocation.decider;
 
+import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.MutableShardRouting;
 import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -26,15 +27,35 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.node.settings.NodeSettingsService;
+
+import java.util.List;
 
 public class ConcurrentRebalanceAllocationDecider extends AllocationDecider {
 
-    private final int clusterConcurrentRebalance;
+    static {
+        MetaData.addDynamicSettings(
+                "cluster.routing.allocation.cluster_concurrent_rebalance"
+        );
+    }
 
-    @Inject public ConcurrentRebalanceAllocationDecider(Settings settings) {
+    class ApplySettings implements NodeSettingsService.Listener {
+        @Override public void onRefreshSettings(Settings settings) {
+            int clusterConcurrentRebalance = settings.getAsInt("cluster.routing.allocation.cluster_concurrent_rebalance", ConcurrentRebalanceAllocationDecider.this.clusterConcurrentRebalance);
+            if (clusterConcurrentRebalance != ConcurrentRebalanceAllocationDecider.this.clusterConcurrentRebalance) {
+                logger.info("updating [cluster.routing.allocation.cluster_concurrent_rebalance] from [{}], to [{}]", ConcurrentRebalanceAllocationDecider.this.clusterConcurrentRebalance, clusterConcurrentRebalance);
+                ConcurrentRebalanceAllocationDecider.this.clusterConcurrentRebalance = clusterConcurrentRebalance;
+            }
+        }
+    }
+
+    private volatile int clusterConcurrentRebalance;
+
+    @Inject public ConcurrentRebalanceAllocationDecider(Settings settings, NodeSettingsService nodeSettingsService) {
         super(settings);
         this.clusterConcurrentRebalance = settings.getAsInt("cluster.routing.allocation.cluster_concurrent_rebalance", 2);
         logger.debug("using [cluster_concurrent_rebalance] with [{}]", clusterConcurrentRebalance);
+        nodeSettingsService.addListener(new ApplySettings());
     }
 
     @Override public boolean canRebalance(ShardRouting shardRouting, RoutingAllocation allocation) {
@@ -43,8 +64,9 @@ public class ConcurrentRebalanceAllocationDecider extends AllocationDecider {
         }
         int rebalance = 0;
         for (RoutingNode node : allocation.routingNodes()) {
-            for (MutableShardRouting shard : node) {
-                if (shard.state() == ShardRoutingState.RELOCATING) {
+            List<MutableShardRouting> shards = node.shards();
+            for (int i = 0; i < shards.size(); i++) {
+                if (shards.get(i).state() == ShardRoutingState.RELOCATING) {
                     rebalance++;
                 }
             }

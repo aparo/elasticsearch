@@ -144,7 +144,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override public Query fieldQuery(String value, QueryParseContext context) {
-        return new AllTermQuery(termFactory.createTerm(value));
+        return new AllTermQuery(names().createIndexNameTerm(value));
     }
 
     @Override public void preParse(ParseContext context) throws IOException {
@@ -162,7 +162,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override public boolean includeInObject() {
-        return false;
+        return true;
     }
 
     @Override protected Fieldable parseCreateField(ParseContext context) throws IOException {
