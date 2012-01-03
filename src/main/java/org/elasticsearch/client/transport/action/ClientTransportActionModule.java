@@ -50,6 +50,7 @@ import org.elasticsearch.client.transport.action.admin.indices.stats.ClientTrans
 import org.elasticsearch.client.transport.action.admin.indices.status.ClientTransportIndicesStatusAction;
 import org.elasticsearch.client.transport.action.admin.indices.template.delete.ClientTransportDeleteIndexTemplateAction;
 import org.elasticsearch.client.transport.action.admin.indices.template.put.ClientTransportPutIndexTemplateAction;
+import org.elasticsearch.client.transport.action.admin.indices.validate.query.ClientTransportValidateQueryAction;
 import org.elasticsearch.client.transport.action.bulk.ClientTransportBulkAction;
 import org.elasticsearch.client.transport.action.count.ClientTransportCountAction;
 import org.elasticsearch.client.transport.action.delete.ClientTransportDeleteAction;
@@ -60,6 +61,7 @@ import org.elasticsearch.client.transport.action.index.ClientTransportIndexActio
 import org.elasticsearch.client.transport.action.percolate.ClientTransportPercolateAction;
 import org.elasticsearch.client.transport.action.search.ClientTransportSearchAction;
 import org.elasticsearch.client.transport.action.search.ClientTransportSearchScrollAction;
+import org.elasticsearch.client.transport.action.update.ClientTransportUpdateAction;
 import org.elasticsearch.common.inject.AbstractModule;
 
 /**
@@ -79,6 +81,7 @@ public class ClientTransportActionModule extends AbstractModule {
         bind(ClientTransportSearchScrollAction.class).asEagerSingleton();
         bind(ClientTransportBulkAction.class).asEagerSingleton();
         bind(ClientTransportPercolateAction.class).asEagerSingleton();
+        bind(ClientTransportUpdateAction.class).asEagerSingleton();
 
         bind(ClientTransportIndicesExistsAction.class).asEagerSingleton();
         bind(ClientTransportIndicesStatsAction.class).asEagerSingleton();
@@ -100,6 +103,7 @@ public class ClientTransportActionModule extends AbstractModule {
         bind(ClientTransportAnalyzeAction.class).asEagerSingleton();
         bind(ClientTransportPutIndexTemplateAction.class).asEagerSingleton();
         bind(ClientTransportDeleteIndexTemplateAction.class).asEagerSingleton();
+        bind(ClientTransportValidateQueryAction.class).asEagerSingleton();
 
         bind(ClientTransportNodesInfoAction.class).asEagerSingleton();
         bind(ClientTransportNodesStatsAction.class).asEagerSingleton();

@@ -22,6 +22,7 @@ package org.elasticsearch.action.get;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.single.shard.TransportShardSingleOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -34,7 +35,6 @@ import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -42,16 +42,13 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
 
     private final IndicesService indicesService;
 
-    private final ScriptService scriptService;
-
     private final boolean realtime;
 
     @Inject
     public TransportShardMultiGetAction(Settings settings, ClusterService clusterService, TransportService transportService,
-                                        IndicesService indicesService, ScriptService scriptService, ThreadPool threadPool) {
+                                        IndicesService indicesService, ThreadPool threadPool) {
         super(settings, threadPool, clusterService, transportService);
         this.indicesService = indicesService;
-        this.scriptService = scriptService;
 
         this.realtime = settings.getAsBoolean("action.get.realtime", true);
     }
@@ -63,12 +60,7 @@ public class TransportShardMultiGetAction extends TransportShardSingleOperationA
 
     @Override
     protected String transportAction() {
-        return "indices/mget/shard";
-    }
-
-    @Override
-    protected String transportShardAction() {
-        return "indices/mget/shard/s";
+        return TransportActions.MULTI_GET + "/shard";
     }
 
     @Override

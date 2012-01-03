@@ -25,14 +25,14 @@ import org.elasticsearch.rest.RestStatus;
 /**
  *
  */
-public class DocumentAlreadyExistsEngineException extends EngineException {
+public class DocumentSourceMissingException extends EngineException {
 
-    public DocumentAlreadyExistsEngineException(ShardId shardId, String type, String id) {
-        super(shardId, "[" + type + "][" + id + "]: document already exists");
+    public DocumentSourceMissingException(ShardId shardId, String type, String id) {
+        super(shardId, "[" + type + "][" + id + "]: document source missing");
     }
 
     @Override
     public RestStatus status() {
-        return RestStatus.CONFLICT;
+        return RestStatus.BAD_REQUEST;
     }
 }

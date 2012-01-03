@@ -58,6 +58,7 @@ import org.elasticsearch.rest.action.admin.indices.status.RestIndicesStatusActio
 import org.elasticsearch.rest.action.admin.indices.template.delete.RestDeleteIndexTemplateAction;
 import org.elasticsearch.rest.action.admin.indices.template.get.RestGetIndexTemplateAction;
 import org.elasticsearch.rest.action.admin.indices.template.put.RestPutIndexTemplateAction;
+import org.elasticsearch.rest.action.admin.indices.validate.query.RestValidateQueryAction;
 import org.elasticsearch.rest.action.bulk.RestBulkAction;
 import org.elasticsearch.rest.action.count.RestCountAction;
 import org.elasticsearch.rest.action.delete.RestDeleteAction;
@@ -70,6 +71,7 @@ import org.elasticsearch.rest.action.mlt.RestMoreLikeThisAction;
 import org.elasticsearch.rest.action.percolate.RestPercolateAction;
 import org.elasticsearch.rest.action.search.RestSearchAction;
 import org.elasticsearch.rest.action.search.RestSearchScrollAction;
+import org.elasticsearch.rest.action.update.RestUpdateAction;
 
 import java.util.List;
 
@@ -136,22 +138,20 @@ public class RestActionModule extends AbstractModule {
         bind(RestClearIndicesCacheAction.class).asEagerSingleton();
 
         bind(RestIndexAction.class).asEagerSingleton();
-
         bind(RestGetAction.class).asEagerSingleton();
         bind(RestMultiGetAction.class).asEagerSingleton();
-
         bind(RestDeleteAction.class).asEagerSingleton();
-
         bind(RestDeleteByQueryAction.class).asEagerSingleton();
-
         bind(RestCountAction.class).asEagerSingleton();
         bind(RestBulkAction.class).asEagerSingleton();
+        bind(RestUpdateAction.class).asEagerSingleton();
+        bind(RestPercolateAction.class).asEagerSingleton();
 
         bind(RestSearchAction.class).asEagerSingleton();
         bind(RestSearchScrollAction.class).asEagerSingleton();
 
-        bind(RestMoreLikeThisAction.class).asEagerSingleton();
+        bind(RestValidateQueryAction.class).asEagerSingleton();
 
-        bind(RestPercolateAction.class).asEagerSingleton();
+        bind(RestMoreLikeThisAction.class).asEagerSingleton();
     }
 }

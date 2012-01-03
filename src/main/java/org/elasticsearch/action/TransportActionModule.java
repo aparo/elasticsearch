@@ -52,6 +52,7 @@ import org.elasticsearch.action.admin.indices.stats.TransportIndicesStatsAction;
 import org.elasticsearch.action.admin.indices.status.TransportIndicesStatusAction;
 import org.elasticsearch.action.admin.indices.template.delete.TransportDeleteIndexTemplateAction;
 import org.elasticsearch.action.admin.indices.template.put.TransportPutIndexTemplateAction;
+import org.elasticsearch.action.admin.indices.validate.query.TransportValidateQueryAction;
 import org.elasticsearch.action.bulk.TransportBulkAction;
 import org.elasticsearch.action.bulk.TransportShardBulkAction;
 import org.elasticsearch.action.count.TransportCountAction;
@@ -70,6 +71,7 @@ import org.elasticsearch.action.percolate.TransportPercolateAction;
 import org.elasticsearch.action.search.TransportSearchAction;
 import org.elasticsearch.action.search.TransportSearchScrollAction;
 import org.elasticsearch.action.search.type.*;
+import org.elasticsearch.action.update.TransportUpdateAction;
 import org.elasticsearch.common.inject.AbstractModule;
 
 /**
@@ -110,6 +112,7 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportAnalyzeAction.class).asEagerSingleton();
         bind(TransportPutIndexTemplateAction.class).asEagerSingleton();
         bind(TransportDeleteIndexTemplateAction.class).asEagerSingleton();
+        bind(TransportValidateQueryAction.class).asEagerSingleton();
 
         bind(TransportGatewaySnapshotAction.class).asEagerSingleton();
 
@@ -124,6 +127,7 @@ public class TransportActionModule extends AbstractModule {
         bind(TransportIndexDeleteAction.class).asEagerSingleton();
         bind(TransportShardDeleteAction.class).asEagerSingleton();
         bind(TransportCountAction.class).asEagerSingleton();
+        bind(TransportUpdateAction.class).asEagerSingleton();
 
         bind(TransportMultiGetAction.class).asEagerSingleton();
         bind(TransportShardMultiGetAction.class).asEagerSingleton();
