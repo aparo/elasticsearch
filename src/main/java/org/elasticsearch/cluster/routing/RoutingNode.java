@@ -19,6 +19,7 @@
 
 package org.elasticsearch.cluster.routing;
 
+import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 
 import java.util.ArrayList;
@@ -31,15 +32,18 @@ import static com.google.common.collect.Lists.newArrayList;
  */
 public class RoutingNode implements Iterable<MutableShardRouting> {
 
+    private final String nodeId;
+
     private final DiscoveryNode node;
 
     private final List<MutableShardRouting> shards;
 
-    public RoutingNode(DiscoveryNode node) {
-        this(node, new ArrayList<MutableShardRouting>());
+    public RoutingNode(String nodeId, DiscoveryNode node) {
+        this(nodeId, node, new ArrayList<MutableShardRouting>());
     }
 
-    public RoutingNode(DiscoveryNode node, List<MutableShardRouting> shards) {
+    public RoutingNode(String nodeId, DiscoveryNode node, List<MutableShardRouting> shards) {
+        this.nodeId = nodeId;
         this.node = node;
         this.shards = shards;
     }
@@ -54,7 +58,7 @@ public class RoutingNode implements Iterable<MutableShardRouting> {
     }
 
     public String nodeId() {
-        return this.node.id();
+        return this.nodeId;
     }
 
     public List<MutableShardRouting> shards() {
@@ -62,6 +66,11 @@ public class RoutingNode implements Iterable<MutableShardRouting> {
     }
 
     public void add(MutableShardRouting shard) {
+        for (MutableShardRouting shardRouting : shards) {
+            if (shardRouting.shardId().equals(shard.shardId())) {
+                throw new ElasticSearchIllegalStateException("Trying to add a shard [" + shard.shardId().index().name() + "][" + shard.shardId().id() + "] to a node [" + nodeId + "] where it already exists");
+            }
+        }
         shards.add(shard);
         shard.assignToNode(node.id());
     }
@@ -140,7 +149,7 @@ public class RoutingNode implements Iterable<MutableShardRouting> {
 
     public String prettyPrint() {
         StringBuilder sb = new StringBuilder();
-        sb.append("-----node_id[").append(node.id()).append("]\n");
+        sb.append("-----node_id[").append(nodeId).append("][" + (node == null ? "X" : "V") + "]\n");
         for (MutableShardRouting entry : shards) {
             sb.append("--------").append(entry.shortSummary()).append('\n');
         }

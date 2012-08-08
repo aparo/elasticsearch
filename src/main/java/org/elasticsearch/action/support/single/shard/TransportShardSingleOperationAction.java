@@ -23,9 +23,10 @@ import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.NoShardAvailableActionException;
-import org.elasticsearch.action.support.BaseAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.ShardIterator;
@@ -43,7 +44,7 @@ import java.io.IOException;
 /**
  *
  */
-public abstract class TransportShardSingleOperationAction<Request extends SingleShardOperationRequest, Response extends ActionResponse> extends BaseAction<Request, Response> {
+public abstract class TransportShardSingleOperationAction<Request extends SingleShardOperationRequest, Response extends ActionResponse> extends TransportAction<Request, Response> {
 
     protected final ClusterService clusterService;
 
@@ -81,11 +82,15 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
 
     protected abstract Response newResponse();
 
-    protected void checkBlock(Request request, ClusterState state) {
+    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
 
+    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request);
+
+    protected void resolveRequest(ClusterState state, Request request) {
+        request.index(state.metaData().concreteIndex(request.index()));
     }
 
-    protected abstract ShardIterator shards(ClusterState clusterState, Request request) throws ElasticSearchException;
+    protected abstract ShardIterator shards(ClusterState state, Request request) throws ElasticSearchException;
 
     class AsyncSingleAction {
 
@@ -102,12 +107,16 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
             this.listener = listener;
 
             ClusterState clusterState = clusterService.state();
-
             nodes = clusterState.nodes();
-
-            request.index(clusterState.metaData().concreteIndex(request.index()));
-
-            checkBlock(request, clusterState);
+            ClusterBlockException blockException = checkGlobalBlock(clusterState, request);
+            if (blockException != null) {
+                throw blockException;
+            }
+            resolveRequest(clusterState, request);
+            blockException = checkRequestBlock(clusterState, request);
+            if (blockException != null) {
+                throw blockException;
+            }
 
             this.shardIt = shards(clusterState, request);
         }
@@ -118,7 +127,7 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
 
         private void onFailure(ShardRouting shardRouting, Exception e) {
             if (logger.isTraceEnabled() && e != null) {
-                logger.trace(shardRouting.shortSummary() + ": Failed to execute [{}]", e, request);
+                logger.trace("{}: failed to execute [{}]", e, shardRouting, request);
             }
             perform(e);
         }
@@ -131,7 +140,7 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
                     failure = new NoShardAvailableActionException(shardIt.shardId(), "No shard available for [" + request + "]");
                 } else {
                     if (logger.isDebugEnabled()) {
-                        logger.debug(shardIt.shardId() + ": Failed to execute [{}]", failure, request);
+                        logger.debug("{}: failed to execute [{}]", failure, shardIt.shardId(), request);
                     }
                 }
                 listener.onFailure(failure);
@@ -220,7 +229,7 @@ public abstract class TransportShardSingleOperationAction<Request extends Single
                     try {
                         channel.sendResponse(e);
                     } catch (Exception e1) {
-                        logger.warn("Failed to send response for get", e1);
+                        logger.warn("failed to send response for get", e1);
                     }
                 }
             });

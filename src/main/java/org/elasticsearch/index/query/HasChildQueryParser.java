@@ -52,6 +52,7 @@ public class HasChildQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         Query query = null;
+        boolean queryFound = false;
         float boost = 1.0f;
         String childType = null;
         String scope = null;
@@ -62,12 +63,19 @@ public class HasChildQueryParser implements QueryParser {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
             } else if (token == XContentParser.Token.START_OBJECT) {
-                // since we switch types, make sure we change the context
-                String[] origTypes = QueryParseContext.setTypesWithPrevious(childType == null ? null : new String[]{childType});
                 if ("query".equals(currentFieldName)) {
-                    query = parseContext.parseInnerQuery();
+                    // TODO we need to set the type, but, `query` can come before `type`... (see HasChildFilterParser)
+                    // since we switch types, make sure we change the context
+                    String[] origTypes = QueryParseContext.setTypesWithPrevious(childType == null ? null : new String[]{childType});
+                    try {
+                        query = parseContext.parseInnerQuery();
+                        queryFound = true;
+                    } finally {
+                        QueryParseContext.setTypes(origTypes);
+                    }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[has_child] query does not support [" + currentFieldName + "]");
                 }
-                QueryParseContext.setTypes(origTypes);
             } else if (token.isValue()) {
                 if ("type".equals(currentFieldName)) {
                     childType = parser.text();
@@ -75,11 +83,16 @@ public class HasChildQueryParser implements QueryParser {
                     scope = parser.text();
                 } else if ("boost".equals(currentFieldName)) {
                     boost = parser.floatValue();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[has_child] query does not support [" + currentFieldName + "]");
                 }
             }
         }
-        if (query == null) {
+        if (!queryFound) {
             throw new QueryParsingException(parseContext.index(), "[has_child] requires 'query' field");
+        }
+        if (query == null) {
+            return null;
         }
         if (childType == null) {
             throw new QueryParsingException(parseContext.index(), "[has_child] requires 'type' field");

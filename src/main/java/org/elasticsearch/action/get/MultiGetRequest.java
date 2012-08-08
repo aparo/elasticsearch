@@ -22,8 +22,10 @@ package org.elasticsearch.action.get;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.Actions;
+import org.elasticsearch.action.ValidateActions;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
@@ -186,15 +188,15 @@ public class MultiGetRequest implements ActionRequest {
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         if (items.isEmpty()) {
-            validationException = Actions.addValidationError("no documents to get", validationException);
+            validationException = ValidateActions.addValidationError("no documents to get", validationException);
         } else {
             for (int i = 0; i < items.size(); i++) {
                 Item item = items.get(i);
                 if (item.index() == null) {
-                    validationException = Actions.addValidationError("index is missing for doc " + i, validationException);
+                    validationException = ValidateActions.addValidationError("index is missing for doc " + i, validationException);
                 }
                 if (item.id() == null) {
-                    validationException = Actions.addValidationError("id is missing for doc " + i, validationException);
+                    validationException = ValidateActions.addValidationError("id is missing for doc " + i, validationException);
                 }
             }
         }
@@ -234,7 +236,11 @@ public class MultiGetRequest implements ActionRequest {
     }
 
     public void add(@Nullable String defaultIndex, @Nullable String defaultType, @Nullable String[] defaultFields, byte[] data, int from, int length) throws Exception {
-        XContentParser parser = XContentFactory.xContent(data, from, length).createParser(data, from, length);
+        add(defaultIndex, defaultType, defaultFields, new BytesArray(data, from, length));
+    }
+
+    public void add(@Nullable String defaultIndex, @Nullable String defaultType, @Nullable String[] defaultFields, BytesReference data) throws Exception {
+        XContentParser parser = XContentFactory.xContent(data).createParser(data);
         try {
             XContentParser.Token token;
             String currentFieldName = null;

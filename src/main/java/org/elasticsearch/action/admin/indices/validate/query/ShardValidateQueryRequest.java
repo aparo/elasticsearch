@@ -22,6 +22,7 @@ package org.elasticsearch.action.admin.indices.validate.query;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationRequest;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
@@ -29,16 +30,14 @@ import java.io.IOException;
 
 /**
  * Internal validate request executed directly against a specific index shard.
- *
- *
  */
 class ShardValidateQueryRequest extends BroadcastShardOperationRequest {
 
-    private byte[] querySource;
-    private int querySourceOffset;
-    private int querySourceLength;
+    private BytesReference querySource;
 
     private String[] types = Strings.EMPTY_ARRAY;
+
+    private boolean explain;
 
     @Nullable
     private String[] filteringAliases;
@@ -50,26 +49,21 @@ class ShardValidateQueryRequest extends BroadcastShardOperationRequest {
     public ShardValidateQueryRequest(String index, int shardId, @Nullable String[] filteringAliases, ValidateQueryRequest request) {
         super(index, shardId);
         this.querySource = request.querySource();
-        this.querySourceOffset = request.querySourceOffset();
-        this.querySourceLength = request.querySourceLength();
         this.types = request.types();
+        this.explain = request.explain();
         this.filteringAliases = filteringAliases;
     }
 
-    public byte[] querySource() {
+    public BytesReference querySource() {
         return querySource;
-    }
-
-    public int querySourceOffset() {
-        return querySourceOffset;
-    }
-
-    public int querySourceLength() {
-        return querySourceLength;
     }
 
     public String[] types() {
         return this.types;
+    }
+
+    public boolean explain() {
+        return this.explain;
     }
 
     public String[] filteringAliases() {
@@ -79,10 +73,8 @@ class ShardValidateQueryRequest extends BroadcastShardOperationRequest {
     @Override
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
-        querySourceLength = in.readVInt();
-        querySourceOffset = 0;
-        querySource = new byte[querySourceLength];
-        in.readFully(querySource);
+        querySource = in.readBytesReference();
+
         int typesSize = in.readVInt();
         if (typesSize > 0) {
             types = new String[typesSize];
@@ -97,13 +89,15 @@ class ShardValidateQueryRequest extends BroadcastShardOperationRequest {
                 filteringAliases[i] = in.readUTF();
             }
         }
+
+        explain = in.readBoolean();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeVInt(querySourceLength);
-        out.writeBytes(querySource, querySourceOffset, querySourceLength);
+        out.writeBytesReference(querySource);
+
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);
@@ -116,5 +110,7 @@ class ShardValidateQueryRequest extends BroadcastShardOperationRequest {
         } else {
             out.writeVInt(0);
         }
+
+        out.writeBoolean(explain);
     }
 }

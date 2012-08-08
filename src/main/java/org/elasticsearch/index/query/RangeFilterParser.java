@@ -90,6 +90,8 @@ public class RangeFilterParser implements FilterParser {
                         } else if ("lte".equals(currentFieldName) || "le".equals(currentFieldName)) {
                             to = parser.textOrNull();
                             includeUpper = true;
+                        } else {
+                            throw new QueryParsingException(parseContext.index(), "[range] filter does not support [" + currentFieldName + "]");
                         }
                     }
                 }
@@ -100,6 +102,8 @@ public class RangeFilterParser implements FilterParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[range] filter does not support [" + currentFieldName + "]");
                 }
             }
         }
@@ -112,7 +116,7 @@ public class RangeFilterParser implements FilterParser {
         MapperService.SmartNameFieldMappers smartNameFieldMappers = parseContext.smartFieldMappers(fieldName);
         if (smartNameFieldMappers != null) {
             if (smartNameFieldMappers.hasMapper()) {
-                filter = smartNameFieldMappers.mapper().rangeFilter(from, to, includeLower, includeUpper);
+                filter = smartNameFieldMappers.mapper().rangeFilter(from, to, includeLower, includeUpper, parseContext);
             }
         }
         if (filter == null) {

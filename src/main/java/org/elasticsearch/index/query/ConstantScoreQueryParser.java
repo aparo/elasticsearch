@@ -51,7 +51,9 @@ public class ConstantScoreQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         Filter filter = null;
+        boolean filterFound = false;
         Query query = null;
+        boolean queryFound = false;
         float boost = 1.0f;
         boolean cache = false;
         CacheKeyFilter.Key cacheKey = null;
@@ -64,8 +66,12 @@ public class ConstantScoreQueryParser implements QueryParser {
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if ("filter".equals(currentFieldName)) {
                     filter = parseContext.parseInnerFilter();
+                    filterFound = true;
                 } else if ("query".equals(currentFieldName)) {
                     query = parseContext.parseInnerQuery();
+                    queryFound = true;
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[constant_score] query does not support [" + currentFieldName + "]");
                 }
             } else if (token.isValue()) {
                 if ("boost".equals(currentFieldName)) {
@@ -74,11 +80,17 @@ public class ConstantScoreQueryParser implements QueryParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[constant_score] query does not support [" + currentFieldName + "]");
                 }
             }
         }
-        if (filter == null && query == null) {
+        if (!filterFound && !queryFound) {
             throw new QueryParsingException(parseContext.index(), "[constant_score] requires either 'filter' or 'query' element");
+        }
+
+        if (query == null && filter == null) {
+            return null;
         }
 
         if (filter != null) {

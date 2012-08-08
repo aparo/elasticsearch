@@ -159,7 +159,7 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
     public <T extends Streamable> void sendRequest(final DiscoveryNode node, final long requestId, final String action, final Streamable message, TransportRequestOptions options) throws IOException, TransportException {
         CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
         try {
-            HandlesStreamOutput stream = cachedEntry.cachedHandlesBytes();
+            StreamOutput stream = cachedEntry.handles();
 
             stream.writeLong(requestId);
             byte status = 0;
@@ -169,16 +169,18 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
             stream.writeUTF(action);
             message.writeTo(stream);
 
+            stream.close();
+
             final LocalTransport targetTransport = connectedNodes.get(node);
             if (targetTransport == null) {
                 throw new NodeNotConnectedException(node, "Node not connected");
             }
 
-            final byte[] data = ((BytesStreamOutput) stream.wrappedOut()).copiedByteArray();
+            final byte[] data = cachedEntry.bytes().bytes().copyBytesArray().toBytes();
 
             transportServiceAdapter.sent(data.length);
 
-            threadPool.cached().execute(new Runnable() {
+            threadPool.generic().execute(new Runnable() {
                 @Override
                 public void run() {
                     targetTransport.messageReceived(data, action, LocalTransport.this, requestId);
@@ -195,7 +197,7 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
 
     void messageReceived(byte[] data, String action, LocalTransport sourceTransport, @Nullable final Long sendRequestId) {
         transportServiceAdapter.received(data.length);
-        StreamInput stream = new BytesStreamInput(data);
+        StreamInput stream = new BytesStreamInput(data, false);
         stream = CachedStreamInput.cachedHandles(stream);
 
         try {
@@ -274,7 +276,7 @@ public class LocalTransport extends AbstractLifecycleComponent<Transport> implem
     private void handlerResponseError(StreamInput buffer, final TransportResponseHandler handler) {
         Throwable error;
         try {
-            ThrowableObjectInputStream ois = new ThrowableObjectInputStream(buffer);
+            ThrowableObjectInputStream ois = new ThrowableObjectInputStream(buffer, settings.getClassLoader());
             error = (Throwable) ois.readObject();
         } catch (Exception e) {
             error = new TransportSerializationException("Failed to deserialize exception response from stream", e);

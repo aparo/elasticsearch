@@ -91,6 +91,8 @@ public class NumericRangeFilterParser implements FilterParser {
                         } else if ("lte".equals(currentFieldName) || "le".equals(currentFieldName)) {
                             to = parser.textOrNull();
                             includeUpper = true;
+                        } else {
+                            throw new QueryParsingException(parseContext.index(), "[numeric_range] filter does not support [" + currentFieldName + "]");
                         }
                     }
                 }
@@ -101,6 +103,8 @@ public class NumericRangeFilterParser implements FilterParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[numeric_range] filter does not support [" + currentFieldName + "]");
                 }
             }
         }
@@ -115,7 +119,7 @@ public class NumericRangeFilterParser implements FilterParser {
         if (!(mapper instanceof NumberFieldMapper)) {
             throw new QueryParsingException(parseContext.index(), "Field [" + fieldName + "] is not a numeric type");
         }
-        Filter filter = ((NumberFieldMapper) mapper).rangeFilter(parseContext.indexCache().fieldData(), from, to, includeLower, includeUpper);
+        Filter filter = ((NumberFieldMapper) mapper).rangeFilter(parseContext.indexCache().fieldData(), from, to, includeLower, includeUpper, parseContext);
 
         if (cache) {
             filter = parseContext.cacheFilter(filter, cacheKey);

@@ -25,15 +25,18 @@ import org.elasticsearch.common.inject.Module;
 import org.elasticsearch.common.inject.SpawnModules;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.indices.analysis.IndicesAnalysisModule;
-import org.elasticsearch.indices.cache.filter.IndicesNodeFilterCache;
+import org.elasticsearch.indices.cache.filter.IndicesFilterCache;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.memory.IndexingMemoryController;
 import org.elasticsearch.indices.query.IndicesQueriesModule;
 import org.elasticsearch.indices.recovery.RecoverySettings;
 import org.elasticsearch.indices.recovery.RecoverySource;
 import org.elasticsearch.indices.recovery.RecoveryTarget;
+import org.elasticsearch.indices.store.IndicesStore;
 import org.elasticsearch.indices.store.TransportNodesListShardStoreMetaData;
 import org.elasticsearch.indices.ttl.IndicesTTLService;
+import org.elasticsearch.indices.warmer.IndicesWarmer;
+import org.elasticsearch.indices.warmer.InternalIndicesWarmer;
 
 /**
  *
@@ -61,10 +64,12 @@ public class IndicesModule extends AbstractModule implements SpawnModules {
         bind(RecoveryTarget.class).asEagerSingleton();
         bind(RecoverySource.class).asEagerSingleton();
 
+        bind(IndicesStore.class).asEagerSingleton();
         bind(IndicesClusterStateService.class).asEagerSingleton();
         bind(IndexingMemoryController.class).asEagerSingleton();
-        bind(IndicesNodeFilterCache.class).asEagerSingleton();
+        bind(IndicesFilterCache.class).asEagerSingleton();
         bind(TransportNodesListShardStoreMetaData.class).asEagerSingleton();
         bind(IndicesTTLService.class).asEagerSingleton();
+        bind(IndicesWarmer.class).to(InternalIndicesWarmer.class).asEagerSingleton();
     }
 }

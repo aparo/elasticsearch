@@ -6,7 +6,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.elasticsearch</groupId>
     <artifactId>elasticsearch</artifactId>
-    <version>0.19.0-SNAPSHOT</version>
+    <version>0.20.0.Beta1-SNAPSHOT</version>
     <packaging>jar</packaging>
     <description>ElasticSearch - Open Source, Distributed, RESTful Search Engine</description>
     <inceptionYear>2009</inceptionYear>
@@ -30,7 +30,7 @@
     </parent>
 
     <properties>
-        <lucene.version>3.5.0</lucene.version>
+        <lucene.version>3.6.1</lucene.version>
     </properties>
 
     <repositories>
@@ -82,16 +82,9 @@
 
         <!-- START: dependencies that are shaded -->
         <dependency>
-            <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
-            <artifactId>concurrentlinkedhashmap-lru</artifactId>
-            <version>1.2</version>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>10.0.1</version>
+            <version>13.0</version>
             <scope>compile</scope>
             <exclusions>
                 <exclusion>
@@ -104,56 +97,36 @@
         <dependency>
             <groupId>net.sf.trove4j</groupId>
             <artifactId>trove4j</artifactId>
-            <version>3.0.2</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.elasticsearch</groupId>
-            <artifactId>es-jsr166y</artifactId>
-            <version>20110918</version>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.elasticsearch</groupId>
-            <artifactId>es-jsr166e</artifactId>
-            <version>20110918</version>
-            <scope>compile</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>commons-codec</groupId>
-            <artifactId>commons-codec</artifactId>
-            <version>1.6</version>
-            <scope>compile</scope>
+            <version>3.0.3</version>
         </dependency>
 
         <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
-            <!-- joda 2.0 moved to using volatile fields for datetime, which hurts performance for facets! -->
-            <version>1.6.2</version>
+            <!-- joda 2.0 moved to using volatile fields for datetime -->
+            <!-- When updating to a new version, make sure to update our copy of BaseDateTime -->
+            <version>2.1</version>
             <scope>compile</scope>
         </dependency>
 
         <dependency>
             <groupId>org.mvel</groupId>
             <artifactId>mvel2</artifactId>
-            <version>2.1.Beta7</version>
+            <version>2.1.Beta8</version>
             <scope>compile</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
-            <version>1.9.3</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>2.0.4</version>
             <scope>compile</scope>
         </dependency>
 
         <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-smile</artifactId>
-            <version>1.9.3</version>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-smile</artifactId>
+            <version>2.0.4</version>
             <scope>compile</scope>
         </dependency>
 
@@ -165,9 +138,16 @@
         </dependency>
 
         <dependency>
-            <groupId>org.jboss.netty</groupId>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
-            <version>3.2.7.Final</version>
+            <version>3.5.3.Final</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.ning</groupId>
+            <artifactId>compress-lzf</artifactId>
+            <version>0.9.5</version>
             <scope>compile</scope>
         </dependency>
         <!-- END: dependencies that are shaded -->
@@ -197,6 +177,24 @@
         </dependency>
 
         <dependency>
+            <groupId>org.fusesource</groupId>
+            <artifactId>sigar</artifactId>
+            <version>1.6.4</version>
+            <scope>compile</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.0.4.1</version>
+            <scope>compile</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- We don't use this since the publish pom is then messed up -->
+        <!--
+        <dependency>
             <groupId>sigar</groupId>
             <artifactId>sigar</artifactId>
             <version>1.6.4</version>
@@ -204,25 +202,29 @@
             <systemPath>${basedir}/lib/sigar/sigar-1.6.4.jar</systemPath>
             <optional>true</optional>
         </dependency>
+        -->
 
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-            <version>6.3.1</version>
+            <version>6.5.2</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.hamcrest</groupId>
+                    <artifactId>hamcrest-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>junit</groupId>
+                    <artifactId>junit</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-core</artifactId>
-            <version>1.3.RC2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-library</artifactId>
-            <version>1.3.RC2</version>
+            <artifactId>hamcrest-all</artifactId>
+            <version>1.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -275,14 +277,22 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.11</version>
+                <version>2.12</version>
                 <configuration>
                     <includes>
                         <include>**/*Tests.java</include>
                     </includes>
+                    <properties>
+                        <property>
+                            <name>listener</name>
+                            <value>org.elasticsearch.test.TestNGLoggingListener</value>
+                        </property>
+                    </properties>
                     <argLine>-Xmx512m -Des.logger.prefix=</argLine>
                     <systemPropertyVariables>
-                        <es.node.local>${test.local}</es.node.local>
+                        <es.node.local>${env.ES_TEST_LOCAL}</es.node.local>
+                        <es.transport.tcp.compress>${env.ES_TEST_COMPRESS}</es.transport.tcp.compress>
+                        <es.index.store.compress.stored>${env.ES_TEST_COMPRESS}</es.index.store.compress.stored>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -315,25 +325,18 @@
                     <minimizeJar>true</minimizeJar>
                     <artifactSet>
                         <includes>
-                            <include>com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru</include>
                             <include>com.google.guava:guava</include>
                             <include>net.sf.trove4j:trove4j</include>
-                            <include>org.elasticsearch:es-jsr166y</include>
-                            <include>org.elasticsearch:es-jsr166e</include>
-                            <include>commons-codec:commons-codec</include>
                             <include>org.mvel:mvel2</include>
-                            <include>org.codehaus.jackson:jackson-core-asl</include>
-                            <include>org.codehaus.jackson:jackson-smile</include>
+                            <include>com.fasterxml.jackson.core:jackson-core</include>
+                            <include>com.fasterxml.jackson.dataformat:jackson-dataformat-smile</include>
                             <include>org.yaml:snakeyaml</include>
                             <include>joda-time:joda-time</include>
-                            <include>org.jboss.netty:netty</include>
+                            <include>io.netty:netty</include>
+                            <include>com.ning:compress-lzf</include>
                         </includes>
                     </artifactSet>
                     <relocations>
-                        <relocation>
-                            <pattern>com.googlecode.concurrentlinkedhashmap</pattern>
-                            <shadedPattern>org.elasticsearch.common.concurrentlinkedhashmap</shadedPattern>
-                        </relocation>
                         <relocation>
                             <pattern>com.google.common</pattern>
                             <shadedPattern>org.elasticsearch.common</shadedPattern>
@@ -351,15 +354,11 @@
                             <shadedPattern>org.elasticsearch.common.util.concurrent.jsr166e</shadedPattern>
                         </relocation>
                         <relocation>
-                            <pattern>org.apache.commons.codec</pattern>
-                            <shadedPattern>org.elasticsearch.common.codec</shadedPattern>
-                        </relocation>
-                        <relocation>
                             <pattern>org.mvel2</pattern>
                             <shadedPattern>org.elasticsearch.common.mvel2</shadedPattern>
                         </relocation>
                         <relocation>
-                            <pattern>org.codehaus.jackson</pattern>
+                            <pattern>com.fasterxml.jackson</pattern>
                             <shadedPattern>org.elasticsearch.common.jackson</shadedPattern>
                         </relocation>
                         <relocation>
@@ -373,6 +372,10 @@
                         <relocation>
                             <pattern>org.jboss.netty</pattern>
                             <shadedPattern>org.elasticsearch.common.netty</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>com.ning.compress</pattern>
+                            <shadedPattern>org.elasticsearch.common.compress</shadedPattern>
                         </relocation>
                     </relocations>
                     <filters>
@@ -390,8 +393,32 @@
                 </configuration>
             </plugin>
             <plugin>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>2.5</version>
+                <executions>
+                    <execution>
+                        <id>copy-resources</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/bin</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${basedir}/bin</directory>
+                                    <filtering>true</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
+                <version>2.3</version>
                 <configuration>
+                    <appendAssemblyId>false</appendAssemblyId>
                     <outputDirectory>${project.build.directory}/releases/</outputDirectory>
                     <descriptors>
                         <descriptor>${basedir}/src/main/assemblies/targz-bin.xml</descriptor>
@@ -422,11 +449,11 @@
                 </executions>
             </plugin>
             <plugin>
-                <!-- some infos https://github.com/tcurdt/jdeb/blob/master/docs/maven.md 
+                <!-- some infos https://github.com/tcurdt/jdeb/blob/master/docs/maven.md
                 -->
                 <artifactId>jdeb</artifactId>
                 <groupId>org.vafer</groupId>
-                <version>0.8</version>
+                <version>0.9</version>
                 <configuration>
                     <deb>${project.build.directory}/releases/${project.artifactId}-${project.version}.deb</deb>
                 </configuration>
@@ -450,9 +477,10 @@
                                     </mapper>
                                 </data>
                                 <data>
-                                    <src>${project.basedir}/bin</src>
+                                    <!-- use the filtered one from the resources plugin -->
+                                    <src>${project.build.directory}/bin</src>
                                     <type>directory</type>
-                                    <excludes>*.bat</excludes>
+                                    <excludes>*.bat, .DS_Store</excludes>
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/usr/share/elasticsearch/bin</prefix>
@@ -485,7 +513,7 @@
                                 </data>
                                 <data>
                                     <src>${project.build.directory}/lib</src>
-                                    <includes>lucene*, log4j*, jna*</includes>
+                                    <includes>lucene*, log4j*, jna*, snappy-java-*</includes>
                                     <type>directory</type>
                                     <mapper>
                                         <type>perm</type>
@@ -497,6 +525,7 @@
                                 <data>
                                     <src>${project.basedir}/src/deb/default/</src>
                                     <type>directory</type>
+                                    <excludes>.DS_Store</excludes>
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/etc/default</prefix>
@@ -507,6 +536,7 @@
                                 <data>
                                     <src>${project.basedir}/src/deb/init.d/</src>
                                     <type>directory</type>
+                                    <excludes>.DS_Store</excludes>
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/etc/init.d</prefix>
@@ -518,6 +548,7 @@
                                 <data>
                                     <src>${project.basedir}/config</src>
                                     <type>directory</type>
+                                    <excludes>.DS_Store</excludes>
                                     <mapper>
                                         <type>perm</type>
                                         <prefix>/etc/elasticsearch</prefix>

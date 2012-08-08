@@ -23,8 +23,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.cluster.metadata.MetaDataStateIndexService;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.rest.RestStatus;
 
 import java.io.IOException;
 import java.util.Map;
@@ -32,8 +35,6 @@ import java.util.Set;
 
 /**
  * Represents current cluster level blocks to block dirty operations done against the cluster.
- *
- *
  */
 public class ClusterBlocks {
 
@@ -107,8 +108,34 @@ public class ClusterBlocks {
         return global.contains(block);
     }
 
+    /**
+     * Is there a global block with the provided status?
+     */
+    public boolean hasGlobalBlock(RestStatus status) {
+        for (ClusterBlock clusterBlock : global) {
+            if (clusterBlock.status().equals(status)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public boolean hasIndexBlock(String index, ClusterBlock block) {
         return indicesBlocks.containsKey(index) && indicesBlocks.get(index).contains(block);
+    }
+
+    public void globalBlockedRaiseException(ClusterBlockLevel level) throws ClusterBlockException {
+        ClusterBlockException blockException = globalBlockedException(level);
+        if (blockException != null) {
+            throw blockException;
+        }
+    }
+
+    public ClusterBlockException globalBlockedException(ClusterBlockLevel level) {
+        if (global(level).isEmpty()) {
+            return null;
+        }
+        return new ClusterBlockException(ImmutableSet.copyOf(global(level)));
     }
 
     public void indexBlockedRaiseException(ClusterBlockLevel level, String index) throws ClusterBlockException {
@@ -204,6 +231,25 @@ public class ClusterBlocks {
                     indices.put(entry.getKey(), Sets.<ClusterBlock>newHashSet());
                 }
                 indices.get(entry.getKey()).addAll(entry.getValue());
+            }
+            return this;
+        }
+
+        public Builder addBlocks(IndexMetaData indexMetaData) {
+            if (indexMetaData.state() == IndexMetaData.State.CLOSE) {
+                addIndexBlock(indexMetaData.index(), MetaDataStateIndexService.INDEX_CLOSED_BLOCK);
+            }
+            if (indexMetaData.settings().getAsBoolean(IndexMetaData.SETTING_READ_ONLY, false)) {
+                addIndexBlock(indexMetaData.index(), IndexMetaData.INDEX_READ_ONLY_BLOCK);
+            }
+            if (indexMetaData.settings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_READ, false)) {
+                addIndexBlock(indexMetaData.index(), IndexMetaData.INDEX_READ_BLOCK);
+            }
+            if (indexMetaData.settings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_WRITE, false)) {
+                addIndexBlock(indexMetaData.index(), IndexMetaData.INDEX_WRITE_BLOCK);
+            }
+            if (indexMetaData.settings().getAsBoolean(IndexMetaData.SETTING_BLOCKS_METADATA, false)) {
+                addIndexBlock(indexMetaData.index(), IndexMetaData.INDEX_METADATA_BLOCK);
             }
             return this;
         }

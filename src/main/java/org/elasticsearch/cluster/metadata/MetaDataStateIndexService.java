@@ -25,7 +25,6 @@ import org.elasticsearch.cluster.ProcessedClusterStateUpdateTask;
 import org.elasticsearch.cluster.block.ClusterBlock;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.block.ClusterBlocks;
-import org.elasticsearch.cluster.routing.IndexRoutingTable;
 import org.elasticsearch.cluster.routing.RoutingTable;
 import org.elasticsearch.cluster.routing.allocation.AllocationService;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
@@ -35,6 +34,7 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.indices.IndexMissingException;
+import org.elasticsearch.rest.RestStatus;
 
 import static org.elasticsearch.cluster.ClusterState.newClusterStateBuilder;
 
@@ -43,7 +43,7 @@ import static org.elasticsearch.cluster.ClusterState.newClusterStateBuilder;
  */
 public class MetaDataStateIndexService extends AbstractComponent {
 
-    public static final ClusterBlock INDEX_CLOSED_BLOCK = new ClusterBlock(4, "index closed", false, false, ClusterBlockLevel.READ_WRITE);
+    public static final ClusterBlock INDEX_CLOSED_BLOCK = new ClusterBlock(4, "index closed", false, false, RestStatus.FORBIDDEN, ClusterBlockLevel.READ_WRITE);
 
     private final ClusterService clusterService;
 
@@ -126,10 +126,8 @@ public class MetaDataStateIndexService extends AbstractComponent {
 
                 ClusterState updatedState = ClusterState.builder().state(currentState).metaData(mdBuilder).blocks(blocks).build();
 
-                RoutingTable.Builder rtBuilder = RoutingTable.builder().routingTable(updatedState.routingTable());
-                IndexRoutingTable.Builder indexRoutingBuilder = new IndexRoutingTable.Builder(request.index)
-                        .initializeEmpty(updatedState.metaData().index(request.index), false);
-                rtBuilder.add(indexRoutingBuilder);
+                RoutingTable.Builder rtBuilder = RoutingTable.builder().routingTable(updatedState.routingTable())
+                        .add(updatedState.metaData().index(request.index), false);
 
                 RoutingAllocation.Result routingResult = allocationService.reroute(newClusterStateBuilder().state(updatedState).routingTable(rtBuilder).build());
 

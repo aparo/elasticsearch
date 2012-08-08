@@ -19,11 +19,11 @@
 
 package org.elasticsearch.action.bulk;
 
+import com.google.common.collect.Sets;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.RoutingMissingException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.index.IndexRequest;
@@ -33,10 +33,12 @@ import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.engine.Engine;
@@ -54,6 +56,8 @@ import org.elasticsearch.transport.TransportRequestOptions;
 import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Performs the index operation.
@@ -72,7 +76,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
     @Override
     protected String executor() {
-        return ThreadPool.Names.INDEX;
+        return ThreadPool.Names.BULK;
     }
 
     @Override
@@ -82,8 +86,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
     @Override
     protected TransportRequestOptions transportOptions() {
-        // low type since we don't want the large bulk requests to cause high latency on typical requests
-        return TransportRequestOptions.options().withCompress(true).withLowType();
+        return BulkAction.INSTANCE.transportOptions(settings);
     }
 
     @Override
@@ -103,12 +106,17 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
     @Override
     protected String transportAction() {
-        return TransportActions.BULK + "/shard";
+        return BulkAction.NAME + "/shard";
     }
 
     @Override
-    protected void checkBlock(BulkShardRequest request, ClusterState state) {
-        state.blocks().indexBlockedRaiseException(ClusterBlockLevel.WRITE, request.index());
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, BulkShardRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, BulkShardRequest request) {
+        return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.index());
     }
 
     @Override
@@ -123,6 +131,8 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
         Engine.IndexingOperation[] ops = null;
 
+        Set<Tuple<String, String>> mappingsToUpdate = null;
+
         BulkItemResponse[] responses = new BulkItemResponse[request.items().length];
         for (int i = 0; i < request.items().length; i++) {
             BulkItemRequest item = request.items()[i];
@@ -131,14 +141,14 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                 try {
 
                     // validate, if routing is required, that we got routing
-                    MappingMetaData mappingMd = clusterState.metaData().index(request.index()).mapping(indexRequest.type());
+                    MappingMetaData mappingMd = clusterState.metaData().index(request.index()).mappingOrDefault(indexRequest.type());
                     if (mappingMd != null && mappingMd.routing().required()) {
                         if (indexRequest.routing() == null) {
                             throw new RoutingMissingException(indexRequest.index(), indexRequest.type(), indexRequest.id());
                         }
                     }
 
-                    SourceToParse sourceToParse = SourceToParse.source(indexRequest.underlyingSource(), indexRequest.underlyingSourceOffset(), indexRequest.underlyingSourceLength()).type(indexRequest.type()).id(indexRequest.id())
+                    SourceToParse sourceToParse = SourceToParse.source(indexRequest.source()).type(indexRequest.type()).id(indexRequest.id())
                             .routing(indexRequest.routing()).parent(indexRequest.parent()).timestamp(indexRequest.timestamp()).ttl(indexRequest.ttl());
 
                     long version;
@@ -159,7 +169,10 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
 
                     // update mapping on master if needed, we won't update changes to the same type, since once its changed, it won't have mappers added
                     if (op.parsedDoc().mappersAdded()) {
-                        updateMappingOnMaster(indexRequest);
+                        if (mappingsToUpdate == null) {
+                            mappingsToUpdate = Sets.newHashSet();
+                        }
+                        mappingsToUpdate.add(Tuple.tuple(indexRequest.index(), indexRequest.type()));
                     }
 
                     // if we are going to percolate, then we need to keep this op for the postPrimary operation
@@ -171,7 +184,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                     }
 
                     // add the response
-                    responses[i] = new BulkItemResponse(item.id(), indexRequest.opType().toString().toLowerCase(),
+                    responses[i] = new BulkItemResponse(item.id(), indexRequest.opType().toString().toLowerCase(Locale.ENGLISH),
                             new IndexResponse(indexRequest.index(), indexRequest.type(), indexRequest.id(), version));
                 } catch (Exception e) {
                     // rethrow the failure if we are going to retry on primary and let parent failure to handle it
@@ -179,11 +192,11 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                         throw (ElasticSearchException) e;
                     }
                     if (e instanceof ElasticSearchException && ((ElasticSearchException) e).status() == RestStatus.CONFLICT) {
-                        logger.trace("[{}][{}] failed to bulk item (index) {}", e, shardRequest.request.index(), shardRequest.shardId, indexRequest);
+                        logger.trace("[{}][{}] failed to execute bulk item (index) {}", e, shardRequest.request.index(), shardRequest.shardId, indexRequest);
                     } else {
-                        logger.debug("[{}][{}] failed to bulk item (index) {}", e, shardRequest.request.index(), shardRequest.shardId, indexRequest);
+                        logger.debug("[{}][{}] failed to execute bulk item (index) {}", e, shardRequest.request.index(), shardRequest.shardId, indexRequest);
                     }
-                    responses[i] = new BulkItemResponse(item.id(), indexRequest.opType().toString().toLowerCase(),
+                    responses[i] = new BulkItemResponse(item.id(), indexRequest.opType().toString().toLowerCase(Locale.ENGLISH),
                             new BulkItemResponse.Failure(indexRequest.index(), indexRequest.type(), indexRequest.id(), ExceptionsHelper.detailedMessage(e)));
                     // nullify the request so it won't execute on the replicas
                     request.items()[i] = null;
@@ -205,15 +218,21 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                         throw (ElasticSearchException) e;
                     }
                     if (e instanceof ElasticSearchException && ((ElasticSearchException) e).status() == RestStatus.CONFLICT) {
-                        logger.trace("[{}][{}] failed to bulk item (delete) {}", e, shardRequest.request.index(), shardRequest.shardId, deleteRequest);
+                        logger.trace("[{}][{}] failed to execute bulk item (delete) {}", e, shardRequest.request.index(), shardRequest.shardId, deleteRequest);
                     } else {
-                        logger.debug("[{}][{}] failed to bulk item (delete) {}", e, shardRequest.request.index(), shardRequest.shardId, deleteRequest);
+                        logger.debug("[{}][{}] failed to execute bulk item (delete) {}", e, shardRequest.request.index(), shardRequest.shardId, deleteRequest);
                     }
                     responses[i] = new BulkItemResponse(item.id(), "delete",
                             new BulkItemResponse.Failure(deleteRequest.index(), deleteRequest.type(), deleteRequest.id(), ExceptionsHelper.detailedMessage(e)));
                     // nullify the request so it won't execute on the replicas
                     request.items()[i] = null;
                 }
+            }
+        }
+
+        if (mappingsToUpdate != null) {
+            for (Tuple<String, String> mappingToUpdate : mappingsToUpdate) {
+                updateMappingOnMaster(mappingToUpdate.v1(), mappingToUpdate.v2());
             }
         }
 
@@ -273,7 +292,7 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
             if (item.request() instanceof IndexRequest) {
                 IndexRequest indexRequest = (IndexRequest) item.request();
                 try {
-                    SourceToParse sourceToParse = SourceToParse.source(indexRequest.underlyingSource(), indexRequest.underlyingSourceOffset(), indexRequest.underlyingSourceLength()).type(indexRequest.type()).id(indexRequest.id())
+                    SourceToParse sourceToParse = SourceToParse.source(indexRequest.source()).type(indexRequest.type()).id(indexRequest.id())
                             .routing(indexRequest.routing()).parent(indexRequest.parent()).timestamp(indexRequest.timestamp()).ttl(indexRequest.ttl());
 
                     if (indexRequest.opType() == IndexRequest.OpType.INDEX) {
@@ -306,16 +325,16 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
         }
     }
 
-    private void updateMappingOnMaster(final IndexRequest request) {
+    private void updateMappingOnMaster(final String index, final String type) {
         try {
-            MapperService mapperService = indicesService.indexServiceSafe(request.index()).mapperService();
-            final DocumentMapper documentMapper = mapperService.documentMapper(request.type());
+            MapperService mapperService = indicesService.indexServiceSafe(index).mapperService();
+            final DocumentMapper documentMapper = mapperService.documentMapper(type);
             if (documentMapper == null) { // should not happen
                 return;
             }
             documentMapper.refreshSource();
 
-            mappingUpdatedAction.execute(new MappingUpdatedAction.MappingUpdatedRequest(request.index(), request.type(), documentMapper.mappingSource()), new ActionListener<MappingUpdatedAction.MappingUpdatedResponse>() {
+            mappingUpdatedAction.execute(new MappingUpdatedAction.MappingUpdatedRequest(index, type, documentMapper.mappingSource()), new ActionListener<MappingUpdatedAction.MappingUpdatedResponse>() {
                 @Override
                 public void onResponse(MappingUpdatedAction.MappingUpdatedResponse mappingUpdatedResponse) {
                     // all is well
@@ -324,14 +343,14 @@ public class TransportShardBulkAction extends TransportShardReplicationOperation
                 @Override
                 public void onFailure(Throwable e) {
                     try {
-                        logger.warn("Failed to update master on updated mapping for index [" + request.index() + "], type [" + request.type() + "] and source [" + documentMapper.mappingSource().string() + "]", e);
+                        logger.warn("failed to update master on updated mapping for index [{}], type [{}] and source [{}]", e, index, type, documentMapper.mappingSource().string());
                     } catch (IOException e1) {
                         // ignore
                     }
                 }
             });
         } catch (Exception e) {
-            logger.warn("Failed to update master on updated mapping for index [" + request.index() + "], type [" + request.type() + "]", e);
+            logger.warn("failed to update master on updated mapping for index [{}], type [{}]", e, index, type);
         }
     }
 }

@@ -75,7 +75,8 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
         @Override
         public FloatFieldMapper build(BuilderContext context) {
             FloatFieldMapper fieldMapper = new FloatFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue);
+                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
+                    ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -103,9 +104,9 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
 
     protected FloatFieldMapper(Names names, int precisionStep, String fuzzyFactor, Field.Index index, Field.Store store,
                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                               Float nullValue) {
+                               Float nullValue, boolean ignoreMalformed) {
         super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
+                ignoreMalformed, new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
                 new NamedAnalyzer("_float/max", new NumericFloatAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -163,7 +164,7 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeQuery.newFloatRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
@@ -178,7 +179,7 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFilter.newFloatRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
@@ -186,11 +187,22 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     }
 
     @Override
-    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFieldDataFilter.newFloatRange(fieldDataCache, names.indexName(),
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return NumericRangeFilter.newFloatRange(names.indexName(), precisionStep,
+                nullValue,
+                nullValue,
+                true, true);
     }
 
     @Override
@@ -199,7 +211,7 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
         float value;
         float boost = this.boost;
         if (context.externalValueSet()) {

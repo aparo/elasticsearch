@@ -22,6 +22,7 @@ package org.elasticsearch.index.shard.service;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineException;
 import org.elasticsearch.index.flush.FlushStats;
@@ -39,6 +40,8 @@ import org.elasticsearch.index.shard.DocsStats;
 import org.elasticsearch.index.shard.IndexShardComponent;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.store.StoreStats;
+import org.elasticsearch.index.warmer.ShardIndexWarmerService;
+import org.elasticsearch.index.warmer.WarmerStats;
 
 /**
  *
@@ -50,6 +53,8 @@ public interface IndexShard extends IndexShardComponent {
     ShardGetService getService();
 
     ShardSearchService searchService();
+
+    ShardIndexWarmerService warmerService();
 
     ShardRouting routingEntry();
 
@@ -69,6 +74,8 @@ public interface IndexShard extends IndexShardComponent {
 
     FlushStats flushStats();
 
+    WarmerStats warmerStats();
+
     IndexShardState state();
 
     Engine.Create prepareCreate(SourceToParse source) throws ElasticSearchException;
@@ -83,15 +90,13 @@ public interface IndexShard extends IndexShardComponent {
 
     void delete(Engine.Delete delete) throws ElasticSearchException;
 
-    Engine.DeleteByQuery prepareDeleteByQuery(byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
+    Engine.DeleteByQuery prepareDeleteByQuery(BytesReference querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
 
     void deleteByQuery(Engine.DeleteByQuery deleteByQuery) throws ElasticSearchException;
 
     Engine.GetResult get(Engine.Get get) throws ElasticSearchException;
 
-    long count(float minScore, byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
-
-    long count(float minScore, byte[] querySource, int querySourceOffset, int querySourceLength, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
+    long count(float minScore, BytesReference querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException;
 
     void refresh(Engine.Refresh refresh) throws ElasticSearchException;
 

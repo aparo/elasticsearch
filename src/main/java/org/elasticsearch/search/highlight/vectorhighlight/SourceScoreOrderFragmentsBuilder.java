@@ -21,7 +21,8 @@ package org.elasticsearch.search.highlight.vectorhighlight;
 
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.vectorhighlight.ScoreOrderFragmentsBuilder;
+import org.apache.lucene.search.vectorhighlight.BoundaryScanner;
+import org.apache.lucene.search.vectorhighlight.XScoreOrderFragmentsBuilder;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.lookup.SearchLookup;
@@ -32,15 +33,15 @@ import java.util.List;
 /**
  *
  */
-public class SourceScoreOrderFragmentsBuilder extends ScoreOrderFragmentsBuilder {
+public class SourceScoreOrderFragmentsBuilder extends XScoreOrderFragmentsBuilder {
 
     private final FieldMapper mapper;
 
     private final SearchContext searchContext;
 
     public SourceScoreOrderFragmentsBuilder(FieldMapper mapper, SearchContext searchContext,
-                                            String[] preTags, String[] postTags) {
-        super(preTags, postTags);
+                                            String[] preTags, String[] postTags, BoundaryScanner boundaryScanner) {
+        super(preTags, postTags, boundaryScanner);
         this.mapper = mapper;
         this.searchContext = searchContext;
     }

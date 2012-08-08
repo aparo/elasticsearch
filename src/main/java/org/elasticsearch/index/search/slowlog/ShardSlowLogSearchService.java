@@ -73,7 +73,7 @@ public class ShardSlowLogSearchService extends AbstractIndexShardComponent {
 
     class ApplySettings implements IndexSettingsService.Listener {
         @Override
-        public void onRefreshSettings(Settings settings) {
+        public synchronized void onRefreshSettings(Settings settings) {
             long queryWarnThreshold = settings.getAsTime("index.search.slowlog.threshold.query.warn", TimeValue.timeValueNanos(ShardSlowLogSearchService.this.queryWarnThreshold)).nanos();
             if (queryWarnThreshold != ShardSlowLogSearchService.this.queryWarnThreshold) {
                 ShardSlowLogSearchService.this.queryWarnThreshold = queryWarnThreshold;
@@ -189,18 +189,18 @@ public class ShardSlowLogSearchService extends AbstractIndexShardComponent {
             StringBuilder sb = new StringBuilder();
             sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");
             sb.append("search_type[").append(context.searchType()).append("], total_shards[").append(context.numberOfShards()).append("], ");
-            if (context.request().sourceLength() > 0) {
+            if (context.request().source() != null && context.request().source().length() > 0) {
                 try {
-                    sb.append("source[").append(XContentHelper.convertToJson(context.request().source(), context.request().sourceOffset(), context.request().sourceLength(), reformat));
+                    sb.append("source[").append(XContentHelper.convertToJson(context.request().source(), reformat)).append("], ");
                 } catch (IOException e) {
                     sb.append("source[_failed_to_convert_], ");
                 }
             } else {
                 sb.append("source[], ");
             }
-            if (context.request().extraSourceLength() > 0) {
+            if (context.request().extraSource() != null && context.request().extraSource().length() > 0) {
                 try {
-                    sb.append("extra_source[").append(XContentHelper.convertToJson(context.request().extraSource(), context.request().extraSourceOffset(), context.request().extraSourceLength(), reformat));
+                    sb.append("extra_source[").append(XContentHelper.convertToJson(context.request().extraSource(), reformat)).append("], ");
                 } catch (IOException e) {
                     sb.append("extra_source[_failed_to_convert_], ");
                 }

@@ -19,11 +19,15 @@
 
 package org.elasticsearch.action.update;
 
+import com.google.common.collect.ImmutableList;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.index.get.GetResult;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  */
@@ -36,6 +40,10 @@ public class UpdateResponse implements ActionResponse {
     private String type;
 
     private long version;
+
+    private List<String> matches;
+
+    private GetResult getResult;
 
     public UpdateResponse() {
 
@@ -104,12 +112,69 @@ public class UpdateResponse implements ActionResponse {
         return version();
     }
 
+    /**
+     * Returns the percolate queries matches. <tt>null</tt> if no percolation was requested.
+     */
+    public List<String> matches() {
+        return this.matches;
+    }
+
+    /**
+     * Returns the percolate queries matches. <tt>null</tt> if no percolation was requested.
+     */
+    public List<String> getMatches() {
+        return this.matches;
+    }
+
+    void getResult(GetResult getResult) {
+        this.getResult = getResult;
+    }
+
+    public GetResult getResult() {
+        return this.getResult;
+    }
+
+    public GetResult getGetResult() {
+        return this.getResult;
+    }
+
+    /**
+     * Internal.
+     */
+    public void matches(List<String> matches) {
+        this.matches = matches;
+    }
+
     @Override
     public void readFrom(StreamInput in) throws IOException {
         index = in.readUTF();
         id = in.readUTF();
         type = in.readUTF();
         version = in.readLong();
+        if (in.readBoolean()) {
+            int size = in.readVInt();
+            if (size == 0) {
+                matches = ImmutableList.of();
+            } else if (size == 1) {
+                matches = ImmutableList.of(in.readUTF());
+            } else if (size == 2) {
+                matches = ImmutableList.of(in.readUTF(), in.readUTF());
+            } else if (size == 3) {
+                matches = ImmutableList.of(in.readUTF(), in.readUTF(), in.readUTF());
+            } else if (size == 4) {
+                matches = ImmutableList.of(in.readUTF(), in.readUTF(), in.readUTF(), in.readUTF());
+            } else if (size == 5) {
+                matches = ImmutableList.of(in.readUTF(), in.readUTF(), in.readUTF(), in.readUTF(), in.readUTF());
+            } else {
+                matches = new ArrayList<String>();
+                for (int i = 0; i < size; i++) {
+                    matches.add(in.readUTF());
+                }
+            }
+        }
+        if (in.readBoolean()) {
+            getResult = GetResult.readGetResult(in);
+        }
     }
 
     @Override
@@ -118,5 +183,20 @@ public class UpdateResponse implements ActionResponse {
         out.writeUTF(id);
         out.writeUTF(type);
         out.writeLong(version);
+        if (matches == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeVInt(matches.size());
+            for (String match : matches) {
+                out.writeUTF(match);
+            }
+        }
+        if (getResult == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            getResult.writeTo(out);
+        }
     }
 }

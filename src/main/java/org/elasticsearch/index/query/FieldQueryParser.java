@@ -28,6 +28,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.query.support.QueryParsers;
 
 import java.io.IOException;
@@ -61,7 +62,9 @@ public class FieldQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         XContentParser.Token token = parser.nextToken();
-        assert token == XContentParser.Token.FIELD_NAME;
+        if (token != XContentParser.Token.FIELD_NAME) {
+            throw new QueryParsingException(parseContext.index(), "[field] query malformed, no field");
+        }
         String fieldName = parser.currentName();
 
         QueryParserSettings qpSettings = new QueryParserSettings();
@@ -91,7 +94,17 @@ public class FieldQueryParser implements QueryParser {
                     } else if ("phrase_slop".equals(currentFieldName) || "phraseSlop".equals(currentFieldName)) {
                         qpSettings.phraseSlop(parser.intValue());
                     } else if ("analyzer".equals(currentFieldName)) {
-                        qpSettings.forcedAnalyzer(parseContext.analysisService().analyzer(parser.text()));
+                        NamedAnalyzer analyzer = parseContext.analysisService().analyzer(parser.text());
+                        if (analyzer == null) {
+                            throw new QueryParsingException(parseContext.index(), "[query_string] analyzer [" + parser.text() + "] not found");
+                        }
+                        qpSettings.forcedAnalyzer(analyzer);
+                    } else if ("quote_analyzer".equals(currentFieldName) || "quoteAnalyzer".equals(currentFieldName)) {
+                        NamedAnalyzer analyzer = parseContext.analysisService().analyzer(parser.text());
+                        if (analyzer == null) {
+                            throw new QueryParsingException(parseContext.index(), "[query_string] analyzer [" + parser.text() + "] not found");
+                        }
+                        qpSettings.forcedQuoteAnalyzer(analyzer);
                     } else if ("default_operator".equals(currentFieldName) || "defaultOperator".equals(currentFieldName)) {
                         String op = parser.text();
                         if ("or".equalsIgnoreCase(op)) {
@@ -105,6 +118,10 @@ public class FieldQueryParser implements QueryParser {
                         qpSettings.fuzzyMinSim(parser.floatValue());
                     } else if ("fuzzy_prefix_length".equals(currentFieldName) || "fuzzyPrefixLength".equals(currentFieldName)) {
                         qpSettings.fuzzyPrefixLength(parser.intValue());
+                    } else if ("fuzzy_max_expansions".equals(currentFieldName) || "fuzzyMaxExpansions".equals(currentFieldName)) {
+                        qpSettings.fuzzyMaxExpansions(parser.intValue());
+                    } else if ("fuzzy_rewrite".equals(currentFieldName) || "fuzzyRewrite".equals(currentFieldName)) {
+                        qpSettings.fuzzyRewriteMethod(QueryParsers.parseRewriteMethod(parser.textOrNull()));
                     } else if ("escape".equals(currentFieldName)) {
                         qpSettings.escape(parser.booleanValue());
                     } else if ("analyze_wildcard".equals(currentFieldName) || "analyzeWildcard".equals(currentFieldName)) {
@@ -113,6 +130,10 @@ public class FieldQueryParser implements QueryParser {
                         qpSettings.rewriteMethod(QueryParsers.parseRewriteMethod(parser.textOrNull()));
                     } else if ("minimum_should_match".equals(currentFieldName) || "minimumShouldMatch".equals(currentFieldName)) {
                         qpSettings.minimumShouldMatch(parser.textOrNull());
+                    } else if ("quote_field_suffix".equals(currentFieldName) || "quoteFieldSuffix".equals(currentFieldName)) {
+                        qpSettings.quoteFieldSuffix(parser.textOrNull());
+                    } else {
+                        throw new QueryParsingException(parseContext.index(), "[field] query does not support [" + currentFieldName + "]");
                     }
                 }
             }
@@ -124,6 +145,7 @@ public class FieldQueryParser implements QueryParser {
         }
 
         qpSettings.defaultAnalyzer(parseContext.mapperService().searchAnalyzer());
+        qpSettings.defaultQuoteAnalyzer(parseContext.mapperService().searchQuoteAnalyzer());
 
         if (qpSettings.queryString() == null) {
             throw new QueryParsingException(parseContext.index(), "No value specified for term query");
@@ -133,12 +155,14 @@ public class FieldQueryParser implements QueryParser {
             qpSettings.queryString(org.apache.lucene.queryParser.QueryParser.escape(qpSettings.queryString()));
         }
 
+        qpSettings.queryTypes(parseContext.queryTypes());
+
         Query query = parseContext.indexCache().queryParserCache().get(qpSettings);
         if (query != null) {
             return query;
         }
 
-        MapperQueryParser queryParser = parseContext.singleQueryParser(qpSettings);
+        MapperQueryParser queryParser = parseContext.queryParser(qpSettings);
 
         try {
             query = queryParser.parse(qpSettings.queryString());

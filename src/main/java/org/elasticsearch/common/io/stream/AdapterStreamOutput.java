@@ -19,6 +19,10 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.text.Text;
+
 import java.io.IOException;
 
 /**
@@ -31,12 +35,27 @@ public class AdapterStreamOutput extends StreamOutput {
         this.out = out;
     }
 
-    public void reset(StreamOutput out) throws IOException {
+    public void setOut(StreamOutput out) {
         this.out = out;
     }
 
     public StreamOutput wrappedOut() {
         return this.out;
+    }
+
+    @Override
+    public boolean seekPositionSupported() {
+        return out.seekPositionSupported();
+    }
+
+    @Override
+    public long position() throws IOException {
+        return out.position();
+    }
+
+    @Override
+    public void seek(long position) throws IOException {
+        out.seek(position);
     }
 
     @Override
@@ -75,6 +94,11 @@ public class AdapterStreamOutput extends StreamOutput {
     }
 
     @Override
+    public void writeBytesReference(@Nullable BytesReference bytes) throws IOException {
+        out.writeBytesReference(bytes);
+    }
+
+    @Override
     public void writeInt(int i) throws IOException {
         out.writeInt(i);
     }
@@ -97,6 +121,16 @@ public class AdapterStreamOutput extends StreamOutput {
     @Override
     public void writeUTF(String str) throws IOException {
         out.writeUTF(str);
+    }
+
+    @Override
+    public void writeString(String str) throws IOException {
+        out.writeString(str);
+    }
+
+    @Override
+    public void writeText(Text text) throws IOException {
+        out.writeText(text);
     }
 
     @Override

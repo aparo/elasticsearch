@@ -28,12 +28,24 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.FileSystemUtils;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.SizeValue;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.util.concurrent.EsAbortPolicy;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
+import org.elasticsearch.common.util.concurrent.EsThreadPoolExecutor;
+import org.elasticsearch.common.util.concurrent.XRejectedExecutionHandler;
+import org.elasticsearch.common.xcontent.ToXContent;
+import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -48,16 +60,21 @@ public class ThreadPool extends AbstractComponent {
 
     public static class Names {
         public static final String SAME = "same";
-        public static final String CACHED = "cached";
+        public static final String GENERIC = "generic";
+        public static final String GET = "get";
         public static final String INDEX = "index";
+        public static final String BULK = "bulk";
         public static final String SEARCH = "search";
         public static final String PERCOLATE = "percolate";
         public static final String MANAGEMENT = "management";
+        public static final String FLUSH = "flush";
         public static final String MERGE = "merge";
+        public static final String CACHE = "cache";
+        public static final String REFRESH = "refresh";
         public static final String SNAPSHOT = "snapshot";
     }
 
-    private final ImmutableMap<String, Executor> executors;
+    private final ImmutableMap<String, ExecutorHolder> executors;
 
     private final ScheduledThreadPoolExecutor scheduler;
 
@@ -73,17 +90,22 @@ public class ThreadPool extends AbstractComponent {
 
         Map<String, Settings> groupSettings = settings.getGroups("threadpool");
 
-        Map<String, Executor> executors = Maps.newHashMap();
-        executors.put(Names.CACHED, build(Names.CACHED, "cached", groupSettings.get(Names.CACHED), settingsBuilder().put("keep_alive", "30s").build()));
+        Map<String, ExecutorHolder> executors = Maps.newHashMap();
+        executors.put(Names.GENERIC, build(Names.GENERIC, "cached", groupSettings.get(Names.GENERIC), settingsBuilder().put("keep_alive", "30s").build()));
         executors.put(Names.INDEX, build(Names.INDEX, "cached", groupSettings.get(Names.INDEX), ImmutableSettings.Builder.EMPTY_SETTINGS));
+        executors.put(Names.BULK, build(Names.BULK, "cached", groupSettings.get(Names.BULK), ImmutableSettings.Builder.EMPTY_SETTINGS));
+        executors.put(Names.GET, build(Names.GET, "cached", groupSettings.get(Names.GET), ImmutableSettings.Builder.EMPTY_SETTINGS));
         executors.put(Names.SEARCH, build(Names.SEARCH, "cached", groupSettings.get(Names.SEARCH), ImmutableSettings.Builder.EMPTY_SETTINGS));
         executors.put(Names.PERCOLATE, build(Names.PERCOLATE, "cached", groupSettings.get(Names.PERCOLATE), ImmutableSettings.Builder.EMPTY_SETTINGS));
-        executors.put(Names.MANAGEMENT, build(Names.MANAGEMENT, "scaling", groupSettings.get(Names.MANAGEMENT), settingsBuilder().put("keep_alive", "5m").put("size", 20).build()));
+        executors.put(Names.MANAGEMENT, build(Names.MANAGEMENT, "scaling", groupSettings.get(Names.MANAGEMENT), settingsBuilder().put("keep_alive", "5m").put("size", 5).build()));
+        executors.put(Names.FLUSH, build(Names.FLUSH, "scaling", groupSettings.get(Names.FLUSH), settingsBuilder().put("keep_alive", "5m").put("size", 10).build()));
         executors.put(Names.MERGE, build(Names.MERGE, "scaling", groupSettings.get(Names.MERGE), settingsBuilder().put("keep_alive", "5m").put("size", 20).build()));
-        executors.put(Names.SNAPSHOT, build(Names.SNAPSHOT, "scaling", groupSettings.get(Names.SNAPSHOT), ImmutableSettings.Builder.EMPTY_SETTINGS));
-        executors.put(Names.SAME, MoreExecutors.sameThreadExecutor());
+        executors.put(Names.REFRESH, build(Names.REFRESH, "cached", groupSettings.get(Names.REFRESH), settingsBuilder().put("keep_alive", "1m").build()));
+        executors.put(Names.CACHE, build(Names.CACHE, "scaling", groupSettings.get(Names.CACHE), settingsBuilder().put("keep_alive", "5m").put("size", 4).build()));
+        executors.put(Names.SNAPSHOT, build(Names.SNAPSHOT, "scaling", groupSettings.get(Names.SNAPSHOT), settingsBuilder().put("keep_alive", "5m").put("size", 5).build()));
+        executors.put(Names.SAME, new ExecutorHolder(MoreExecutors.sameThreadExecutor(), new Info(Names.SAME, "same")));
         this.executors = ImmutableMap.copyOf(executors);
-        this.scheduler = (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(1, EsExecutors.daemonThreadFactory(settings, "[scheduler]"));
+        this.scheduler = (ScheduledThreadPoolExecutor) Executors.newScheduledThreadPool(1, EsExecutors.daemonThreadFactory(settings, "scheduler"));
         this.scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
         this.scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
 
@@ -96,12 +118,52 @@ public class ThreadPool extends AbstractComponent {
         return estimatedTimeThread.estimatedTimeInMillis();
     }
 
-    public Executor cached() {
-        return executor(Names.CACHED);
+    public ThreadPoolInfo info() {
+        List<Info> infos = new ArrayList<Info>();
+        for (ExecutorHolder holder : executors.values()) {
+            String name = holder.info.name();
+            // no need to have info on "same" thread pool
+            if ("same".equals(name)) {
+                continue;
+            }
+            infos.add(holder.info);
+        }
+        return new ThreadPoolInfo(infos);
+    }
+
+    public ThreadPoolStats stats() {
+        List<ThreadPoolStats.Stats> stats = new ArrayList<ThreadPoolStats.Stats>();
+        for (ExecutorHolder holder : executors.values()) {
+            String name = holder.info.name();
+            // no need to have info on "same" thread pool
+            if ("same".equals(name)) {
+                continue;
+            }
+            int threads = -1;
+            int queue = -1;
+            int active = -1;
+            long rejected = -1;
+            if (holder.executor instanceof ThreadPoolExecutor) {
+                ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) holder.executor;
+                threads = threadPoolExecutor.getPoolSize();
+                queue = threadPoolExecutor.getQueue().size();
+                active = threadPoolExecutor.getActiveCount();
+                RejectedExecutionHandler rejectedExecutionHandler = threadPoolExecutor.getRejectedExecutionHandler();
+                if (rejectedExecutionHandler instanceof XRejectedExecutionHandler) {
+                    rejected = ((XRejectedExecutionHandler) rejectedExecutionHandler).rejected();
+                }
+            }
+            stats.add(new ThreadPoolStats.Stats(name, threads, queue, active, rejected));
+        }
+        return new ThreadPoolStats(stats);
+    }
+
+    public Executor generic() {
+        return executor(Names.GENERIC);
     }
 
     public Executor executor(String name) {
-        Executor executor = executors.get(name);
+        Executor executor = executors.get(name).executor;
         if (executor == null) {
             throw new ElasticSearchIllegalArgumentException("No executor found for [" + name + "]");
         }
@@ -127,9 +189,9 @@ public class ThreadPool extends AbstractComponent {
         estimatedTimeThread.running = false;
         estimatedTimeThread.interrupt();
         scheduler.shutdown();
-        for (Executor executor : executors.values()) {
-            if (executor instanceof ThreadPoolExecutor) {
-                ((ThreadPoolExecutor) executor).shutdown();
+        for (ExecutorHolder executor : executors.values()) {
+            if (executor.executor instanceof ThreadPoolExecutor) {
+                ((ThreadPoolExecutor) executor.executor).shutdown();
             }
         }
     }
@@ -138,70 +200,89 @@ public class ThreadPool extends AbstractComponent {
         estimatedTimeThread.running = false;
         estimatedTimeThread.interrupt();
         scheduler.shutdownNow();
-        for (Executor executor : executors.values()) {
-            if (executor instanceof ThreadPoolExecutor) {
-                ((ThreadPoolExecutor) executor).shutdownNow();
+        for (ExecutorHolder executor : executors.values()) {
+            if (executor.executor instanceof ThreadPoolExecutor) {
+                ((ThreadPoolExecutor) executor.executor).shutdownNow();
             }
         }
     }
 
     public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
         boolean result = scheduler.awaitTermination(timeout, unit);
-        for (Executor executor : executors.values()) {
-            if (executor instanceof ThreadPoolExecutor) {
-                result &= ((ThreadPoolExecutor) executor).awaitTermination(timeout, unit);
+        for (ExecutorHolder executor : executors.values()) {
+            if (executor.executor instanceof ThreadPoolExecutor) {
+                result &= ((ThreadPoolExecutor) executor.executor).awaitTermination(timeout, unit);
             }
         }
         return result;
     }
 
-    private Executor build(String name, String defaultType, @Nullable Settings settings, Settings defaultSettings) {
+    private ExecutorHolder build(String name, String defaultType, @Nullable Settings settings, Settings defaultSettings) {
         if (settings == null) {
             settings = ImmutableSettings.Builder.EMPTY_SETTINGS;
         }
         String type = settings.get("type", defaultType);
-        ThreadFactory threadFactory = EsExecutors.daemonThreadFactory(settings, "[" + name + "]");
+        ThreadFactory threadFactory = EsExecutors.daemonThreadFactory(this.settings, name);
         if ("same".equals(type)) {
             logger.debug("creating thread_pool [{}], type [{}]", name, type);
-            return MoreExecutors.sameThreadExecutor();
+            return new ExecutorHolder(MoreExecutors.sameThreadExecutor(), new Info(name, type));
         } else if ("cached".equals(type)) {
             TimeValue keepAlive = settings.getAsTime("keep_alive", defaultSettings.getAsTime("keep_alive", timeValueMinutes(5)));
             logger.debug("creating thread_pool [{}], type [{}], keep_alive [{}]", name, type, keepAlive);
-            return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+            Executor executor = new EsThreadPoolExecutor(0, Integer.MAX_VALUE,
                     keepAlive.millis(), TimeUnit.MILLISECONDS,
                     new SynchronousQueue<Runnable>(),
                     threadFactory);
+            return new ExecutorHolder(executor, new Info(name, type, -1, -1, keepAlive, null));
         } else if ("fixed".equals(type)) {
             int size = settings.getAsInt("size", defaultSettings.getAsInt("size", Runtime.getRuntime().availableProcessors() * 5));
-            int queueSize = settings.getAsInt("queue_size", defaultSettings.getAsInt("queue_size", -1));
+            SizeValue capacity = settings.getAsSize("capacity", settings.getAsSize("queue", settings.getAsSize("queue_size", defaultSettings.getAsSize("queue", defaultSettings.getAsSize("queue_size", null)))));
             RejectedExecutionHandler rejectedExecutionHandler;
             String rejectSetting = settings.get("reject_policy", defaultSettings.get("reject_policy", "abort"));
             if ("abort".equals(rejectSetting)) {
-                rejectedExecutionHandler = new ThreadPoolExecutor.AbortPolicy();
+                rejectedExecutionHandler = new EsAbortPolicy();
             } else if ("caller".equals(rejectSetting)) {
                 rejectedExecutionHandler = new ThreadPoolExecutor.CallerRunsPolicy();
             } else {
                 throw new ElasticSearchIllegalArgumentException("reject_policy [" + rejectSetting + "] not valid for [" + name + "] thread pool");
             }
-            logger.debug("creating thread_pool [{}], type [{}], size [{}], queue_size [{}], reject_policy [{}]", name, type, size, queueSize, rejectSetting);
-            return new ThreadPoolExecutor(size, size,
+            String queueType = settings.get("queue_type", "linked");
+            BlockingQueue<Runnable> workQueue;
+            if (capacity == null) {
+                workQueue = new LinkedTransferQueue<Runnable>();
+            } else if ((int) capacity.singles() > 0) {
+                if ("linked".equals(queueType)) {
+                    workQueue = new LinkedBlockingQueue<Runnable>((int) capacity.singles());
+                } else if ("array".equals(queueType)) {
+                    workQueue = new ArrayBlockingQueue<Runnable>((int) capacity.singles());
+                } else {
+                    throw new ElasticSearchIllegalArgumentException("illegal queue_type set to [" + queueType + "], should be either linked or array");
+                }
+            } else {
+                workQueue = new SynchronousQueue<Runnable>();
+            }
+            logger.debug("creating thread_pool [{}], type [{}], size [{}], queue_size [{}], reject_policy [{}], queue_type [{}]", name, type, size, capacity, rejectSetting, queueType);
+            Executor executor = new EsThreadPoolExecutor(size, size,
                     0L, TimeUnit.MILLISECONDS,
-                    queueSize <= 0 ? new LinkedTransferQueue<Runnable>() : new ArrayBlockingQueue<Runnable>(queueSize),
+                    workQueue,
                     threadFactory, rejectedExecutionHandler);
+            return new ExecutorHolder(executor, new Info(name, type, size, size, null, capacity));
         } else if ("scaling".equals(type)) {
             TimeValue keepAlive = settings.getAsTime("keep_alive", defaultSettings.getAsTime("keep_alive", timeValueMinutes(5)));
             int min = settings.getAsInt("min", defaultSettings.getAsInt("min", 1));
-            int size = settings.getAsInt("size", defaultSettings.getAsInt("size", Runtime.getRuntime().availableProcessors() * 5));
+            int size = settings.getAsInt("max", settings.getAsInt("size", defaultSettings.getAsInt("size", Runtime.getRuntime().availableProcessors() * 5)));
             logger.debug("creating thread_pool [{}], type [{}], min [{}], size [{}], keep_alive [{}]", name, type, min, size, keepAlive);
-            return EsExecutors.newScalingExecutorService(min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory);
+            Executor executor = EsExecutors.newScalingExecutorService(min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory);
+            return new ExecutorHolder(executor, new Info(name, type, min, size, keepAlive, null));
         } else if ("blocking".equals(type)) {
             TimeValue keepAlive = settings.getAsTime("keep_alive", defaultSettings.getAsTime("keep_alive", timeValueMinutes(5)));
             int min = settings.getAsInt("min", defaultSettings.getAsInt("min", 1));
-            int size = settings.getAsInt("size", defaultSettings.getAsInt("size", Runtime.getRuntime().availableProcessors() * 5));
-            SizeValue capacity = settings.getAsSize("queue_size", defaultSettings.getAsSize("queue_size", new SizeValue(1000)));
+            int size = settings.getAsInt("max", settings.getAsInt("size", defaultSettings.getAsInt("size", Runtime.getRuntime().availableProcessors() * 5)));
+            SizeValue capacity = settings.getAsSize("capacity", settings.getAsSize("queue_size", defaultSettings.getAsSize("queue_size", new SizeValue(1000))));
             TimeValue waitTime = settings.getAsTime("wait_time", defaultSettings.getAsTime("wait_time", timeValueSeconds(60)));
             logger.debug("creating thread_pool [{}], type [{}], min [{}], size [{}], queue_size [{}], keep_alive [{}], wait_time [{}]", name, type, min, size, capacity.singles(), keepAlive, waitTime);
-            return EsExecutors.newBlockingExecutorService(min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory, (int) capacity.singles(), waitTime.millis(), TimeUnit.MILLISECONDS);
+            Executor executor = EsExecutors.newBlockingExecutorService(min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory, (int) capacity.singles(), waitTime.millis(), TimeUnit.MILLISECONDS);
+            return new ExecutorHolder(executor, new Info(name, type, min, size, keepAlive, capacity));
         }
         throw new ElasticSearchIllegalArgumentException("No type found [" + type + "], for [" + name + "]");
     }
@@ -306,5 +387,161 @@ public class ThreadPool extends AbstractComponent {
                 }
             }
         }
+    }
+
+    static class ExecutorHolder {
+        public final Executor executor;
+        public final Info info;
+
+        ExecutorHolder(Executor executor, Info info) {
+            this.executor = executor;
+            this.info = info;
+        }
+    }
+
+    public static class Info implements Streamable, ToXContent {
+
+        private String name;
+        private String type;
+        private int min;
+        private int max;
+        private TimeValue keepAlive;
+        private SizeValue capacity;
+
+        Info() {
+
+        }
+
+        public Info(String name, String type) {
+            this(name, type, -1);
+        }
+
+        public Info(String name, String type, int size) {
+            this(name, type, size, size, null, null);
+        }
+
+        public Info(String name, String type, int min, int max, @Nullable TimeValue keepAlive, @Nullable SizeValue capacity) {
+            this.name = name;
+            this.type = type;
+            this.min = min;
+            this.max = max;
+            this.keepAlive = keepAlive;
+            this.capacity = capacity;
+        }
+
+        public String name() {
+            return this.name;
+        }
+
+        public String getName() {
+            return this.name;
+        }
+
+        public String type() {
+            return this.type;
+        }
+
+        public String getType() {
+            return this.type;
+        }
+
+        public int min() {
+            return this.min;
+        }
+
+        public int getMin() {
+            return this.min;
+        }
+
+        public int max() {
+            return this.max;
+        }
+
+        public int getMax() {
+            return this.max;
+        }
+
+        @Nullable
+        public TimeValue keepAlive() {
+            return this.keepAlive;
+        }
+
+        @Nullable
+        public TimeValue getKeepAlive() {
+            return this.keepAlive;
+        }
+
+        @Nullable
+        public SizeValue capacity() {
+            return this.capacity;
+        }
+
+        @Nullable
+        public SizeValue getCapacity() {
+            return this.capacity;
+        }
+
+        @Override
+        public void readFrom(StreamInput in) throws IOException {
+            name = in.readUTF();
+            type = in.readUTF();
+            min = in.readInt();
+            max = in.readInt();
+            if (in.readBoolean()) {
+                keepAlive = TimeValue.readTimeValue(in);
+            }
+            if (in.readBoolean()) {
+                capacity = SizeValue.readSizeValue(in);
+            }
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeUTF(name);
+            out.writeUTF(type);
+            out.writeInt(min);
+            out.writeInt(max);
+            if (keepAlive == null) {
+                out.writeBoolean(false);
+            } else {
+                out.writeBoolean(true);
+                keepAlive.writeTo(out);
+            }
+            if (capacity == null) {
+                out.writeBoolean(false);
+            } else {
+                out.writeBoolean(true);
+                capacity.writeTo(out);
+            }
+        }
+
+        @Override
+        public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+            builder.startObject(name, XContentBuilder.FieldCaseConversion.NONE);
+            builder.field(Fields.TYPE, type);
+            if (min != -1) {
+                builder.field(Fields.MIN, min);
+            }
+            if (max != -1) {
+                builder.field(Fields.MAX, max);
+            }
+            if (keepAlive != null) {
+                builder.field(Fields.KEEP_ALIVE, keepAlive.toString());
+            }
+            if (capacity != null) {
+                builder.field(Fields.CAPACITY, capacity.toString());
+            }
+            builder.endObject();
+            return builder;
+        }
+
+        static final class Fields {
+            static final XContentBuilderString TYPE = new XContentBuilderString("type");
+            static final XContentBuilderString MIN = new XContentBuilderString("min");
+            static final XContentBuilderString MAX = new XContentBuilderString("max");
+            static final XContentBuilderString KEEP_ALIVE = new XContentBuilderString("keep_alive");
+            static final XContentBuilderString CAPACITY = new XContentBuilderString("capacity");
+        }
+
     }
 }

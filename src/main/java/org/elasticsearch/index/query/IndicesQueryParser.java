@@ -21,6 +21,9 @@ package org.elasticsearch.index.query;
 
 import com.google.common.collect.Sets;
 import org.apache.lucene.search.Query;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.metadata.MetaData;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.MatchNoDocsQuery;
 import org.elasticsearch.common.lucene.search.Queries;
@@ -36,8 +39,12 @@ public class IndicesQueryParser implements QueryParser {
 
     public static final String NAME = "indices";
 
+    @Nullable
+    private final ClusterService clusterService;
+
     @Inject
-    public IndicesQueryParser() {
+    public IndicesQueryParser(@Nullable ClusterService clusterService) {
+        this.clusterService = clusterService;
     }
 
     @Override
@@ -50,6 +57,7 @@ public class IndicesQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         Query query = null;
+        boolean queryFound = false;
         Set<String> indices = Sets.newHashSet();
 
         String currentFieldName = null;
@@ -61,8 +69,11 @@ public class IndicesQueryParser implements QueryParser {
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if ("query".equals(currentFieldName)) {
                     query = parseContext.parseInnerQuery();
+                    queryFound = true;
                 } else if ("no_match_query".equals(currentFieldName)) {
                     noMatchQuery = parseContext.parseInnerQuery();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[indices] query does not support [" + currentFieldName + "]");
                 }
             } else if (token == XContentParser.Token.START_ARRAY) {
                 if ("indices".equals(currentFieldName)) {
@@ -73,6 +84,8 @@ public class IndicesQueryParser implements QueryParser {
                         }
                         indices.add(value);
                     }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[indices] query does not support [" + currentFieldName + "]");
                 }
             } else if (token.isValue()) {
                 if ("index".equals(currentFieldName)) {
@@ -84,16 +97,28 @@ public class IndicesQueryParser implements QueryParser {
                     } else if ("none".equals(type)) {
                         noMatchQuery = MatchNoDocsQuery.INSTANCE;
                     }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[indices] query does not support [" + currentFieldName + "]");
                 }
             }
         }
-        if (query == null) {
+        if (!queryFound) {
             throw new QueryParsingException(parseContext.index(), "[indices] requires 'query' element");
+        }
+        if (query == null) {
+            return null;
         }
         if (indices.isEmpty()) {
             throw new QueryParsingException(parseContext.index(), "[indices] requires 'indices' element");
         }
-        for (String index : indices) {
+
+        String[] concreteIndices = indices.toArray(new String[indices.size()]);
+        if (clusterService != null) {
+            MetaData metaData = clusterService.state().metaData();
+            concreteIndices = metaData.concreteIndices(indices.toArray(new String[indices.size()]), true, true);
+        }
+
+        for (String index : concreteIndices) {
             if (Regex.simpleMatch(index, parseContext.index().name())) {
                 return query;
             }

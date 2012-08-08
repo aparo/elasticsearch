@@ -24,6 +24,7 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.MultiTermQuery;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.index.field.data.FieldDataType;
@@ -101,6 +102,16 @@ public interface FieldMapper<T> {
             return sourcePath;
         }
 
+        /**
+         * The index name term that can be used as a factory.
+         */
+        public Term indexNameTerm() {
+            return this.indexNameTermFactory;
+        }
+
+        /**
+         * Creates a new index term based on the provided value.
+         */
         public Term createIndexNameTerm(String value) {
             return indexNameTermFactory.createTerm(value);
         }
@@ -135,6 +146,11 @@ public interface FieldMapper<T> {
      * The analyzer that will be used to search the field.
      */
     Analyzer searchAnalyzer();
+
+    /**
+     * The analyzer that will be used for quoted search on the field.
+     */
+    Analyzer searchQuoteAnalyzer();
 
     /**
      * Returns the value that will be used as a result for search. Can be only of specific types... .
@@ -173,6 +189,10 @@ public interface FieldMapper<T> {
 
     Query fuzzyQuery(String value, double minSim, int prefixLength, int maxExpansions);
 
+    Query prefixQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, @Nullable QueryParseContext context);
+
+    Filter prefixFilter(String value, @Nullable QueryParseContext context);
+
     /**
      * A term query to use when parsing a query string. Can return <tt>null</tt>.
      */
@@ -183,12 +203,18 @@ public interface FieldMapper<T> {
     /**
      * Constructs a range query based on the mapper.
      */
-    Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper);
+    Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context);
 
     /**
      * Constructs a range query filter based on the mapper.
      */
-    Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper);
+    Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context);
+
+    /**
+     * Null value filter, returns <tt>null</tt> if there is no null value associated with the field.
+     */
+    @Nullable
+    Filter nullValueFilter();
 
     FieldDataType fieldDataType();
 }

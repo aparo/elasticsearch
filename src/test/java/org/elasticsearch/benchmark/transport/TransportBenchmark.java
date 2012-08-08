@@ -56,10 +56,10 @@ public class TransportBenchmark {
     }
 
     public static void main(String[] args) {
-        final String executor = ThreadPool.Names.CACHED;
+        final String executor = ThreadPool.Names.GENERIC;
         final boolean waitForRequest = true;
         final ByteSizeValue payloadSize = new ByteSizeValue(100, ByteSizeUnit.BYTES);
-        final int NUMBER_OF_CLIENTS = 1;
+        final int NUMBER_OF_CLIENTS = 10;
         final int NUMBER_OF_ITERATIONS = 100000;
         final byte[] payload = new byte[(int) payloadSize.bytes()];
         final AtomicLong idGenerator = new AtomicLong();

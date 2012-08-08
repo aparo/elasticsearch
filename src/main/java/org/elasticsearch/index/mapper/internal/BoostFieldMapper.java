@@ -26,6 +26,7 @@ import org.apache.lucene.search.NumericRangeFilter;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.NumericUtils;
+import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -37,6 +38,7 @@ import org.elasticsearch.index.field.data.FieldDataType;
 import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.core.FloatFieldMapper;
 import org.elasticsearch.index.mapper.core.NumberFieldMapper;
+import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.search.NumericRangeFieldDataFilter;
 
 import java.io.IOException;
@@ -115,7 +117,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
                                Float nullValue) {
         super(new Names(name, indexName, indexName, name), precisionStep, null, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
+                false, new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
                 new NamedAnalyzer("_float/max", new NumericFloatAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
     }
@@ -165,7 +167,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeQuery.newFloatRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
@@ -173,7 +175,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFilter.newFloatRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
@@ -181,11 +183,22 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFieldDataFilter.newFloatRange(fieldDataCache, names.indexName(),
                 lowerTerm == null ? null : Float.parseFloat(lowerTerm),
                 upperTerm == null ? null : Float.parseFloat(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return NumericRangeFilter.newFloatRange(names.indexName(), precisionStep,
+                nullValue,
+                nullValue,
+                true, true);
     }
 
     @Override
@@ -216,7 +229,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
         final float value = parseFloatValue(context);
         if (Float.isNaN(value)) {
             return null;

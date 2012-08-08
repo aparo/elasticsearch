@@ -19,6 +19,7 @@
 
 package org.elasticsearch.cluster.metadata;
 
+import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.action.TimestampParsingException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
@@ -27,6 +28,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
 import org.elasticsearch.common.joda.Joda;
+import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -158,7 +160,9 @@ public class MappingMetaData {
         public static String parseStringTimestamp(String timestampAsString, FormatDateTimeFormatter dateTimeFormatter) throws TimestampParsingException {
             long ts;
             try {
+                // if we manage to parse it, its a millisecond timestamp, just return the string as is
                 ts = Long.parseLong(timestampAsString);
+                return timestampAsString;
             } catch (NumberFormatException e) {
                 try {
                     ts = dateTimeFormatter.parser().parseMillis(timestampAsString);
@@ -166,7 +170,7 @@ public class MappingMetaData {
                     throw new TimestampParsingException(timestampAsString);
                 }
             }
-            return String.valueOf(ts);
+            return Long.toString(ts);
         }
 
 
@@ -250,9 +254,9 @@ public class MappingMetaData {
 
     private final CompressedString source;
 
-    private final Id id;
-    private final Routing routing;
-    private final Timestamp timestamp;
+    private Id id;
+    private Routing routing;
+    private Timestamp timestamp;
 
     public MappingMetaData(DocumentMapper docMapper) {
         this.type = docMapper.type();
@@ -262,13 +266,32 @@ public class MappingMetaData {
         this.timestamp = new Timestamp(docMapper.timestampFieldMapper().enabled(), docMapper.timestampFieldMapper().path(), docMapper.timestampFieldMapper().dateTimeFormatter().format());
     }
 
+    public MappingMetaData(CompressedString mapping) throws IOException {
+        this.source = mapping;
+        Map<String, Object> mappingMap = XContentHelper.createParser(mapping.compressed(), 0, mapping.compressed().length).mapOrderedAndClose();
+        if (mappingMap.size() != 1) {
+            throw new ElasticSearchIllegalStateException("Can't derive type from mapping, no root type: " + mapping.string());
+        }
+        this.type = mappingMap.keySet().iterator().next();
+        initMappers((Map<String, Object>) mappingMap.get(this.type));
+    }
+
+    public MappingMetaData(Map<String, Object> mapping) throws IOException {
+        this(mapping.keySet().iterator().next(), mapping);
+    }
+
     public MappingMetaData(String type, Map<String, Object> mapping) throws IOException {
         this.type = type;
-        this.source = new CompressedString(XContentFactory.jsonBuilder().map(mapping).string());
+        XContentBuilder mappingBuilder = XContentFactory.jsonBuilder().map(mapping);
+        this.source = new CompressedString(mappingBuilder.bytes());
         Map<String, Object> withoutType = mapping;
         if (mapping.size() == 1 && mapping.containsKey(type)) {
             withoutType = (Map<String, Object>) mapping.get(type);
         }
+        initMappers(withoutType);
+    }
+
+    private void initMappers(Map<String, Object> withoutType) {
         if (withoutType.containsKey("_id")) {
             String path = null;
             Map<String, Object> routingNode = (Map<String, Object>) withoutType.get("_id");
@@ -328,6 +351,18 @@ public class MappingMetaData {
         this.id = id;
         this.routing = routing;
         this.timestamp = timestamp;
+    }
+
+    void updateDefaultMapping(MappingMetaData defaultMapping) {
+        if (id == Id.EMPTY) {
+            id = defaultMapping.id();
+        }
+        if (routing == Routing.EMPTY) {
+            routing = defaultMapping.routing();
+        }
+        if (timestamp == Timestamp.EMPTY) {
+            timestamp = defaultMapping.timestamp();
+        }
     }
 
     public String type() {
@@ -515,20 +550,6 @@ public class MappingMetaData {
         // timestamp
         Timestamp timestamp = new Timestamp(in.readBoolean(), in.readBoolean() ? in.readUTF() : null, in.readUTF());
         return new MappingMetaData(type, source, id, routing, timestamp);
-    }
-
-    public static class ParseResult {
-        public final String routing;
-        public final boolean routingResolved;
-        public final String timestamp;
-        public final boolean timestampResolved;
-
-        public ParseResult(String routing, boolean routingResolved, String timestamp, boolean timestampResolved) {
-            this.routing = routing;
-            this.routingResolved = routingResolved;
-            this.timestamp = timestamp;
-            this.timestampResolved = timestampResolved;
-        }
     }
 
     public static class ParseContext {

@@ -73,14 +73,22 @@ public class RestIndicesStatsAction extends BaseRestHandler {
 
         controller.registerHandler(GET, "/_stats/flush", new RestFlushStatsHandler());
         controller.registerHandler(GET, "/{index}/_stats/flush", new RestFlushStatsHandler());
+
+        controller.registerHandler(GET, "/_stats/warmer", new RestWarmerStatsHandler());
+        controller.registerHandler(GET, "/{index}/_stats/warmer", new RestWarmerStatsHandler());
     }
 
     @Override
     public void handleRequest(final RestRequest request, final RestChannel channel) {
         IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+        indicesStatsRequest.listenerThreaded(false);
         boolean clear = request.paramAsBoolean("clear", false);
         if (clear) {
             indicesStatsRequest.clear();
+        }
+        boolean all = request.paramAsBoolean("all", false);
+        if (all) {
+            indicesStatsRequest.all();
         }
         indicesStatsRequest.indices(splitIndices(request.param("index")));
         indicesStatsRequest.types(splitTypes(request.param("types")));
@@ -95,6 +103,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         indicesStatsRequest.merge(request.paramAsBoolean("merge", indicesStatsRequest.merge()));
         indicesStatsRequest.refresh(request.paramAsBoolean("refresh", indicesStatsRequest.refresh()));
         indicesStatsRequest.flush(request.paramAsBoolean("flush", indicesStatsRequest.flush()));
+        indicesStatsRequest.warmer(request.paramAsBoolean("warmer", indicesStatsRequest.warmer()));
 
         client.admin().indices().stats(indicesStatsRequest, new ActionListener<IndicesStats>() {
             @Override
@@ -128,6 +137,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().docs(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             indicesStatsRequest.types(splitTypes(request.param("types")));
@@ -165,6 +175,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().store(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             indicesStatsRequest.types(splitTypes(request.param("types")));
@@ -202,6 +213,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().indexing(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             if (request.hasParam("types")) {
@@ -245,6 +257,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().search(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             if (request.hasParam("groups")) {
@@ -288,6 +301,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().get(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
 
@@ -324,6 +338,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().merge(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             indicesStatsRequest.types(splitTypes(request.param("types")));
@@ -361,7 +376,46 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().flush(true);
+            indicesStatsRequest.indices(splitIndices(request.param("index")));
+            indicesStatsRequest.types(splitTypes(request.param("types")));
+
+            client.admin().indices().stats(indicesStatsRequest, new ActionListener<IndicesStats>() {
+                @Override
+                public void onResponse(IndicesStats response) {
+                    try {
+                        XContentBuilder builder = RestXContentBuilder.restContentBuilder(request);
+                        builder.startObject();
+                        builder.field("ok", true);
+                        buildBroadcastShardsHeader(builder, response);
+                        response.toXContent(builder, request);
+                        builder.endObject();
+                        channel.sendResponse(new XContentRestResponse(request, OK, builder));
+                    } catch (Exception e) {
+                        onFailure(e);
+                    }
+                }
+
+                @Override
+                public void onFailure(Throwable e) {
+                    try {
+                        channel.sendResponse(new XContentThrowableRestResponse(request, e));
+                    } catch (IOException e1) {
+                        logger.error("Failed to send failure response", e1);
+                    }
+                }
+            });
+        }
+    }
+
+    class RestWarmerStatsHandler implements RestHandler {
+
+        @Override
+        public void handleRequest(final RestRequest request, final RestChannel channel) {
+            IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
+            indicesStatsRequest.clear().warmer(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             indicesStatsRequest.types(splitTypes(request.param("types")));
 
@@ -398,6 +452,7 @@ public class RestIndicesStatsAction extends BaseRestHandler {
         @Override
         public void handleRequest(final RestRequest request, final RestChannel channel) {
             IndicesStatsRequest indicesStatsRequest = new IndicesStatsRequest();
+            indicesStatsRequest.listenerThreaded(false);
             indicesStatsRequest.clear().refresh(true);
             indicesStatsRequest.indices(splitIndices(request.param("index")));
             indicesStatsRequest.types(splitTypes(request.param("types")));

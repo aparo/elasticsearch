@@ -19,6 +19,8 @@
 
 package org.elasticsearch.env;
 
+import com.google.common.collect.Sets;
+import com.google.common.primitives.Ints;
 import org.apache.lucene.store.Lock;
 import org.apache.lucene.store.NativeFSLockFactory;
 import org.elasticsearch.ElasticSearchIllegalStateException;
@@ -34,6 +36,7 @@ import org.elasticsearch.index.shard.ShardId;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Set;
 
 /**
  *
@@ -173,6 +176,58 @@ public class NodeEnvironment extends AbstractComponent {
             shardLocations[i] = new File(new File(new File(nodeFiles[i], "indices"), shardId.index().name()), Integer.toString(shardId.id()));
         }
         return shardLocations;
+    }
+
+    public Set<String> findAllIndices() throws Exception {
+        if (nodeFiles == null || locks == null) {
+            throw new ElasticSearchIllegalStateException("node is not configured to store local location");
+        }
+        Set<String> indices = Sets.newHashSet();
+        for (File indicesLocation : nodeIndicesLocations) {
+            File[] indicesList = indicesLocation.listFiles();
+            if (indicesList == null) {
+                continue;
+            }
+            for (File indexLocation : indicesList) {
+                if (indexLocation.isDirectory()) {
+                    indices.add(indexLocation.getName());
+                }
+            }
+        }
+        return indices;
+    }
+
+    public Set<ShardId> findAllShardIds() throws Exception {
+        if (nodeFiles == null || locks == null) {
+            throw new ElasticSearchIllegalStateException("node is not configured to store local location");
+        }
+        Set<ShardId> shardIds = Sets.newHashSet();
+        for (File indicesLocation : nodeIndicesLocations) {
+            File[] indicesList = indicesLocation.listFiles();
+            if (indicesList == null) {
+                continue;
+            }
+            for (File indexLocation : indicesList) {
+                if (!indexLocation.isDirectory()) {
+                    continue;
+                }
+                String indexName = indexLocation.getName();
+                File[] shardsList = indexLocation.listFiles();
+                if (shardsList == null) {
+                    continue;
+                }
+                for (File shardLocation : shardsList) {
+                    if (!shardLocation.isDirectory()) {
+                        continue;
+                    }
+                    Integer shardId = Ints.tryParse(shardLocation.getName());
+                    if (shardId != null) {
+                        shardIds.add(new ShardId(indexName, shardId));
+                    }
+                }
+            }
+        }
+        return shardIds;
     }
 
     public void close() {

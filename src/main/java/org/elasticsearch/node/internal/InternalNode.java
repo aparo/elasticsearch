@@ -21,7 +21,7 @@ package org.elasticsearch.node.internal;
 
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.Version;
-import org.elasticsearch.action.TransportActionModule;
+import org.elasticsearch.action.ActionModule;
 import org.elasticsearch.cache.NodeCache;
 import org.elasticsearch.cache.NodeCacheModule;
 import org.elasticsearch.client.Client;
@@ -35,6 +35,7 @@ import org.elasticsearch.common.StopWatch;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.component.Lifecycle;
 import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.Injectors;
 import org.elasticsearch.common.inject.ModulesBuilder;
@@ -46,7 +47,7 @@ import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
-import org.elasticsearch.common.thread.ThreadLocals;
+import org.elasticsearch.common.util.concurrent.ThreadLocals;
 import org.elasticsearch.discovery.DiscoveryModule;
 import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.env.Environment;
@@ -59,7 +60,7 @@ import org.elasticsearch.http.HttpServer;
 import org.elasticsearch.http.HttpServerModule;
 import org.elasticsearch.indices.IndicesModule;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.indices.cache.filter.IndicesNodeFilterCache;
+import org.elasticsearch.indices.cache.filter.IndicesFilterCache;
 import org.elasticsearch.indices.cluster.IndicesClusterStateService;
 import org.elasticsearch.indices.memory.IndexingMemoryController;
 import org.elasticsearch.indices.ttl.IndicesTTLService;
@@ -117,6 +118,8 @@ public final class InternalNode implements Node {
         this.settings = pluginsService.updatedSettings();
         this.environment = tuple.v2();
 
+        CompressorFactory.configure(settings);
+
         NodeEnvironment nodeEnvironment = new NodeEnvironment(this.settings, this.environment);
 
         ModulesBuilder modules = new ModulesBuilder();
@@ -141,7 +144,7 @@ public final class InternalNode implements Node {
         modules.add(new RiversModule(settings));
         modules.add(new IndicesModule(settings));
         modules.add(new SearchModule());
-        modules.add(new TransportActionModule());
+        modules.add(new ActionModule(false));
         modules.add(new MonitorModule(settings));
         modules.add(new GatewayModule(settings));
         modules.add(new NodeClientModule());
@@ -271,7 +274,7 @@ public final class InternalNode implements Node {
         stopWatch.stop().start("indices_cluster");
         injector.getInstance(IndicesClusterStateService.class).close();
         stopWatch.stop().start("indices");
-        injector.getInstance(IndicesNodeFilterCache.class).close();
+        injector.getInstance(IndicesFilterCache.class).close();
         injector.getInstance(IndexingMemoryController.class).close();
         injector.getInstance(IndicesTTLService.class).close();
         injector.getInstance(IndicesService.class).close();

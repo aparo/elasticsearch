@@ -28,10 +28,11 @@ import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.single.custom.TransportSingleCustomOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.ShardsIterator;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.FastStringReader;
@@ -40,6 +41,7 @@ import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.analysis.*;
 import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.analysis.IndicesAnalysisService;
@@ -83,17 +85,30 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.ANALYZE;
+        return AnalyzeAction.NAME;
     }
 
     @Override
-    protected ShardsIterator shards(ClusterState clusterState, AnalyzeRequest request) {
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, AnalyzeRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, AnalyzeRequest request) {
+        if (request.index() != null) {
+            request.index(state.metaData().concreteIndex(request.index()));
+            return state.blocks().indexBlockedException(ClusterBlockLevel.READ, request.index());
+        }
+        return null;
+    }
+
+    @Override
+    protected ShardsIterator shards(ClusterState state, AnalyzeRequest request) {
         if (request.index() == null) {
             // just execute locally....
             return null;
         }
-        request.index(clusterState.metaData().concreteIndex(request.index()));
-        return clusterState.routingTable().index(request.index()).randomAllActiveShardsIt();
+        return state.routingTable().index(request.index()).randomAllActiveShardsIt();
     }
 
     @Override
@@ -116,7 +131,11 @@ public class TransportAnalyzeAction extends TransportSingleCustomOperationAction
             }
         }
         if (field == null) {
-            field = "_all";
+            if (indexService != null) {
+                field = indexService.queryParserService().defaultField();
+            } else {
+                field = AllFieldMapper.NAME;
+            }
         }
         if (analyzer == null && request.analyzer() != null) {
             if (indexService == null) {

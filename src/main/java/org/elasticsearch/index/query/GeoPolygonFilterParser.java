@@ -49,8 +49,6 @@ import static org.elasticsearch.index.query.support.QueryParsers.wrapSmartNameFi
  *     }
  * }
  * </pre>
- *
- *
  */
 public class GeoPolygonFilterParser implements FilterParser {
 
@@ -138,6 +136,8 @@ public class GeoPolygonFilterParser implements FilterParser {
                                     points.add(point);
                                 }
                             }
+                        } else {
+                            throw new QueryParsingException(parseContext.index(), "[geo_polygon] filter does not support [" + currentFieldName + "]");
                         }
                     }
                 }
@@ -151,6 +151,8 @@ public class GeoPolygonFilterParser implements FilterParser {
                 } else if ("normalize".equals(currentFieldName)) {
                     normalizeLat = parser.booleanValue();
                     normalizeLon = parser.booleanValue();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[geo_polygon] filter does not support [" + currentFieldName + "]");
                 }
             }
         }
@@ -159,12 +161,9 @@ public class GeoPolygonFilterParser implements FilterParser {
             throw new QueryParsingException(parseContext.index(), "no points defined for geo_polygon filter");
         }
 
-        for (Point point : points) {
-            if (normalizeLat) {
-                point.lat = GeoUtils.normalizeLat(point.lat);
-            }
-            if (normalizeLon) {
-                point.lon = GeoUtils.normalizeLon(point.lon);
+        if (normalizeLat || normalizeLon) {
+            for (Point point : points) {
+                GeoUtils.normalizePoint(point, normalizeLat, normalizeLon);
             }
         }
 

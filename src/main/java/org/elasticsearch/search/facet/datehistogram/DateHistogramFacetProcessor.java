@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.joda.TimeZoneRounding;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
@@ -58,6 +59,7 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
         dateFieldParsers = MapBuilder.<String, DateFieldParser>newMapBuilder()
                 .put("year", new DateFieldParser.YearOfCentury())
                 .put("1y", new DateFieldParser.YearOfCentury())
+                .put("quarter", new DateFieldParser.Quarter())
                 .put("month", new DateFieldParser.MonthOfYear())
                 .put("1m", new DateFieldParser.MonthOfYear())
                 .put("week", new DateFieldParser.WeekOfWeekyear())
@@ -88,6 +90,9 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
         String interval = null;
         DateTimeZone preZone = DateTimeZone.UTC;
         DateTimeZone postZone = DateTimeZone.UTC;
+        boolean preZoneAdjustLargeInterval = false;
+        long preOffset = 0;
+        long postOffset = 0;
         float factor = 1.0f;
         Chronology chronology = ISOChronology.getInstanceUTC();
         DateHistogramFacet.ComparatorType comparatorType = DateHistogramFacet.ComparatorType.TIME;
@@ -113,8 +118,14 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
                     preZone = parseZone(parser, token);
                 } else if ("pre_zone".equals(fieldName) || "preZone".equals(fieldName)) {
                     preZone = parseZone(parser, token);
+                } else if ("pre_zone_adjust_large_interval".equals(fieldName) || "preZoneAdjustLargeInterval".equals(fieldName)) {
+                    preZoneAdjustLargeInterval = parser.booleanValue();
                 } else if ("post_zone".equals(fieldName) || "postZone".equals(fieldName)) {
                     postZone = parseZone(parser, token);
+                } else if ("pre_offset".equals(fieldName) || "preOffset".equals(fieldName)) {
+                    preOffset = parseOffset(parser.text());
+                } else if ("post_offset".equals(fieldName) || "postOffset".equals(fieldName)) {
+                    postOffset = parseOffset(parser.text());
                 } else if ("factor".equals(fieldName)) {
                     factor = parser.floatValue();
                 } else if ("value_script".equals(fieldName) || "valueScript".equals(fieldName)) {
@@ -152,7 +163,12 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
             tzRoundingBuilder = TimeZoneRounding.builder(TimeValue.parseTimeValue(interval, null));
         }
 
-        TimeZoneRounding tzRounding = tzRoundingBuilder.preZone(preZone).postZone(postZone).factor(factor).build();
+        TimeZoneRounding tzRounding = tzRoundingBuilder
+                .preZone(preZone).postZone(postZone)
+                .preZoneAdjustLargeInterval(preZoneAdjustLargeInterval)
+                .preOffset(preOffset).postOffset(postOffset)
+                .factor(factor)
+                .build();
 
         if (valueScript != null) {
             return new ValueScriptDateHistogramFacetCollector(facetName, keyField, scriptLang, valueScript, params, tzRounding, comparatorType, context);
@@ -163,6 +179,14 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
         }
     }
 
+    private long parseOffset(String offset) throws IOException {
+        if (offset.charAt(0) == '-') {
+            return -TimeValue.parseTimeValue(offset.substring(1), null).millis();
+        }
+        int beginIndex = offset.charAt(0) == '+' ? 1 : 0;
+        return TimeValue.parseTimeValue(offset.substring(beginIndex), null).millis();
+    }
+
     private DateTimeZone parseZone(XContentParser parser, XContentParser.Token token) throws IOException {
         if (token == XContentParser.Token.VALUE_NUMBER) {
             return DateTimeZone.forOffsetHours(parser.intValue());
@@ -170,9 +194,10 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
             String text = parser.text();
             int index = text.indexOf(':');
             if (index != -1) {
+                int beginIndex = text.charAt(0) == '+' ? 1 : 0;
                 // format like -02:30
                 return DateTimeZone.forOffsetHoursMinutes(
-                        Integer.parseInt(text.substring(0, index)),
+                        Integer.parseInt(text.substring(beginIndex, index)),
                         Integer.parseInt(text.substring(index + 1))
                 );
             } else {
@@ -203,6 +228,13 @@ public class DateHistogramFacetProcessor extends AbstractComponent implements Fa
             @Override
             public DateTimeField parse(Chronology chronology) {
                 return chronology.yearOfCentury();
+            }
+        }
+
+        static class Quarter implements DateFieldParser {
+            @Override
+            public DateTimeField parse(Chronology chronology) {
+                return Joda.QuarterOfYear.getField(chronology);
             }
         }
 

@@ -21,6 +21,7 @@ package org.elasticsearch.common.settings;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import org.elasticsearch.Version;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Classes;
 import org.elasticsearch.common.Strings;
@@ -58,11 +59,16 @@ public class ImmutableSettings implements Settings {
 
     private ImmutableSettings(Map<String, String> settings, ClassLoader classLoader) {
         this.settings = ImmutableMap.copyOf(settings);
-        this.classLoader = classLoader == null ? buildClassLoader() : classLoader;
+        this.classLoader = classLoader;
     }
 
     @Override
     public ClassLoader getClassLoader() {
+        return this.classLoader == null ? Classes.getDefaultClassLoader() : classLoader;
+    }
+
+    @Override
+    public ClassLoader getClassLoaderIfSet() {
         return this.classLoader;
     }
 
@@ -305,6 +311,19 @@ public class ImmutableSettings implements Settings {
     }
 
     @Override
+    public Version getAsVersion(String setting, Version defaultVersion) throws SettingsException {
+        String sValue = get(setting);
+        if (sValue == null) {
+            return defaultVersion;
+        }
+        try {
+            return Version.fromId(Integer.parseInt(sValue));
+        } catch (Exception e) {
+            throw new SettingsException("Failed to parse version setting [" + setting + "] with value [" + sValue + "]", e);
+        }
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
@@ -322,10 +341,6 @@ public class ImmutableSettings implements Settings {
         int result = settings != null ? settings.hashCode() : 0;
         result = 31 * result + (classLoader != null ? classLoader.hashCode() : 0);
         return result;
-    }
-
-    private static ClassLoader buildClassLoader() {
-        return Classes.getDefaultClassLoader();
     }
 
     public static Settings readSettingsFromStream(StreamInput in) throws IOException {
@@ -374,7 +389,7 @@ public class ImmutableSettings implements Settings {
         }
 
         /**
-         * Removes the provided setting.
+         * Removes the provided setting from the internal map holding the current list of settings.
          */
         public String remove(String key) {
             return map.remove(key);
@@ -437,6 +452,11 @@ public class ImmutableSettings implements Settings {
          */
         public Builder put(String setting, int value) {
             put(setting, String.valueOf(value));
+            return this;
+        }
+
+        public Builder put(String setting, Version version) {
+            put(setting, version.id);
             return this;
         }
 
@@ -543,6 +563,7 @@ public class ImmutableSettings implements Settings {
          */
         public Builder put(Settings settings) {
             map.putAll(settings.getAsMap());
+            classLoader = settings.getClassLoaderIfSet();
             return this;
         }
 
@@ -574,7 +595,7 @@ public class ImmutableSettings implements Settings {
                 Map<String, String> loadedSettings = settingsLoader.load(source);
                 put(loadedSettings);
             } catch (Exception e) {
-                throw new SettingsException("Failed to load settings from [" + source + "]");
+                throw new SettingsException("Failed to load settings from [" + source + "]", e);
             }
             return this;
         }
@@ -613,7 +634,7 @@ public class ImmutableSettings implements Settings {
         public Builder loadFromClasspath(String resourceName) throws SettingsException {
             ClassLoader classLoader = this.classLoader;
             if (classLoader == null) {
-                classLoader = buildClassLoader();
+                classLoader = Classes.getDefaultClassLoader();
             }
             InputStream is = classLoader.getResourceAsStream(resourceName);
             if (is == null) {
@@ -634,7 +655,7 @@ public class ImmutableSettings implements Settings {
         /**
          * Puts all the properties with keys starting with the provided <tt>prefix</tt>.
          *
-         * @param prefix     The prefix to filter proeprty key by
+         * @param prefix     The prefix to filter property key by
          * @param properties The properties to put
          * @return The builder
          */
@@ -644,6 +665,33 @@ public class ImmutableSettings implements Settings {
                 String value = properties.getProperty(key);
                 if (key.startsWith(prefix)) {
                     map.put(key.substring(prefix.length()), value);
+                }
+            }
+            return this;
+        }
+
+        /**
+         * Puts all the properties with keys starting with the provided <tt>prefix</tt>.
+         *
+         * @param prefix     The prefix to filter property key by
+         * @param properties The properties to put
+         * @return The builder
+         */
+        public Builder putProperties(String prefix, Properties properties, String[] ignorePrefixes) {
+            for (Object key1 : properties.keySet()) {
+                String key = (String) key1;
+                String value = properties.getProperty(key);
+                if (key.startsWith(prefix)) {
+                    boolean ignore = false;
+                    for (String ignorePrefix : ignorePrefixes) {
+                        if (key.startsWith(ignorePrefix)) {
+                            ignore = true;
+                            break;
+                        }
+                    }
+                    if (!ignore) {
+                        map.put(key.substring(prefix.length()), value);
+                    }
                 }
             }
             return this;

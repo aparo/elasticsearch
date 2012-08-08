@@ -27,10 +27,12 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.client.Client;
-import org.elasticsearch.client.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -42,9 +44,10 @@ import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.FieldMappers;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
-import org.elasticsearch.index.mapper.selector.UidFieldSelector;
+import org.elasticsearch.index.mapper.selector.UidAndRoutingFieldSelector;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.index.shard.IndexShardState;
 import org.elasticsearch.index.shard.service.IndexShard;
@@ -64,8 +67,13 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
         MetaData.addDynamicSettings(
                 "indices.ttl.interval"
         );
+
+        IndexMetaData.addDynamicSettings(
+                "index.ttl.disable_purge"
+        );
     }
 
+    private final ClusterService clusterService;
     private final IndicesService indicesService;
     private final Client client;
 
@@ -74,8 +82,9 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
     private PurgerThread purgerThread;
 
     @Inject
-    public IndicesTTLService(Settings settings, IndicesService indicesService, NodeSettingsService nodeSettingsService, Client client) {
+    public IndicesTTLService(Settings settings, ClusterService clusterService, IndicesService indicesService, NodeSettingsService nodeSettingsService, Client client) {
         super(settings);
+        this.clusterService = clusterService;
         this.indicesService = indicesService;
         this.client = client;
         this.interval = componentSettings.getAsTime("interval", TimeValue.timeValueSeconds(60));
@@ -132,11 +141,22 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
         }
 
         /**
-         * Returns the shards to purge, i.e. the local started primary shards that have ttl enabled
+         * Returns the shards to purge, i.e. the local started primary shards that have ttl enabled and disable_purge to false
          */
         private List<IndexShard> getShardsToPurge() {
             List<IndexShard> shardsToPurge = new ArrayList<IndexShard>();
+            MetaData metaData = clusterService.state().metaData();
             for (IndexService indexService : indicesService) {
+                // check the value of disable_purge for this index
+                IndexMetaData indexMetaData = metaData.index(indexService.index().name());
+                if (indexMetaData == null) {
+                    continue;
+                }
+                boolean disablePurge = indexMetaData.settings().getAsBoolean("index.ttl.disable_purge", false);
+                if (disablePurge) {
+                    continue;
+                }
+
                 // should be optimized with the hasTTL flag
                 FieldMappers ttlFieldMappers = indexService.mapperService().name(TTLFieldMapper.NAME);
                 if (ttlFieldMappers == null) {
@@ -152,7 +172,7 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
                 }
                 if (hasTTLEnabled) {
                     for (IndexShard indexShard : indexService) {
-                        if (indexShard.routingEntry().primary() && indexShard.state() == IndexShardState.STARTED && indexShard.routingEntry().started()) {
+                        if (indexShard.state() == IndexShardState.STARTED && indexShard.routingEntry().primary() && indexShard.routingEntry().started()) {
                             shardsToPurge.add(indexShard);
                         }
                     }
@@ -173,7 +193,7 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
                 List<DocToPurge> docsToPurge = expiredDocsCollector.getDocsToPurge();
                 BulkRequestBuilder bulkRequest = client.prepareBulk();
                 for (DocToPurge docToPurge : docsToPurge) {
-                    bulkRequest.add(new DeleteRequest().index(shardToPurge.routingEntry().index()).type(docToPurge.type).id(docToPurge.id).version(docToPurge.version));
+                    bulkRequest.add(new DeleteRequest().index(shardToPurge.routingEntry().index()).type(docToPurge.type).id(docToPurge.id).version(docToPurge.version).routing(docToPurge.routing));
                     bulkRequest = processBulkIfNeeded(bulkRequest, false);
                 }
                 processBulkIfNeeded(bulkRequest, true);
@@ -189,11 +209,13 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
         public final String type;
         public final String id;
         public final long version;
+        public final String routing;
 
-        public DocToPurge(String type, String id, long version) {
+        public DocToPurge(String type, String id, long version, String routing) {
             this.type = type;
             this.id = id;
             this.version = version;
+            this.routing = routing;
         }
     }
 
@@ -213,11 +235,12 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
 
         public void collect(int doc) {
             try {
-                Document document = indexReader.document(doc, UidFieldSelector.INSTANCE);
+                Document document = indexReader.document(doc, new UidAndRoutingFieldSelector());
                 String uid = document.getFieldable(UidFieldMapper.NAME).stringValue();
                 long version = UidField.loadVersion(indexReader, UidFieldMapper.TERM_FACTORY.createTerm(uid));
-                docsToPurge.add(new DocToPurge(Uid.typeFromUid(uid), Uid.idFromUid(uid), version));
+                docsToPurge.add(new DocToPurge(Uid.typeFromUid(uid), Uid.idFromUid(uid), version, document.get(RoutingFieldMapper.NAME)));
             } catch (Exception e) {
+                logger.trace("failed to collect doc", e);
             }
         }
 

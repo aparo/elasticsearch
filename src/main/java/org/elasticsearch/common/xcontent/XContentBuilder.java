@@ -19,11 +19,14 @@
 
 package org.elasticsearch.common.xcontent;
 
+import com.google.common.base.Charsets;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.Unicode;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.BytesStream;
 import org.elasticsearch.common.io.FastByteArrayOutputStream;
+import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.support.XContentMapConverter;
 import org.joda.time.DateTimeZone;
 import org.joda.time.ReadableInstant;
@@ -34,13 +37,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
 /**
  *
  */
-public final class XContentBuilder {
+public final class XContentBuilder implements BytesStream {
 
     public static enum FieldCaseConversion {
         /**
@@ -468,6 +470,32 @@ public final class XContentBuilder {
         return this;
     }
 
+    public XContentBuilder field(String name, BytesReference value) throws IOException {
+        field(name);
+        if (!value.hasArray()) {
+            value = value.toBytesArray();
+        }
+        generator.writeBinary(value.array(), value.arrayOffset(), value.length());
+        return this;
+    }
+
+    public XContentBuilder field(String name, Text value) throws IOException {
+        field(name);
+        if (value.hasBytes() && value.bytes().hasArray()) {
+            generator.writeUTF8String(value.bytes().array(), value.bytes().arrayOffset(), value.bytes().length());
+            return this;
+        }
+        if (value.hasString()) {
+            generator.writeString(value.string());
+            return this;
+        }
+        // TODO: TextBytesOptimization we can use a buffer here to convert it? maybe add a request to jackson to support InputStream as well?
+        BytesArray bytesArray = value.bytes().toBytesArray();
+        generator.writeUTF8String(bytesArray.array(), bytesArray.arrayOffset(), bytesArray.length());
+        return this;
+    }
+
+
     public XContentBuilder field(String name, byte[] value, int offset, int length) throws IOException {
         field(name);
         generator.writeBinary(value, offset, length);
@@ -486,7 +514,7 @@ public final class XContentBuilder {
         return this;
     }
 
-    public XContentBuilder field(String name, List value) throws IOException {
+    public XContentBuilder field(String name, Iterable value) throws IOException {
         startArray(name);
         for (Object o : value) {
             value(o);
@@ -495,7 +523,7 @@ public final class XContentBuilder {
         return this;
     }
 
-    public XContentBuilder field(XContentBuilderString name, List value) throws IOException {
+    public XContentBuilder field(XContentBuilderString name, Iterable value) throws IOException {
         startArray(name);
         for (Object o : value) {
             value(o);
@@ -644,8 +672,8 @@ public final class XContentBuilder {
         } else if (value instanceof Map) {
             //noinspection unchecked
             field(name, (Map<String, Object>) value);
-        } else if (value instanceof List) {
-            field(name, (List) value);
+        } else if (value instanceof Iterable) {
+            field(name, (Iterable) value);
         } else if (value instanceof Object[]) {
             field(name, (Object[]) value);
         } else if (value instanceof int[]) {
@@ -695,8 +723,8 @@ public final class XContentBuilder {
         } else if (value instanceof Map) {
             //noinspection unchecked
             field(name, (Map<String, Object>) value);
-        } else if (value instanceof List) {
-            field(name, (List) value);
+        } else if (value instanceof Iterable) {
+            field(name, (Iterable) value);
         } else if (value instanceof Object[]) {
             field(name, (Object[]) value);
         } else if (value instanceof int[]) {
@@ -707,6 +735,10 @@ public final class XContentBuilder {
             field(name, (float[]) value);
         } else if (value instanceof double[]) {
             field(name, (double[]) value);
+        } else if (value instanceof BytesReference) {
+            field(name, (BytesReference) value);
+        } else if (value instanceof Text) {
+            field(name, (Text) value);
         } else {
             field(name, value.toString());
         }
@@ -740,9 +772,15 @@ public final class XContentBuilder {
             value((Date) value);
         } else if (value instanceof ReadableInstant) {
             value((ReadableInstant) value);
+        } else if (value instanceof BytesReference) {
+            value((BytesReference) value);
+        } else if (value instanceof Text) {
+            value((Text) value);
         } else if (value instanceof Map) {
             //noinspection unchecked
             value((Map<String, Object>) value);
+        } else if (value instanceof Iterable) {
+            value((Iterable) value);
         } else {
             throw new IOException("Type not allowed [" + type + "]");
         }
@@ -847,7 +885,15 @@ public final class XContentBuilder {
         return this;
     }
 
+    public XContentBuilder rawField(String fieldName, BytesReference content) throws IOException {
+        generator.writeRawField(fieldName, content, bos);
+        return this;
+    }
+
     public XContentBuilder value(Boolean value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
         return value(value.booleanValue());
     }
 
@@ -950,6 +996,34 @@ public final class XContentBuilder {
         return this;
     }
 
+    public XContentBuilder value(BytesReference value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
+        if (!value.hasArray()) {
+            value = value.toBytesArray();
+        }
+        generator.writeBinary(value.array(), value.arrayOffset(), value.length());
+        return this;
+    }
+
+    public XContentBuilder value(Text value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
+        if (value.hasBytes() && value.bytes().hasArray()) {
+            generator.writeUTF8String(value.bytes().array(), value.bytes().arrayOffset(), value.bytes().length());
+            return this;
+        }
+        if (value.hasString()) {
+            generator.writeString(value.string());
+            return this;
+        }
+        BytesArray bytesArray = value.bytes().toBytesArray();
+        generator.writeUTF8String(bytesArray.array(), bytesArray.arrayOffset(), bytesArray.length());
+        return this;
+    }
+
     public XContentBuilder map(Map<String, Object> map) throws IOException {
         if (map == null) {
             return nullValue();
@@ -963,6 +1037,18 @@ public final class XContentBuilder {
             return nullValue();
         }
         XContentMapConverter.writeMap(generator, map);
+        return this;
+    }
+
+    public XContentBuilder value(Iterable value) throws IOException {
+        if (value == null) {
+            return nullValue();
+        }
+        startArray();
+        for (Object o : value) {
+            value(o);
+        }
+        endArray();
         return this;
     }
 
@@ -993,44 +1079,18 @@ public final class XContentBuilder {
         return this.bos;
     }
 
-    /**
-     * Returns the unsafe bytes (thread local bound). Make sure to use it with
-     * {@link #underlyingBytesLength()}.
-     * <p/>
-     * <p>Only applicable when the builder is constructed with {@link FastByteArrayOutputStream}.
-     */
-    public byte[] underlyingBytes() throws IOException {
+    @Override
+    public BytesReference bytes() {
         close();
-        return ((BytesStream) bos).underlyingBytes();
-    }
-
-    /**
-     * Returns the unsafe bytes length (thread local bound). Make sure to use it with
-     * {@link #underlyingBytes()}.
-     * <p/>
-     * <p>Only applicable when the builder is constructed with {@link FastByteArrayOutputStream}.
-     */
-    public int underlyingBytesLength() throws IOException {
-        close();
-        return ((BytesStream) bos).size();
+        return ((BytesStream) bos).bytes();
     }
 
     /**
      * Returns the actual stream used.
      */
-    public BytesStream underlyingStream() throws IOException {
+    public BytesStream bytesStream() throws IOException {
         close();
         return (BytesStream) bos;
-    }
-
-    /**
-     * Returns a copy of the bytes this builder generated.
-     * <p/>
-     * <p>Only applicable when the builder is constructed with {@link FastByteArrayOutputStream}.
-     */
-    public byte[] copiedBytes() throws IOException {
-        close();
-        return ((BytesStream) bos).copiedByteArray();
     }
 
     /**
@@ -1040,6 +1100,7 @@ public final class XContentBuilder {
      */
     public String string() throws IOException {
         close();
-        return Unicode.fromBytes(underlyingBytes(), 0, underlyingBytesLength());
+        BytesArray bytesArray = bytes().toBytesArray();
+        return new String(bytesArray.array(), bytesArray.arrayOffset(), bytesArray.length(), Charsets.UTF_8);
     }
 }

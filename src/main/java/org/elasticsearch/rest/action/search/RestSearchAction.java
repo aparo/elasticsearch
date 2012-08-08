@@ -120,7 +120,7 @@ public class RestSearchAction extends BaseRestHandler {
         SearchRequest searchRequest = new SearchRequest(indices);
         // get the content, and put it in the body
         if (request.hasContent()) {
-            searchRequest.source(request.contentByteArray(), request.contentByteArrayOffset(), request.contentLength(), request.contentUnsafe());
+            searchRequest.source(request.content(), request.contentUnsafe());
         } else {
             String source = request.param("source");
             if (source != null) {
@@ -137,7 +137,6 @@ public class RestSearchAction extends BaseRestHandler {
             searchRequest.scroll(new Scroll(parseTimeValue(scroll, null)));
         }
 
-        searchRequest.timeout(request.paramAsTime("timeout", null));
         searchRequest.types(RestActions.splitTypes(request.param("type")));
         searchRequest.queryHint(request.param("query_hint"));
         searchRequest.routing(request.param("routing"));
@@ -155,6 +154,7 @@ public class RestSearchAction extends BaseRestHandler {
             queryBuilder.analyzer(request.param("analyzer"));
             queryBuilder.analyzeWildcard(request.paramAsBoolean("analyze_wildcard", false));
             queryBuilder.lowercaseExpandedTerms(request.paramAsBoolean("lowercase_expanded_terms", true));
+            queryBuilder.lenient(request.paramAsBooleanOptional("lenient", null));
             String defaultOperator = request.param("default_operator");
             if (defaultOperator != null) {
                 if ("OR".equals(defaultOperator)) {
@@ -197,6 +197,12 @@ public class RestSearchAction extends BaseRestHandler {
                 searchSourceBuilder = new SearchSourceBuilder();
             }
             searchSourceBuilder.version(request.paramAsBooleanOptional("version", null));
+        }
+        if (request.hasParam("timeout")) {
+            if (searchSourceBuilder == null) {
+                searchSourceBuilder = new SearchSourceBuilder();
+            }
+            searchSourceBuilder.timeout(request.paramAsTime("timeout", null));
         }
 
         String sField = request.param("fields");

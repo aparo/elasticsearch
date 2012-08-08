@@ -35,13 +35,17 @@ public class MapBuilder<K, V> {
     }
 
     public static <K, V> MapBuilder<K, V> newMapBuilder(Map<K, V> map) {
-        return new MapBuilder<K, V>().putAll(map);
+        return new MapBuilder<K, V>(map);
     }
 
     private Map<K, V> map = newHashMap();
 
     public MapBuilder() {
         this.map = newHashMap();
+    }
+
+    public MapBuilder(Map<K, V> map) {
+        this.map = newHashMap(map);
     }
 
     public MapBuilder<K, V> putAll(Map<K, V> map) {
@@ -56,6 +60,11 @@ public class MapBuilder<K, V> {
 
     public MapBuilder<K, V> remove(K key) {
         this.map.remove(key);
+        return this;
+    }
+
+    public MapBuilder<K, V> clear() {
+        this.map.clear();
         return this;
     }
 

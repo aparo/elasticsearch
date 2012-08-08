@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.shard.service;
 
+import com.google.common.base.Charsets;
 import org.apache.lucene.index.CheckIndex;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Filter;
@@ -30,8 +31,10 @@ import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.FastByteArrayOutputStream;
 import org.elasticsearch.common.lucene.Lucene;
@@ -51,6 +54,7 @@ import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.merge.MergeStats;
 import org.elasticsearch.index.merge.scheduler.MergeSchedulerProvider;
 import org.elasticsearch.index.query.IndexQueryParserService;
+import org.elasticsearch.index.query.QueryParseContext;
 import org.elasticsearch.index.refresh.RefreshStats;
 import org.elasticsearch.index.search.nested.IncludeAllChildrenQuery;
 import org.elasticsearch.index.search.nested.NonNestedDocsFilter;
@@ -62,6 +66,8 @@ import org.elasticsearch.index.shard.*;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.store.StoreStats;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.index.warmer.ShardIndexWarmerService;
+import org.elasticsearch.index.warmer.WarmerStats;
 import org.elasticsearch.indices.IndicesLifecycle;
 import org.elasticsearch.indices.InternalIndicesLifecycle;
 import org.elasticsearch.indices.recovery.RecoveryStatus;
@@ -108,10 +114,13 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
     private final ShardGetService getService;
 
+    private final ShardIndexWarmerService shardWarmerService;
+
     private final Object mutex = new Object();
 
+    private final String checkIndexOnStartup;
 
-    private final boolean checkIndexOnStartup;
+    private long checkIndexTook = 0;
 
     private volatile IndexShardState state;
 
@@ -133,7 +142,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
     @Inject
     public InternalIndexShard(ShardId shardId, @IndexSettings Settings indexSettings, IndexSettingsService indexSettingsService, IndicesLifecycle indicesLifecycle, Store store, Engine engine, MergeSchedulerProvider mergeScheduler, Translog translog,
-                              ThreadPool threadPool, MapperService mapperService, IndexQueryParserService queryParserService, IndexCache indexCache, IndexAliasesService indexAliasesService, ShardIndexingService indexingService, ShardGetService getService, ShardSearchService searchService) {
+                              ThreadPool threadPool, MapperService mapperService, IndexQueryParserService queryParserService, IndexCache indexCache, IndexAliasesService indexAliasesService, ShardIndexingService indexingService, ShardGetService getService, ShardSearchService searchService, ShardIndexWarmerService shardWarmerService) {
         super(shardId, indexSettings);
         this.indicesLifecycle = (InternalIndicesLifecycle) indicesLifecycle;
         this.indexSettingsService = indexSettingsService;
@@ -149,6 +158,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         this.indexingService = indexingService;
         this.getService = getService.setIndexShard(this);
         this.searchService = searchService;
+        this.shardWarmerService = shardWarmerService;
         state = IndexShardState.CREATED;
 
         this.refreshInterval = indexSettings.getAsTime("engine.robin.refresh_interval", indexSettings.getAsTime("index.refresh_interval", engine.defaultRefreshInterval()));
@@ -158,7 +168,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
         logger.debug("state: [CREATED]");
 
-        this.checkIndexOnStartup = indexSettings.getAsBoolean("index.shard.check_on_startup", false);
+        this.checkIndexOnStartup = indexSettings.get("index.shard.check_on_startup", "false");
     }
 
     public MergeSchedulerProvider mergeScheduler() {
@@ -192,20 +202,31 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
     }
 
     @Override
+    public ShardIndexWarmerService warmerService() {
+        return this.shardWarmerService;
+    }
+
+    @Override
     public ShardRouting routingEntry() {
         return this.shardRouting;
     }
 
     public InternalIndexShard routingEntry(ShardRouting shardRouting) {
+        ShardRouting currentRouting = this.shardRouting;
         if (!shardRouting.shardId().equals(shardId())) {
             throw new ElasticSearchIllegalArgumentException("Trying to set a routing entry with shardId [" + shardRouting.shardId() + "] on a shard with shardId [" + shardId() + "]");
         }
-        if (this.shardRouting != null) {
-            if (!shardRouting.primary() && this.shardRouting.primary()) {
-                logger.warn("suspect illegal state: trying to move shard from primary mode to backup mode");
+        if (currentRouting != null) {
+            if (!shardRouting.primary() && currentRouting.primary()) {
+                logger.warn("suspect illegal state: trying to move shard from primary mode to replica mode");
+            }
+            // if its the same routing, return
+            if (currentRouting.equals(shardRouting)) {
+                return this;
             }
         }
         this.shardRouting = shardRouting;
+        indicesLifecycle.shardRoutingChanged(this, currentRouting, shardRouting);
         return this;
     }
 
@@ -256,7 +277,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
             if (state == IndexShardState.RELOCATED) {
                 throw new IndexShardRelocatedException(shardId);
             }
-            if (checkIndexOnStartup) {
+            if (Booleans.parseBoolean(checkIndexOnStartup, false)) {
                 checkIndex(true);
             }
             engine.start();
@@ -345,7 +366,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
     }
 
     @Override
-    public Engine.DeleteByQuery prepareDeleteByQuery(byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException {
+    public Engine.DeleteByQuery prepareDeleteByQuery(BytesReference querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException {
         long startTime = System.nanoTime();
         if (types == null) {
             types = Strings.EMPTY_ARRAY;
@@ -382,19 +403,18 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
     }
 
     @Override
-    public long count(float minScore, byte[] querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException {
-        return count(minScore, querySource, 0, querySource.length, filteringAliases, types);
-    }
-
-    @Override
-    public long count(float minScore, byte[] querySource, int querySourceOffset, int querySourceLength,
-                      @Nullable String[] filteringAliases, String... types) throws ElasticSearchException {
+    public long count(float minScore, BytesReference querySource, @Nullable String[] filteringAliases, String... types) throws ElasticSearchException {
         readAllowed();
         Query query;
-        if (querySourceLength == 0) {
+        if (querySource == null || querySource.length() == 0) {
             query = Queries.MATCH_ALL_QUERY;
         } else {
-            query = queryParserService.parse(querySource, querySourceOffset, querySourceLength).query();
+            try {
+                QueryParseContext.setTypes(types);
+                query = queryParserService.parse(querySource).query();
+            } finally {
+                QueryParseContext.removeTypes();
+            }
         }
         // wrap it in filter, cache it, and constant score it
         // Don't cache it, since it might be very different queries each time...
@@ -481,6 +501,11 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
     }
 
     @Override
+    public WarmerStats warmerStats() {
+        return shardWarmerService.stats();
+    }
+
+    @Override
     public void flush(Engine.Flush flush) throws ElasticSearchException {
         // we allows flush while recovering, since we allow for operations to happen
         // while recovering, and we want to keep the translog at bay (up to deletes, which
@@ -543,6 +568,10 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         }
     }
 
+    public long checkIndexTook() {
+        return this.checkIndexTook;
+    }
+
     /**
      * After the store has been recovered, we need to start the engine in order to apply operations
      */
@@ -551,7 +580,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
             throw new IndexShardNotRecoveringException(shardId, state);
         }
         // also check here, before we apply the translog
-        if (checkIndexOnStartup) {
+        if (Booleans.parseBoolean(checkIndexOnStartup, false)) {
             checkIndex(true);
         }
         // we disable deletes since we allow for operations to be executed against the shard while recovering
@@ -596,13 +625,13 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
             switch (operation.opType()) {
                 case CREATE:
                     Translog.Create create = (Translog.Create) operation;
-                    engine.create(prepareCreate(source(create.source(), create.sourceOffset(), create.sourceLength()).type(create.type()).id(create.id())
+                    engine.create(prepareCreate(source(create.source()).type(create.type()).id(create.id())
                             .routing(create.routing()).parent(create.parent()).timestamp(create.timestamp()).ttl(create.ttl())).version(create.version())
                             .origin(Engine.Operation.Origin.RECOVERY));
                     break;
                 case SAVE:
                     Translog.Index index = (Translog.Index) operation;
-                    engine.index(prepareIndex(source(index.source(), index.sourceOffset(), index.sourceLength()).type(index.type()).id(index.id())
+                    engine.index(prepareIndex(source(index.source()).type(index.type()).id(index.id())
                             .routing(index.routing()).parent(index.parent()).timestamp(index.timestamp()).ttl(index.ttl())).version(index.version())
                             .origin(Engine.Operation.Origin.RECOVERY));
                     break;
@@ -738,7 +767,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                 }
                 return;
             }
-            threadPool.cached().execute(new Runnable() {
+            threadPool.executor(ThreadPool.Names.REFRESH).execute(new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -823,6 +852,8 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
 
     private void checkIndex(boolean throwException) throws IndexShardException {
         try {
+            checkIndexTook = 0;
+            long time = System.currentTimeMillis();
             if (!IndexReader.indexExists(store.directory())) {
                 return;
             }
@@ -837,15 +868,27 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                     // ignore if closed....
                     return;
                 }
-                logger.warn("check index [failure]\n{}", new String(os.underlyingBytes(), 0, os.size()));
-                if (throwException) {
-                    throw new IndexShardException(shardId, "index check failure");
+                logger.warn("check index [failure]\n{}", new String(os.bytes().toBytes(), Charsets.UTF_8));
+                if ("fix".equalsIgnoreCase(checkIndexOnStartup)) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("fixing index, writing new segments file ...");
+                    }
+                    checkIndex.fixIndex(status);
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("index fixed, wrote new segments file \"{}\"", status.segmentsFileName);
+                    }
+                } else {
+                    // only throw a failure if we are not going to fix the index
+                    if (throwException) {
+                        throw new IndexShardException(shardId, "index check failure");
+                    }
                 }
             } else {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("check index [success]\n{}", new String(os.underlyingBytes(), 0, os.size()));
+                    logger.debug("check index [success]\n{}", new String(os.bytes().toBytes(), Charsets.UTF_8));
                 }
             }
+            checkIndexTook = System.currentTimeMillis() - time;
         } catch (Exception e) {
             logger.warn("failed to check index", e);
         }

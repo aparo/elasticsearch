@@ -74,7 +74,8 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
         @Override
         public ByteFieldMapper build(BuilderContext context) {
             ByteFieldMapper fieldMapper = new ByteFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue);
+                    precisionStep, fuzzyFactor, index, store, boost, omitNorms,
+                    omitTermFreqAndPositions, nullValue, ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -102,9 +103,9 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
 
     protected ByteFieldMapper(Names names, int precisionStep, String fuzzyFactor, Field.Index index, Field.Store store,
                               float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                              Byte nullValue) {
+                              Byte nullValue, boolean ignoreMalformed) {
         super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                new NamedAnalyzer("_byte/" + precisionStep, new NumericIntegerAnalyzer(precisionStep)),
+                ignoreMalformed, new NamedAnalyzer("_byte/" + precisionStep, new NumericIntegerAnalyzer(precisionStep)),
                 new NamedAnalyzer("_byte/max", new NumericIntegerAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -167,7 +168,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeQuery.newIntRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Integer.parseInt(lowerTerm),
                 upperTerm == null ? null : Integer.parseInt(upperTerm),
@@ -182,7 +183,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFilter.newIntRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Integer.parseInt(lowerTerm),
                 upperTerm == null ? null : Integer.parseInt(upperTerm),
@@ -190,11 +191,22 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFieldDataFilter.newByteRange(fieldDataCache, names.indexName(),
                 lowerTerm == null ? null : Byte.parseByte(lowerTerm),
                 upperTerm == null ? null : Byte.parseByte(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return NumericRangeFilter.newIntRange(names.indexName(), precisionStep,
+                nullValue.intValue(),
+                nullValue.intValue(),
+                true, true);
     }
 
     @Override
@@ -203,7 +215,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
         byte value;
         float boost = this.boost;
         if (context.externalValueSet()) {

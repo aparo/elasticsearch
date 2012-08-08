@@ -21,8 +21,11 @@ package org.elasticsearch.action.admin.indices.template.put;
 
 import org.elasticsearch.ElasticSearchGenerationException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
+import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.support.master.MasterNodeOperationRequest;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -32,20 +35,21 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.common.xcontent.support.XContentMapValues;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Maps.newHashMap;
-import static org.elasticsearch.action.Actions.addValidationError;
+import static org.elasticsearch.action.ValidateActions.addValidationError;
 import static org.elasticsearch.common.settings.ImmutableSettings.Builder.EMPTY_SETTINGS;
 import static org.elasticsearch.common.settings.ImmutableSettings.readSettingsFromStream;
 import static org.elasticsearch.common.settings.ImmutableSettings.writeSettingsToStream;
 import static org.elasticsearch.common.unit.TimeValue.readTimeValue;
 
 /**
- *
+ * A request to create an index template.
  */
 public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
 
@@ -62,6 +66,8 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
     private Settings settings = EMPTY_SETTINGS;
 
     private Map<String, String> mappings = newHashMap();
+
+    private Map<String, IndexMetaData.Custom> customs = newHashMap();
 
     private TimeValue timeout = new TimeValue(10, TimeUnit.SECONDS);
 
@@ -134,7 +140,7 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
     }
 
     /**
-     * The settings to created the index template with.
+     * The settings to create the index template with.
      */
     public PutIndexTemplateRequest settings(Settings settings) {
         this.settings = settings;
@@ -142,7 +148,7 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
     }
 
     /**
-     * The settings to created the index template with.
+     * The settings to create the index template with.
      */
     public PutIndexTemplateRequest settings(Settings.Builder settings) {
         this.settings = settings.build();
@@ -150,7 +156,7 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
     }
 
     /**
-     * The settings to crete the index template with (either json/yaml/properties format)
+     * The settings to create the index template with (either json/yaml/properties format).
      */
     public PutIndexTemplateRequest settings(String source) {
         this.settings = ImmutableSettings.settingsBuilder().loadFromSource(source).build();
@@ -158,7 +164,7 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
     }
 
     /**
-     * The settings to crete the index template with (either json/yaml/properties format)
+     * The settings to crete the index template with (either json/yaml/properties format).
      */
     public PutIndexTemplateRequest settings(Map<String, Object> source) {
         try {
@@ -237,6 +243,104 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
         return this.mappings;
     }
 
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(XContentBuilder templateBuilder) {
+        try {
+            return source(templateBuilder.bytes());
+        } catch (Exception e) {
+            throw new ElasticSearchIllegalArgumentException("Failed to build json for template request", e);
+        }
+    }
+
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(Map templateSource) {
+        Map<String, Object> source = templateSource;
+        for (Map.Entry<String, Object> entry : source.entrySet()) {
+            String name = entry.getKey();
+            if (name.equals("template")) {
+                template(entry.getValue().toString());
+            } else if (name.equals("order")) {
+                order(XContentMapValues.nodeIntegerValue(entry.getValue(), order()));
+            } else if (name.equals("settings")) {
+                if (!(entry.getValue() instanceof Map)) {
+                    throw new ElasticSearchIllegalArgumentException("Malformed settings section, should include an inner object");
+                }
+                settings((Map<String, Object>) entry.getValue());
+            } else if (name.equals("mappings")) {
+                Map<String, Object> mappings = (Map<String, Object>) entry.getValue();
+                for (Map.Entry<String, Object> entry1 : mappings.entrySet()) {
+                    if (!(entry1.getValue() instanceof Map)) {
+                        throw new ElasticSearchIllegalArgumentException("Malformed mappings section for type [" + entry1.getKey() + "], should include an inner object describing the mapping");
+                    }
+                    mapping(entry1.getKey(), (Map<String, Object>) entry1.getValue());
+                }
+            } else {
+                // maybe custom?
+                IndexMetaData.Custom.Factory factory = IndexMetaData.lookupFactory(name);
+                if (factory != null) {
+                    try {
+                        customs.put(name, factory.fromMap((Map<String, Object>) entry.getValue()));
+                    } catch (IOException e) {
+                        throw new ElasticSearchParseException("failed to parse custom metadata for [" + name + "]");
+                    }
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(String templateSource) {
+        try {
+            return source(XContentFactory.xContent(templateSource).createParser(templateSource).mapOrderedAndClose());
+        } catch (Exception e) {
+            throw new ElasticSearchIllegalArgumentException("failed to parse template source [" + templateSource + "]", e);
+        }
+    }
+
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(byte[] source) {
+        return source(source, 0, source.length);
+    }
+
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(byte[] source, int offset, int length) {
+        try {
+            return source(XContentFactory.xContent(source, offset, length).createParser(source, offset, length).mapOrderedAndClose());
+        } catch (IOException e) {
+            throw new ElasticSearchIllegalArgumentException("failed to parse template source", e);
+        }
+    }
+
+    /**
+     * The template source definition.
+     */
+    public PutIndexTemplateRequest source(BytesReference source) {
+        try {
+            return source(XContentFactory.xContent(source).createParser(source).mapOrderedAndClose());
+        } catch (IOException e) {
+            throw new ElasticSearchIllegalArgumentException("failed to parse template source", e);
+        }
+    }
+
+    public PutIndexTemplateRequest custom(IndexMetaData.Custom custom) {
+        customs.put(custom.type(), custom);
+        return this;
+    }
+
+    Map<String, IndexMetaData.Custom> customs() {
+        return this.customs;
+    }
 
     /**
      * Timeout to wait till the put mapping gets acknowledged of all current cluster nodes. Defaults to
@@ -277,6 +381,12 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
         for (int i = 0; i < size; i++) {
             mappings.put(in.readUTF(), in.readUTF());
         }
+        int customSize = in.readVInt();
+        for (int i = 0; i < customSize; i++) {
+            String type = in.readUTF();
+            IndexMetaData.Custom customIndexMetaData = IndexMetaData.lookupFactorySafe(type).readFrom(in);
+            customs.put(type, customIndexMetaData);
+        }
     }
 
     @Override
@@ -293,6 +403,11 @@ public class PutIndexTemplateRequest extends MasterNodeOperationRequest {
         for (Map.Entry<String, String> entry : mappings.entrySet()) {
             out.writeUTF(entry.getKey());
             out.writeUTF(entry.getValue());
+        }
+        out.writeVInt(customs.size());
+        for (Map.Entry<String, IndexMetaData.Custom> entry : customs.entrySet()) {
+            out.writeUTF(entry.getKey());
+            IndexMetaData.lookupFactorySafe(entry.getKey()).writeTo(entry.getValue(), out);
         }
     }
 }

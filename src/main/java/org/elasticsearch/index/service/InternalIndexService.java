@@ -52,6 +52,7 @@ import org.elasticsearch.index.percolator.PercolatorService;
 import org.elasticsearch.index.query.IndexQueryParserService;
 import org.elasticsearch.index.search.stats.ShardSearchModule;
 import org.elasticsearch.index.settings.IndexSettings;
+import org.elasticsearch.index.settings.IndexSettingsService;
 import org.elasticsearch.index.shard.IndexShardCreationException;
 import org.elasticsearch.index.shard.IndexShardManagement;
 import org.elasticsearch.index.shard.IndexShardModule;
@@ -117,6 +118,8 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
 
     private final IndexStore indexStore;
 
+    private final IndexSettingsService settingsService;
+
     private volatile ImmutableMap<Integer, Injector> shardsInjectors = ImmutableMap.of();
 
     private volatile ImmutableMap<Integer, IndexShard> shards = ImmutableMap.of();
@@ -127,7 +130,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
     public InternalIndexService(Injector injector, Index index, @IndexSettings Settings indexSettings, NodeEnvironment nodeEnv, ThreadPool threadPool,
                                 PercolatorService percolatorService, AnalysisService analysisService, MapperService mapperService,
                                 IndexQueryParserService queryParserService, SimilarityService similarityService, IndexAliasesService aliasesService,
-                                IndexCache indexCache, IndexEngine indexEngine, IndexGateway indexGateway, IndexStore indexStore) {
+                                IndexCache indexCache, IndexEngine indexEngine, IndexGateway indexGateway, IndexStore indexStore, IndexSettingsService settingsService) {
         super(index, indexSettings);
         this.injector = injector;
         this.nodeEnv = nodeEnv;
@@ -143,6 +146,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         this.indexEngine = indexEngine;
         this.indexGateway = indexGateway;
         this.indexStore = indexStore;
+        this.settingsService = settingsService;
 
         this.pluginsService = injector.getInstance(PluginsService.class);
         this.indicesLifecycle = (InternalIndicesLifecycle) injector.getInstance(IndicesLifecycle.class);
@@ -190,6 +194,11 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
     @Override
     public IndexGateway gateway() {
         return indexGateway;
+    }
+
+    @Override
+    public IndexSettingsService settingsService() {
+        return this.settingsService;
     }
 
     @Override
@@ -244,7 +253,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         Set<Integer> shardIds = shardIds();
         final CountDownLatch latch = new CountDownLatch(shardIds.size());
         for (final int shardId : shardIds) {
-            executor = executor == null ? threadPool.cached() : executor;
+            executor = executor == null ? threadPool.generic() : executor;
             executor.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -295,7 +304,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
 
         ModulesBuilder modules = new ModulesBuilder();
         modules.add(new ShardsPluginsModule(indexSettings, pluginsService));
-        modules.add(new IndexShardModule(shardId));
+        modules.add(new IndexShardModule(indexSettings, shardId));
         modules.add(new ShardIndexingModule());
         modules.add(new ShardSearchModule());
         modules.add(new ShardGetModule());
@@ -312,6 +321,8 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
             shardInjector = modules.createChildInjector(injector);
         } catch (CreationException e) {
             throw new IndexShardCreationException(shardId, Injectors.getFirstErrorFailure(e));
+        } catch (Throwable e) {
+            throw new IndexShardCreationException(shardId, e);
         }
 
         shardsInjectors = newMapBuilder(shardsInjectors).put(shardId.id(), shardInjector).immutableMap();

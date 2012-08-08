@@ -29,6 +29,7 @@ import org.apache.lucene.search.Filter;
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Preconditions;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.compress.CompressedString;
 import org.elasticsearch.common.settings.Settings;
@@ -132,6 +133,8 @@ public class DocumentMapper implements ToXContent {
 
         private NamedAnalyzer searchAnalyzer;
 
+        private NamedAnalyzer searchQuoteAnalyzer;
+
         private final String index;
 
         @Nullable
@@ -193,6 +196,14 @@ public class DocumentMapper implements ToXContent {
 
         public Builder searchAnalyzer(NamedAnalyzer searchAnalyzer) {
             this.searchAnalyzer = searchAnalyzer;
+            if (this.searchQuoteAnalyzer == null) {
+                this.searchQuoteAnalyzer = searchAnalyzer;
+            }
+            return this;
+        }
+
+        public Builder searchQuoteAnalyzer(NamedAnalyzer searchQuoteAnalyzer) {
+            this.searchQuoteAnalyzer = searchQuoteAnalyzer;
             return this;
         }
 
@@ -200,10 +211,14 @@ public class DocumentMapper implements ToXContent {
             return searchAnalyzer != null;
         }
 
+        public boolean hasSearchQuoteAnalyzer() {
+            return searchQuoteAnalyzer != null;
+        }
+
         public DocumentMapper build(DocumentMapperParser docMapperParser) {
             Preconditions.checkNotNull(rootObjectMapper, "Mapper builder must have the root object mapper set");
             return new DocumentMapper(index, indexSettings, docMapperParser, rootObjectMapper, meta,
-                    indexAnalyzer, searchAnalyzer,
+                    indexAnalyzer, searchAnalyzer, searchQuoteAnalyzer,
                     rootMappers);
         }
     }
@@ -237,6 +252,7 @@ public class DocumentMapper implements ToXContent {
     private final NamedAnalyzer indexAnalyzer;
 
     private final NamedAnalyzer searchAnalyzer;
+    private final NamedAnalyzer searchQuoteAnalyzer;
 
     private volatile DocumentFieldMappers fieldMappers;
 
@@ -257,7 +273,7 @@ public class DocumentMapper implements ToXContent {
     public DocumentMapper(String index, @Nullable Settings indexSettings, DocumentMapperParser docMapperParser,
                           RootObjectMapper rootObjectMapper,
                           ImmutableMap<String, Object> meta,
-                          NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
+                          NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer, NamedAnalyzer searchQuoteAnalyzer,
                           Map<Class<? extends RootMapper>, RootMapper> rootMappers) {
         this.index = index;
         this.indexSettings = indexSettings;
@@ -278,6 +294,7 @@ public class DocumentMapper implements ToXContent {
 
         this.indexAnalyzer = indexAnalyzer;
         this.searchAnalyzer = searchAnalyzer;
+        this.searchQuoteAnalyzer = searchQuoteAnalyzer != null ? searchQuoteAnalyzer : searchAnalyzer;
 
         this.typeFilter = typeMapper().fieldFilter(type, null);
 
@@ -389,6 +406,10 @@ public class DocumentMapper implements ToXContent {
         return this.searchAnalyzer;
     }
 
+    public Analyzer searchQuotedAnalyzer() {
+        return this.searchQuoteAnalyzer;
+    }
+
     public Filter typeFilter() {
         return this.typeFilter;
     }
@@ -405,11 +426,11 @@ public class DocumentMapper implements ToXContent {
         return this.objectMappers;
     }
 
-    public ParsedDocument parse(byte[] source) throws MapperParsingException {
+    public ParsedDocument parse(BytesReference source) throws MapperParsingException {
         return parse(SourceToParse.source(source));
     }
 
-    public ParsedDocument parse(String type, String id, byte[] source) throws MapperParsingException {
+    public ParsedDocument parse(String type, String id, BytesReference source) throws MapperParsingException {
         return parse(SourceToParse.source(source).type(type).id(id));
     }
 
@@ -428,7 +449,7 @@ public class DocumentMapper implements ToXContent {
         XContentParser parser = source.parser();
         try {
             if (parser == null) {
-                parser = XContentHelper.createParser(source.source(), source.sourceOffset(), source.sourceLength());
+                parser = XContentHelper.createParser(source.source());
             }
             context.reset(parser, new Document(), source, listener);
             // on a newly created instance of document mapper, we always consider it as new mappers that have been added
@@ -497,7 +518,7 @@ public class DocumentMapper implements ToXContent {
             Collections.reverse(context.docs());
         }
         ParsedDocument doc = new ParsedDocument(context.uid(), context.id(), context.type(), source.routing(), source.timestamp(), source.ttl(), context.docs(), context.analyzer(),
-                context.source(), context.sourceOffset(), context.sourceLength(), context.mappersAdded()).parent(source.parent());
+                context.source(), context.mappersAdded()).parent(source.parent());
         // reset the context to free up memory
         context.reset(null, null, null, null);
         return doc;
@@ -515,13 +536,17 @@ public class DocumentMapper implements ToXContent {
     public void addFieldMapperListener(FieldMapperListener fieldMapperListener, boolean includeExisting) {
         fieldMapperListeners.add(fieldMapperListener);
         if (includeExisting) {
-            for (RootMapper rootMapper : rootMappersOrdered) {
-                if (!rootMapper.includeInObject() && rootMapper instanceof FieldMapper) {
-                    fieldMapperListener.fieldMapper((FieldMapper) rootMapper);
-                }
-            }
-            rootObjectMapper.traverse(fieldMapperListener);
+            traverse(fieldMapperListener);
         }
+    }
+
+    public void traverse(FieldMapperListener listener) {
+        for (RootMapper rootMapper : rootMappersOrdered) {
+            if (!rootMapper.includeInObject() && rootMapper instanceof FieldMapper) {
+                listener.fieldMapper((FieldMapper) rootMapper);
+            }
+        }
+        rootObjectMapper.traverse(listener);
     }
 
     public void addObjectMapper(ObjectMapper objectMapper) {
@@ -539,8 +564,12 @@ public class DocumentMapper implements ToXContent {
     public void addObjectMapperListener(ObjectMapperListener objectMapperListener, boolean includeExisting) {
         objectMapperListeners.add(objectMapperListener);
         if (includeExisting) {
-            rootObjectMapper.traverse(objectMapperListener);
+            traverse(objectMapperListener);
         }
+    }
+
+    public void traverse(ObjectMapperListener listener) {
+        rootObjectMapper.traverse(listener);
     }
 
     public synchronized MergeResult merge(DocumentMapper mergeWith, MergeFlags mergeFlags) {
@@ -573,7 +602,7 @@ public class DocumentMapper implements ToXContent {
             builder.startObject();
             toXContent(builder, ToXContent.EMPTY_PARAMS);
             builder.endObject();
-            this.mappingSource = new CompressedString(builder.string());
+            this.mappingSource = new CompressedString(builder.bytes());
         } catch (Exception e) {
             throw new FailedToGenerateSourceMapperException(e.getMessage(), e);
         }

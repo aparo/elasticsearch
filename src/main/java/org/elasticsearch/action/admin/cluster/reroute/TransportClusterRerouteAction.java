@@ -20,7 +20,6 @@
 package org.elasticsearch.action.admin.cluster.reroute;
 
 import org.elasticsearch.ElasticSearchException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -52,12 +51,12 @@ public class TransportClusterRerouteAction extends TransportMasterNodeOperationA
 
     @Override
     protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.GENERIC;
     }
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Cluster.REROUTE;
+        return ClusterRerouteAction.NAME;
     }
 
     @Override

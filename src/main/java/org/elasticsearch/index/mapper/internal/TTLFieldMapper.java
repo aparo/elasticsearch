@@ -110,7 +110,7 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
     protected TTLFieldMapper(Field.Store store, Field.Index index, boolean enabled, long defaultTTL) {
         super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), Defaults.PRECISION_STEP,
                 Defaults.FUZZY_FACTOR, index, store, Defaults.BOOST, Defaults.OMIT_NORMS,
-                Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.NULL_VALUE);
+                Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.NULL_VALUE, Defaults.IGNORE_MALFORMED);
         this.enabled = enabled;
         this.defaultTTL = defaultTTL;
     }
@@ -177,11 +177,12 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException, AlreadyExpiredException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException, AlreadyExpiredException {
         if (enabled) {
             long ttl = context.sourceToParse().ttl();
             if (ttl <= 0 && defaultTTL > 0) { // no ttl provided so we use the default value
                 ttl = defaultTTL;
+                context.sourceToParse().ttl(ttl);
             }
             if (ttl > 0) { // a ttl has been provided either externally or in the _source
                 long timestamp = context.sourceToParse().timestamp();
@@ -217,6 +218,11 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
 
     @Override
     public void merge(Mapper mergeWith, MergeContext mergeContext) throws MergeMappingException {
-        // do nothing here, no merging, but also no exception
+        TTLFieldMapper ttlMergeWith = (TTLFieldMapper) mergeWith;
+        if (!mergeContext.mergeFlags().simulate()) {
+            if (ttlMergeWith.defaultTTL != -1) {
+                this.defaultTTL = ttlMergeWith.defaultTTL;
+            }
+        }
     }
 }

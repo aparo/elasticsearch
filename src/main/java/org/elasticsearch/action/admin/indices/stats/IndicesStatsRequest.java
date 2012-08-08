@@ -44,11 +44,30 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
     private boolean merge = false;
     private boolean refresh = false;
     private boolean flush = false;
+    private boolean warmer = false;
     private String[] types = null;
     private String[] groups = null;
 
     public IndicesStatsRequest indices(String... indices) {
         this.indices = indices;
+        return this;
+    }
+
+    /**
+     * Sets all flags to return all stats.
+     */
+    public IndicesStatsRequest all() {
+        docs = true;
+        store = true;
+        get = true;
+        indexing = true;
+        search = true;
+        merge = true;
+        refresh = true;
+        flush = true;
+        warmer = true;
+        types = null;
+        groups = null;
         return this;
     }
 
@@ -64,6 +83,7 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         merge = false;
         refresh = false;
         flush = false;
+        warmer = false;
         types = null;
         groups = null;
         return this;
@@ -171,6 +191,15 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         return this.flush;
     }
 
+    public IndicesStatsRequest warmer(boolean warmer) {
+        this.warmer = warmer;
+        return this;
+    }
+
+    public boolean warmer() {
+        return this.warmer;
+    }
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
@@ -182,6 +211,7 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         out.writeBoolean(merge);
         out.writeBoolean(flush);
         out.writeBoolean(refresh);
+        out.writeBoolean(warmer);
         if (types == null) {
             out.writeVInt(0);
         } else {
@@ -211,6 +241,7 @@ public class IndicesStatsRequest extends BroadcastOperationRequest {
         merge = in.readBoolean();
         flush = in.readBoolean();
         refresh = in.readBoolean();
+        warmer = in.readBoolean();
         int size = in.readVInt();
         if (size > 0) {
             types = new String[size];

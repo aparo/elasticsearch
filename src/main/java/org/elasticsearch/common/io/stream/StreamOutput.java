@@ -20,9 +20,14 @@
 package org.elasticsearch.common.io.stream;
 
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.io.UTF8StreamWriter;
+import org.elasticsearch.common.text.Text;
+import org.joda.time.ReadableInstant;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,10 +37,17 @@ import java.util.Map;
  */
 public abstract class StreamOutput extends OutputStream {
 
-    /**
-     * bytearr is initialized on demand by writeUTF
-     */
-    private byte[] bytearr = null;
+    public boolean seekPositionSupported() {
+        return false;
+    }
+
+    public long position() throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    public void seek(long position) throws IOException {
+        throw new UnsupportedOperationException();
+    }
 
     /**
      * Writes a single byte.
@@ -69,6 +81,18 @@ public abstract class StreamOutput extends OutputStream {
      * @param length the number of bytes to write
      */
     public abstract void writeBytes(byte[] b, int offset, int length) throws IOException;
+
+    /**
+     * Writes the bytes reference, including a length header.
+     */
+    public void writeBytesReference(@Nullable BytesReference bytes) throws IOException {
+        if (bytes == null) {
+            writeVInt(0);
+            return;
+        }
+        writeVInt(bytes.length());
+        bytes.writeTo(this);
+    }
 
     public final void writeShort(short v) throws IOException {
         writeByte((byte) (v >> 8));
@@ -119,59 +143,72 @@ public abstract class StreamOutput extends OutputStream {
         writeByte((byte) i);
     }
 
+    @Deprecated
+    public void writeOptionalUTF(@Nullable String str) throws IOException {
+        if (str == null) {
+            writeBoolean(false);
+        } else {
+            writeBoolean(true);
+            writeUTF(str);
+        }
+    }
+
+    public void writeOptionalString(@Nullable String str) throws IOException {
+        if (str == null) {
+            writeBoolean(false);
+        } else {
+            writeBoolean(true);
+            writeString(str);
+        }
+    }
+
+    public void writeText(Text text) throws IOException {
+        if (!text.hasBytes() && seekPositionSupported()) {
+            long pos1 = position();
+            // make room for the size
+            seek(pos1 + 4);
+            UTF8StreamWriter utf8StreamWriter = CachedStreamOutput.utf8StreamWriter();
+            utf8StreamWriter.setOutput(this);
+            utf8StreamWriter.write(text.string());
+            utf8StreamWriter.close();
+            long pos2 = position();
+            seek(pos1);
+            writeInt((int) (pos2 - pos1 - 4));
+            seek(pos2);
+        } else {
+            BytesReference bytes = text.bytes();
+            writeInt(bytes.length());
+            bytes.writeTo(this);
+        }
+    }
+
+    public void writeString(String str) throws IOException {
+        int charCount = str.length();
+        writeVInt(charCount);
+        int c;
+        for (int i = 0; i < charCount; i++) {
+            c = str.charAt(i);
+            if (c <= 0x007F) {
+                writeByte((byte) c);
+            } else if (c > 0x07FF) {
+                writeByte((byte) (0xE0 | c >> 12 & 0x0F));
+                writeByte((byte) (0x80 | c >> 6 & 0x3F));
+                writeByte((byte) (0x80 | c >> 0 & 0x3F));
+            } else {
+                writeByte((byte) (0xC0 | c >> 6 & 0x1F));
+                writeByte((byte) (0x80 | c >> 0 & 0x3F));
+            }
+        }
+    }
+
     /**
      * Writes a string.
+     *
+     * @deprecated use {@link #writeString(String)}
      */
+    @Deprecated
     public void writeUTF(String str) throws IOException {
-        int strlen = str.length();
-        int utflen = 0;
-        int c, count = 0;
-
-        /* use charAt instead of copying String to char array */
-        for (int i = 0; i < strlen; i++) {
-            c = str.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F)) {
-                utflen++;
-            } else if (c > 0x07FF) {
-                utflen += 3;
-            } else {
-                utflen += 2;
-            }
-        }
-
-        if (this.bytearr == null || (this.bytearr.length < (utflen + 4)))
-            this.bytearr = new byte[(utflen * 2) + 4];
-        byte[] bytearr = this.bytearr;
-
-        // same as writeInt
-        bytearr[count++] = (byte) (utflen >> 24);
-        bytearr[count++] = (byte) (utflen >> 16);
-        bytearr[count++] = (byte) (utflen >> 8);
-        bytearr[count++] = (byte) (utflen);
-
-        int i = 0;
-        for (i = 0; i < strlen; i++) {
-            c = str.charAt(i);
-            if (!((c >= 0x0001) && (c <= 0x007F))) break;
-            bytearr[count++] = (byte) c;
-        }
-
-        for (; i < strlen; i++) {
-            c = str.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F)) {
-                bytearr[count++] = (byte) c;
-
-            } else if (c > 0x07FF) {
-                bytearr[count++] = (byte) (0xE0 | ((c >> 12) & 0x0F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 6) & 0x3F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 0) & 0x3F));
-            } else {
-                bytearr[count++] = (byte) (0xC0 | ((c >> 6) & 0x1F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 0) & 0x3F));
-            }
-        }
-        writeBytes(bytearr, 0, utflen + 4);
-//        return utflen + 2;
+        writeString(str);
     }
 
     public void writeFloat(float v) throws IOException {
@@ -215,11 +252,18 @@ public abstract class StreamOutput extends OutputStream {
         writeBytes(b, off, len);
     }
 
-    public void writeMap(@Nullable Map<String, Object> map) throws IOException {
-        writeValue(map);
+    public void writeStringArray(String[] array) throws IOException {
+        writeVInt(array.length);
+        for (String s : array) {
+            writeString(s);
+        }
     }
 
-    private void writeValue(@Nullable Object value) throws IOException {
+    public void writeMap(@Nullable Map<String, Object> map) throws IOException {
+        writeGenericValue(map);
+    }
+
+    public void writeGenericValue(@Nullable Object value) throws IOException {
         if (value == null) {
             writeByte((byte) -1);
             return;
@@ -227,7 +271,7 @@ public abstract class StreamOutput extends OutputStream {
         Class type = value.getClass();
         if (type == String.class) {
             writeByte((byte) 0);
-            writeUTF((String) value);
+            writeString((String) value);
         } else if (type == Integer.class) {
             writeByte((byte) 1);
             writeInt((Integer) value);
@@ -252,14 +296,14 @@ public abstract class StreamOutput extends OutputStream {
             List list = (List) value;
             writeVInt(list.size());
             for (Object o : list) {
-                writeValue(o);
+                writeGenericValue(o);
             }
         } else if (value instanceof Object[]) {
             writeByte((byte) 8);
             Object[] list = (Object[]) value;
             writeVInt(list.length);
             for (Object o : list) {
-                writeValue(o);
+                writeGenericValue(o);
             }
         } else if (value instanceof Map) {
             if (value instanceof LinkedHashMap) {
@@ -271,8 +315,20 @@ public abstract class StreamOutput extends OutputStream {
             writeVInt(map.size());
             for (Map.Entry<String, Object> entry : map.entrySet()) {
                 writeUTF(entry.getKey());
-                writeValue(entry.getValue());
+                writeGenericValue(entry.getValue());
             }
+        } else if (type == Byte.class) {
+            writeByte((byte) 11);
+            writeByte((Byte) value);
+        } else if (type == Date.class) {
+            writeByte((byte) 12);
+            writeLong(((Date) value).getTime());
+        } else if (value instanceof ReadableInstant) {
+            writeByte((byte) 13);
+            writeLong(((ReadableInstant) value).getMillis());
+        } else if (value instanceof BytesReference) {
+            writeByte((byte) 14);
+            writeBytesReference((BytesReference) value);
         } else {
             throw new IOException("Can't write type [" + type + "]");
         }

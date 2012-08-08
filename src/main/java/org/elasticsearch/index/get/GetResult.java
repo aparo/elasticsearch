@@ -21,16 +21,15 @@ package org.elasticsearch.index.get;
 
 import com.google.common.collect.ImmutableMap;
 import org.elasticsearch.ElasticSearchParseException;
-import org.elasticsearch.common.BytesHolder;
-import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.compress.lzf.LZF;
-import org.elasticsearch.common.compress.lzf.LZFDecoder;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentBuilderString;
+import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.rest.action.support.RestXContentBuilder;
 import org.elasticsearch.search.lookup.SourceLookup;
 
@@ -60,14 +59,14 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
 
     private Map<String, Object> sourceAsMap;
 
-    private BytesHolder source;
+    private BytesReference source;
 
     private byte[] sourceAsBytes;
 
     GetResult() {
     }
 
-    GetResult(String index, String type, String id, long version, boolean exists, BytesHolder source, Map<String, GetField> fields) {
+    public GetResult(String index, String type, String id, long version, boolean exists, BytesReference source, Map<String, GetField> fields) {
         this.index = index;
         this.type = type;
         this.id = id;
@@ -160,29 +159,26 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
         if (sourceAsBytes != null) {
             return sourceAsBytes;
         }
-        this.sourceAsBytes = sourceRef().copyBytes();
+        this.sourceAsBytes = sourceRef().toBytes();
         return this.sourceAsBytes;
     }
 
     /**
      * Returns bytes reference, also un compress the source if needed.
      */
-    public BytesHolder sourceRef() {
-        if (LZF.isCompressed(source.bytes(), source.offset(), source.length())) {
-            try {
-                // TODO decompress without doing an extra copy!
-                this.source = new BytesHolder(LZFDecoder.decode(source.copyBytes()));
-            } catch (IOException e) {
-                throw new ElasticSearchParseException("failed to decompress source", e);
-            }
+    public BytesReference sourceRef() {
+        try {
+            this.source = CompressorFactory.uncompressIfNeeded(this.source);
+            return this.source;
+        } catch (IOException e) {
+            throw new ElasticSearchParseException("failed to decompress source", e);
         }
-        return this.source;
     }
 
     /**
      * Internal source representation, might be compressed....
      */
-    public BytesHolder internalSourceRef() {
+    public BytesReference internalSourceRef() {
         return source;
     }
 
@@ -200,8 +196,12 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
         if (source == null) {
             return null;
         }
-        BytesHolder source = sourceRef();
-        return Unicode.fromBytes(source.bytes(), source.offset(), source.length());
+        BytesReference source = sourceRef();
+        try {
+            return XContentHelper.convertToJson(source, false);
+        } catch (IOException e) {
+            throw new ElasticSearchParseException("failed to convert source to a json string");
+        }
     }
 
     /**
@@ -216,7 +216,7 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
             return sourceAsMap;
         }
 
-        sourceAsMap = SourceLookup.sourceAsMap(source.bytes(), source.offset(), source.length());
+        sourceAsMap = SourceLookup.sourceAsMap(source);
         return sourceAsMap;
     }
 
@@ -253,6 +253,35 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
         static final XContentBuilderString FIELDS = new XContentBuilderString("fields");
     }
 
+    public XContentBuilder toXContentEmbedded(XContentBuilder builder, Params params) throws IOException {
+        builder.field(Fields.EXISTS, exists);
+
+        if (source != null) {
+            RestXContentBuilder.restDocumentSource(source, builder, params);
+        }
+
+        if (fields != null && !fields.isEmpty()) {
+            builder.startObject(Fields.FIELDS);
+            for (GetField field : fields.values()) {
+                if (field.values().isEmpty()) {
+                    continue;
+                }
+                if (field.values().size() == 1) {
+                    builder.field(field.name(), field.values().get(0));
+                } else {
+                    builder.field(field.name());
+                    builder.startArray();
+                    for (Object value : field.values()) {
+                        builder.value(value);
+                    }
+                    builder.endArray();
+                }
+            }
+            builder.endObject();
+        }
+        return builder;
+    }
+
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         if (!exists()) {
@@ -270,31 +299,7 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
             if (version != -1) {
                 builder.field(Fields._VERSION, version);
             }
-            builder.field(Fields.EXISTS, true);
-            if (source != null) {
-                RestXContentBuilder.restDocumentSource(source.bytes(), source.offset(), source.length(), builder, params);
-            }
-
-            if (fields != null && !fields.isEmpty()) {
-                builder.startObject(Fields.FIELDS);
-                for (GetField field : fields.values()) {
-                    if (field.values().isEmpty()) {
-                        continue;
-                    }
-                    if (field.values().size() == 1) {
-                        builder.field(field.name(), field.values().get(0));
-                    } else {
-                        builder.field(field.name());
-                        builder.startArray();
-                        for (Object value : field.values()) {
-                            builder.value(value);
-                        }
-                        builder.endArray();
-                    }
-                }
-                builder.endObject();
-            }
-
+            toXContentEmbedded(builder, params);
 
             builder.endObject();
         }
@@ -310,13 +315,14 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
     @Override
     public void readFrom(StreamInput in) throws IOException {
         index = in.readUTF();
-        type = in.readUTF();
+        type = in.readOptionalUTF();
         id = in.readUTF();
         version = in.readLong();
         exists = in.readBoolean();
         if (exists) {
-            if (in.readBoolean()) {
-                source = BytesHolder.readBytesHolder(in);
+            source = in.readBytesReference();
+            if (source.length() == 0) {
+                source = null;
             }
             int size = in.readVInt();
             if (size == 0) {
@@ -334,17 +340,12 @@ public class GetResult implements Streamable, Iterable<GetField>, ToXContent {
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeUTF(index);
-        out.writeUTF(type);
+        out.writeOptionalUTF(type);
         out.writeUTF(id);
         out.writeLong(version);
         out.writeBoolean(exists);
         if (exists) {
-            if (source == null) {
-                out.writeBoolean(false);
-            } else {
-                out.writeBoolean(true);
-                source.writeTo(out);
-            }
+            out.writeBytesReference(source);
             if (fields == null) {
                 out.writeVInt(0);
             } else {

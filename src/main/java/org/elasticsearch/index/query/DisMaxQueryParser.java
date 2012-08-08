@@ -54,6 +54,7 @@ public class DisMaxQueryParser implements QueryParser {
         float tieBreaker = 0.0f;
 
         List<Query> queries = newArrayList();
+        boolean queriesFound = false;
 
         String currentFieldName = null;
         XContentParser.Token token;
@@ -62,22 +63,44 @@ public class DisMaxQueryParser implements QueryParser {
                 currentFieldName = parser.currentName();
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if ("queries".equals(currentFieldName)) {
-                    queries.add(parseContext.parseInnerQuery());
+                    queriesFound = true;
+                    Query query = parseContext.parseInnerQuery();
+                    if (query != null) {
+                        queries.add(query);
+                    }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[dis_max] query does not support [" + currentFieldName + "]");
                 }
             } else if (token == XContentParser.Token.START_ARRAY) {
                 if ("queries".equals(currentFieldName)) {
+                    queriesFound = true;
                     while (token != XContentParser.Token.END_ARRAY) {
-                        queries.add(parseContext.parseInnerQuery());
+                        Query query = parseContext.parseInnerQuery();
+                        if (query != null) {
+                            queries.add(query);
+                        }
                         token = parser.nextToken();
                     }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[dis_max] query does not support [" + currentFieldName + "]");
                 }
             } else {
                 if ("boost".equals(currentFieldName)) {
                     boost = parser.floatValue();
                 } else if ("tie_breaker".equals(currentFieldName) || "tieBreaker".equals(currentFieldName)) {
                     tieBreaker = parser.floatValue();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[dis_max] query does not support [" + currentFieldName + "]");
                 }
             }
+        }
+
+        if (!queriesFound) {
+            throw new QueryParsingException(parseContext.index(), "[dis_max] requires 'queries' field");
+        }
+
+        if (queries.isEmpty()) {
+            return null;
         }
 
         DisjunctionMaxQuery query = new DisjunctionMaxQuery(queries, tieBreaker);

@@ -30,10 +30,14 @@ import java.net.InetSocketAddress;
 
 /**
  * A transport address used for IP socket address (wraps {@link java.net.InetSocketAddress}).
- *
- *
  */
 public class InetSocketTransportAddress implements TransportAddress {
+
+    private static boolean resolveAddress = false;
+
+    public static void setResolveAddress(boolean resolveAddress) {
+        InetSocketTransportAddress.resolveAddress = resolveAddress;
+    }
 
     private InetSocketAddress address;
 
@@ -80,6 +84,20 @@ public class InetSocketTransportAddress implements TransportAddress {
         return false;
     }
 
+    @Override
+    public boolean sameHost(TransportAddress other) {
+        if (!(other instanceof InetSocketTransportAddress)) {
+            return false;
+        }
+        InetSocketTransportAddress otherAddr = (InetSocketTransportAddress) other;
+        if (address.isUnresolved() || otherAddr.address().isUnresolved()) {
+            String hostName = address.getHostName();
+            String otherHostName = otherAddr.address().getHostName();
+            return !(hostName == null || otherHostName == null) && hostName.equals(otherHostName);
+        }
+        return otherAddr.address().getAddress().equals(address.getAddress());
+    }
+
     public InetSocketAddress address() {
         return this.address;
     }
@@ -106,7 +124,7 @@ public class InetSocketTransportAddress implements TransportAddress {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        if (address.getAddress() != null) {
+        if (!resolveAddress && address.getAddress() != null) {
             out.writeByte((byte) 0);
             byte[] bytes = address().getAddress().getAddress();  // 4 bytes (IPv4) or 16 bytes (IPv6)
             out.writeByte((byte) bytes.length); // 1 byte

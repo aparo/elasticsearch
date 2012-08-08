@@ -28,7 +28,7 @@ import java.io.IOException;
  *
  *
  */
-public class FuzzyQueryBuilder extends BaseQueryBuilder {
+public class FuzzyQueryBuilder extends BaseQueryBuilder implements BoostableQueryBuilder<FuzzyQueryBuilder> {
 
     private final String name;
 
@@ -39,6 +39,8 @@ public class FuzzyQueryBuilder extends BaseQueryBuilder {
     private String minSimilarity;
 
     private Integer prefixLength;
+
+    private Integer maxExpansions;
 
     /**
      * Constructs a new term query.
@@ -75,6 +77,11 @@ public class FuzzyQueryBuilder extends BaseQueryBuilder {
         return this;
     }
 
+    public FuzzyQueryBuilder maxExpansions(int maxExpansions) {
+        this.maxExpansions = maxExpansions;
+        return this;
+    }
+
     @Override
     public void doXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(FuzzyQueryParser.NAME);
@@ -91,6 +98,9 @@ public class FuzzyQueryBuilder extends BaseQueryBuilder {
             }
             if (prefixLength != null) {
                 builder.field("prefix_length", prefixLength);
+            }
+            if (maxExpansions != null) {
+                builder.field("max_expansions", maxExpansions);
             }
             builder.endObject();
         }

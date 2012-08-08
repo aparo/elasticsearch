@@ -28,11 +28,13 @@ import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.management.*;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,8 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
     private final static MemoryMXBean memoryMXBean;
     private final static ThreadMXBean threadMXBean;
 
+    private static Method managementFactoryPlatformMXBeansMethod;
+
     private static Method getLastGcInfoMethod;
     private static Method getMemoryUsageBeforeGcMethod;
     private static Method getMemoryUsageAfterGcMethod;
@@ -60,12 +64,47 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
     private static Method getEndTimeMethod;
     private static Method getDurationMethod;
 
+    private static boolean bufferPoolsEnabled;
+    private static Class bufferPoolMXBeanClass;
+    private static Method bufferPoolMXBeanNameMethod;
+    private static Method bufferPoolMXBeanCountMethod;
+    private static Method bufferPoolMXBeanTotalCapacityMethod;
+    private static Method bufferPoolMXBeanMemoryUsedMethod;
+
     static {
         runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         memoryMXBean = ManagementFactory.getMemoryMXBean();
         threadMXBean = ManagementFactory.getThreadMXBean();
 
-        boolean enableLastGc = Booleans.parseBoolean(System.getProperty("monitor.jvm.enable_last_gc"), false);
+        try {
+            managementFactoryPlatformMXBeansMethod = ManagementFactory.class.getMethod("getPlatformMXBeans", Class.class);
+        } catch (Throwable e) {
+            managementFactoryPlatformMXBeansMethod = null;
+        }
+
+
+        try {
+            bufferPoolMXBeanClass = Class.forName("java.lang.management.BufferPoolMXBean");
+            bufferPoolMXBeanNameMethod = bufferPoolMXBeanClass.getMethod("getName");
+            bufferPoolMXBeanCountMethod = bufferPoolMXBeanClass.getMethod("getCount");
+            bufferPoolMXBeanTotalCapacityMethod = bufferPoolMXBeanClass.getMethod("getTotalCapacity");
+            bufferPoolMXBeanMemoryUsedMethod = bufferPoolMXBeanClass.getMethod("getMemoryUsed");
+            bufferPoolsEnabled = true;
+        } catch (Throwable t) {
+            bufferPoolsEnabled = false;
+        }
+
+        JvmInfo info = JvmInfo.jvmInfo();
+        boolean defaultEnableLastGc = false;
+        if (info.versionAsInteger() == 170) {
+            defaultEnableLastGc = info.versionUpdatePack() >= 4;
+        } else if (info.versionAsInteger() > 170) {
+            defaultEnableLastGc = true;
+        }
+        // always disable lastG, some reports it gives are strange...
+        defaultEnableLastGc = false;
+
+        boolean enableLastGc = Booleans.parseBoolean(System.getProperty("monitor.jvm.enable_last_gc"), defaultEnableLastGc);
         if (enableLastGc) {
             try {
                 Class sunGcClass = Class.forName("com.sun.management.GarbageCollectorMXBean");
@@ -90,7 +129,7 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
             }
         }
 
-        JvmStats.enableLastGc = false;
+        JvmStats.enableLastGc = enableLastGc;
     }
 
     public static JvmStats jvmStats() {
@@ -102,6 +141,20 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         memUsage = memoryMXBean.getNonHeapMemoryUsage();
         stats.mem.nonHeapUsed = memUsage.getUsed() < 0 ? 0 : memUsage.getUsed();
         stats.mem.nonHeapCommitted = memUsage.getCommitted() < 0 ? 0 : memUsage.getCommitted();
+
+        List<MemoryPoolMXBean> memoryPoolMXBeans = ManagementFactory.getMemoryPoolMXBeans();
+        stats.mem.pools = new MemoryPool[memoryPoolMXBeans.size()];
+        for (int i = 0; i < memoryPoolMXBeans.size(); i++) {
+            MemoryPoolMXBean memoryPoolMXBean = memoryPoolMXBeans.get(i);
+            MemoryUsage usage = memoryPoolMXBean.getUsage();
+            MemoryUsage peakUsage = memoryPoolMXBean.getPeakUsage();
+            stats.mem.pools[i] = new MemoryPool(memoryPoolMXBean.getName(),
+                    usage.getUsed() < 0 ? 0 : usage.getUsed(),
+                    usage.getMax() < 0 ? 0 : usage.getMax(),
+                    peakUsage.getUsed() < 0 ? 0 : peakUsage.getUsed(),
+                    peakUsage.getMax() < 0 ? 0 : peakUsage.getMax()
+            );
+        }
 
         stats.threads = new Threads();
         stats.threads.count = threadMXBean.getThreadCount();
@@ -146,6 +199,23 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
             }
         }
 
+
+        if (bufferPoolsEnabled) {
+            try {
+                List bufferPools = (List) managementFactoryPlatformMXBeansMethod.invoke(null, bufferPoolMXBeanClass);
+                stats.bufferPools = new ArrayList<BufferPool>(bufferPools.size());
+                for (Object bufferPool : bufferPools) {
+                    String name = (String) bufferPoolMXBeanNameMethod.invoke(bufferPool);
+                    Long count = (Long) bufferPoolMXBeanCountMethod.invoke(bufferPool);
+                    Long totalCapacity = (Long) bufferPoolMXBeanTotalCapacityMethod.invoke(bufferPool);
+                    Long memoryUsed = (Long) bufferPoolMXBeanMemoryUsedMethod.invoke(bufferPool);
+                    stats.bufferPools.add(new BufferPool(name, count, totalCapacity, memoryUsed));
+                }
+            } catch (Throwable t) {
+                //t.printStackTrace();
+            }
+        }
+
         return stats;
     }
 
@@ -158,6 +228,8 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
     Threads threads;
 
     GarbageCollectors gc;
+
+    List<BufferPool> bufferPools;
 
     private JvmStats() {
     }
@@ -209,50 +281,127 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject("jvm");
-        builder.field("timestamp", timestamp);
-        builder.field("uptime", uptime().format());
-        builder.field("uptime_in_millis", uptime().millis());
+        builder.startObject(Fields.JVM);
+        builder.field(Fields.TIMESTAMP, timestamp);
+        builder.field(Fields.UPTIME, uptime().format());
+        builder.field(Fields.UPTIME_IN_MILLIS, uptime().millis());
         if (mem != null) {
-            builder.startObject("mem");
-            builder.field("heap_used", mem.heapUsed().toString());
-            builder.field("heap_used_in_bytes", mem.heapUsed().bytes());
-            builder.field("heap_committed", mem.heapCommitted().toString());
-            builder.field("heap_committed_in_bytes", mem.heapCommitted().bytes());
+            builder.startObject(Fields.MEM);
+            builder.field(Fields.HEAP_USED, mem.heapUsed().toString());
+            builder.field(Fields.HEAP_USED_IN_BYTES, mem.heapUsed().bytes());
+            builder.field(Fields.HEAP_COMMITTED, mem.heapCommitted().toString());
+            builder.field(Fields.HEAP_COMMITTED_IN_BYTES, mem.heapCommitted().bytes());
 
-            builder.field("non_heap_used", mem.nonHeapUsed().toString());
-            builder.field("non_heap_used_in_bytes", mem.nonHeapUsed().bytes());
-            builder.field("non_heap_committed", mem.nonHeapCommitted().toString());
-            builder.field("non_heap_committed_in_bytes", mem.nonHeapCommitted().bytes());
-            builder.endObject();
-        }
-        if (threads != null) {
-            builder.startObject("threads");
-            builder.field("count", threads.count());
-            builder.field("peak_count", threads.peakCount());
-            builder.endObject();
-        }
-        if (gc != null) {
-            builder.startObject("gc");
-            builder.field("collection_count", gc.collectionCount());
-            builder.field("collection_time", gc.collectionTime().format());
-            builder.field("collection_time_in_millis", gc.collectionTime().millis());
+            builder.field(Fields.NON_HEAP_USED, mem.nonHeapUsed().toString());
+            builder.field(Fields.NON_HEAP_USED_IN_BYTES, mem.nonHeapUsed);
+            builder.field(Fields.NON_HEAP_COMMITTED, mem.nonHeapCommitted().toString());
+            builder.field(Fields.NON_HEAP_COMMITTED_IN_BYTES, mem.nonHeapCommitted);
 
-            builder.startObject("collectors");
-            for (GarbageCollector collector : gc) {
-                builder.startObject(collector.name());
-                builder.field("collection_count", collector.collectionCount());
-                builder.field("collection_time", collector.collectionTime().format());
-                builder.field("collection_time_in_millis", collector.collectionTime().millis());
+            builder.startObject(Fields.POOLS);
+            for (MemoryPool pool : mem) {
+                builder.startObject(pool.name(), XContentBuilder.FieldCaseConversion.NONE);
+                builder.field(Fields.USED, pool.used().toString());
+                builder.field(Fields.USED_IN_BYTES, pool.used);
+                builder.field(Fields.MAX, pool.max().toString());
+                builder.field(Fields.MAX_IN_BYTES, pool.max);
+
+                builder.field(Fields.PEAK_USED, pool.peakUsed().toString());
+                builder.field(Fields.PEAK_USED_IN_BYTES, pool.peakUsed);
+                builder.field(Fields.PEAK_MAX, pool.peakMax().toString());
+                builder.field(Fields.PEAK_MAX_IN_BYTES, pool.peakMax);
+
                 builder.endObject();
             }
             builder.endObject();
 
             builder.endObject();
         }
+        if (threads != null) {
+            builder.startObject(Fields.THREADS);
+            builder.field(Fields.COUNT, threads.count());
+            builder.field(Fields.PEAK_COUNT, threads.peakCount());
+            builder.endObject();
+        }
+        if (gc != null) {
+            builder.startObject(Fields.GC);
+            builder.field(Fields.COLLECTION_COUNT, gc.collectionCount());
+            builder.field(Fields.COLLECTION_TIME, gc.collectionTime().format());
+            builder.field(Fields.COLLECTION_TIME_IN_MILLIS, gc.collectionTime().millis());
+
+            builder.startObject(Fields.COLLECTORS);
+            for (GarbageCollector collector : gc) {
+                builder.startObject(collector.name(), XContentBuilder.FieldCaseConversion.NONE);
+                builder.field(Fields.COLLECTION_COUNT, collector.collectionCount());
+                builder.field(Fields.COLLECTION_TIME, collector.collectionTime().format());
+                builder.field(Fields.COLLECTION_TIME_IN_MILLIS, collector.collectionTime().millis());
+                builder.endObject();
+            }
+            builder.endObject();
+
+            builder.endObject();
+        }
+
+        if (bufferPools != null) {
+            builder.startObject(Fields.BUFFER_POOLS);
+            for (BufferPool bufferPool : bufferPools) {
+                builder.startObject(bufferPool.name(), XContentBuilder.FieldCaseConversion.NONE);
+                builder.field(Fields.COUNT, bufferPool.count());
+                builder.field(Fields.USED, bufferPool.used().toString());
+                builder.field(Fields.USED_IN_BYTES, bufferPool.used);
+                builder.field(Fields.TOTAL_CAPACITY, bufferPool.totalCapacity().toString());
+                builder.field(Fields.TOTAL_CAPACITY_IN_BYTES, bufferPool.totalCapacity);
+                builder.endObject();
+            }
+            builder.endObject();
+        }
+
         builder.endObject();
         return builder;
     }
+
+    static final class Fields {
+        static final XContentBuilderString JVM = new XContentBuilderString("jvm");
+        static final XContentBuilderString TIMESTAMP = new XContentBuilderString("timestamp");
+        static final XContentBuilderString UPTIME = new XContentBuilderString("uptime");
+        static final XContentBuilderString UPTIME_IN_MILLIS = new XContentBuilderString("uptime_in_millis");
+
+        static final XContentBuilderString MEM = new XContentBuilderString("mem");
+        static final XContentBuilderString HEAP_USED = new XContentBuilderString("heap_used");
+        static final XContentBuilderString HEAP_USED_IN_BYTES = new XContentBuilderString("heap_used_in_bytes");
+        static final XContentBuilderString HEAP_COMMITTED = new XContentBuilderString("heap_committed");
+        static final XContentBuilderString HEAP_COMMITTED_IN_BYTES = new XContentBuilderString("heap_committed_in_bytes");
+
+        static final XContentBuilderString NON_HEAP_USED = new XContentBuilderString("non_heap_used");
+        static final XContentBuilderString NON_HEAP_USED_IN_BYTES = new XContentBuilderString("non_heap_used_in_bytes");
+        static final XContentBuilderString NON_HEAP_COMMITTED = new XContentBuilderString("non_heap_committed");
+        static final XContentBuilderString NON_HEAP_COMMITTED_IN_BYTES = new XContentBuilderString("non_heap_committed_in_bytes");
+
+        static final XContentBuilderString POOLS = new XContentBuilderString("pools");
+        static final XContentBuilderString USED = new XContentBuilderString("used");
+        static final XContentBuilderString USED_IN_BYTES = new XContentBuilderString("used_in_bytes");
+        static final XContentBuilderString MAX = new XContentBuilderString("max");
+        static final XContentBuilderString MAX_IN_BYTES = new XContentBuilderString("max_in_bytes");
+        static final XContentBuilderString PEAK_USED = new XContentBuilderString("peak_used");
+        static final XContentBuilderString PEAK_USED_IN_BYTES = new XContentBuilderString("peak_used_in_bytes");
+        static final XContentBuilderString PEAK_MAX = new XContentBuilderString("peak_max");
+        static final XContentBuilderString PEAK_MAX_IN_BYTES = new XContentBuilderString("peak_max_in_bytes");
+
+        static final XContentBuilderString THREADS = new XContentBuilderString("threads");
+        static final XContentBuilderString COUNT = new XContentBuilderString("count");
+        static final XContentBuilderString PEAK_COUNT = new XContentBuilderString("peak_count");
+
+        static final XContentBuilderString GC = new XContentBuilderString("gc");
+        static final XContentBuilderString COLLECTORS = new XContentBuilderString("collectors");
+        static final XContentBuilderString COLLECTION_COUNT = new XContentBuilderString("collection_count");
+        static final XContentBuilderString COLLECTION_TIME = new XContentBuilderString("collection_time");
+        static final XContentBuilderString COLLECTION_TIME_IN_MILLIS = new XContentBuilderString("collection_time_in_millis");
+
+        static final XContentBuilderString BUFFER_POOLS = new XContentBuilderString("buffer_pools");
+        static final XContentBuilderString NAME = new XContentBuilderString("name");
+        static final XContentBuilderString TOTAL_CAPACITY = new XContentBuilderString("total_capacity");
+        static final XContentBuilderString TOTAL_CAPACITY_IN_BYTES = new XContentBuilderString("total_capacity_in_bytes");
+    }
+
 
     public static JvmStats readJvmStats(StreamInput in) throws IOException {
         JvmStats jvmStats = new JvmStats();
@@ -268,6 +417,16 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         mem = Mem.readMem(in);
         threads = Threads.readThreads(in);
         gc = GarbageCollectors.readGarbageCollectors(in);
+
+        if (in.readBoolean()) {
+            int size = in.readVInt();
+            bufferPools = new ArrayList<BufferPool>(size);
+            for (int i = 0; i < size; i++) {
+                BufferPool bufferPool = new BufferPool();
+                bufferPool.readFrom(in);
+                bufferPools.add(bufferPool);
+            }
+        }
     }
 
     @Override
@@ -278,11 +437,21 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         mem.writeTo(out);
         threads.writeTo(out);
         gc.writeTo(out);
+
+        if (bufferPools == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeVInt(bufferPools.size());
+            for (BufferPool bufferPool : bufferPools) {
+                bufferPool.writeTo(out);
+            }
+        }
     }
 
     public static class GarbageCollectors implements Streamable, Serializable, Iterable<GarbageCollector> {
 
-        private GarbageCollector[] collectors;
+        GarbageCollector[] collectors;
 
         GarbageCollectors() {
         }
@@ -314,7 +483,7 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         }
 
         @Override
-        public Iterator iterator() {
+        public Iterator<GarbageCollector> iterator() {
             return Iterators.forArray(collectors);
         }
 
@@ -554,12 +723,100 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         }
     }
 
-    public static class Mem implements Streamable, Serializable {
+    public static class MemoryPool implements Streamable, Serializable {
+
+        String name;
+        long used;
+        long max;
+
+        long peakUsed;
+        long peakMax;
+
+        MemoryPool() {
+
+        }
+
+        public MemoryPool(String name, long used, long max, long peakUsed, long peakMax) {
+            this.name = name;
+            this.used = used;
+            this.max = max;
+            this.peakUsed = peakUsed;
+            this.peakMax = peakMax;
+        }
+
+        public static MemoryPool readMemoryPool(StreamInput in) throws IOException {
+            MemoryPool pool = new MemoryPool();
+            pool.readFrom(in);
+            return pool;
+        }
+
+        public String name() {
+            return this.name;
+        }
+
+        public String getName() {
+            return this.name;
+        }
+
+        public ByteSizeValue used() {
+            return new ByteSizeValue(used);
+        }
+
+        public ByteSizeValue getUsed() {
+            return used();
+        }
+
+        public ByteSizeValue max() {
+            return new ByteSizeValue(max);
+        }
+
+        public ByteSizeValue getMax() {
+            return max();
+        }
+
+        public ByteSizeValue peakUsed() {
+            return new ByteSizeValue(peakUsed);
+        }
+
+        public ByteSizeValue getPeakUsed() {
+            return peakUsed();
+        }
+
+        public ByteSizeValue peakMax() {
+            return new ByteSizeValue(peakMax);
+        }
+
+        public ByteSizeValue getPeakMax() {
+            return peakMax();
+        }
+
+        @Override
+        public void readFrom(StreamInput in) throws IOException {
+            name = in.readUTF();
+            used = in.readVLong();
+            max = in.readVLong();
+            peakUsed = in.readVLong();
+            peakMax = in.readVLong();
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeUTF(name);
+            out.writeVLong(used);
+            out.writeVLong(max);
+            out.writeVLong(peakUsed);
+            out.writeVLong(peakMax);
+        }
+    }
+
+    public static class Mem implements Streamable, Serializable, Iterable<MemoryPool> {
 
         long heapCommitted;
         long heapUsed;
         long nonHeapCommitted;
         long nonHeapUsed;
+
+        MemoryPool[] pools = new MemoryPool[0];
 
         Mem() {
         }
@@ -571,11 +828,21 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
         }
 
         @Override
+        public Iterator<MemoryPool> iterator() {
+            return Iterators.forArray(pools);
+        }
+
+        @Override
         public void readFrom(StreamInput in) throws IOException {
             heapCommitted = in.readVLong();
             heapUsed = in.readVLong();
             nonHeapCommitted = in.readVLong();
             nonHeapUsed = in.readVLong();
+
+            pools = new MemoryPool[in.readVInt()];
+            for (int i = 0; i < pools.length; i++) {
+                pools[i] = MemoryPool.readMemoryPool(in);
+            }
         }
 
         @Override
@@ -584,6 +851,11 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
             out.writeVLong(heapUsed);
             out.writeVLong(nonHeapCommitted);
             out.writeVLong(nonHeapUsed);
+
+            out.writeVInt(pools.length);
+            for (MemoryPool pool : pools) {
+                pool.writeTo(out);
+            }
         }
 
         public ByteSizeValue heapCommitted() {
@@ -616,6 +888,72 @@ public class JvmStats implements Streamable, Serializable, ToXContent {
 
         public ByteSizeValue getNonHeapUsed() {
             return nonHeapUsed();
+        }
+    }
+
+    public static class BufferPool implements Streamable {
+
+        String name;
+        long count;
+        long totalCapacity;
+        long used;
+
+        BufferPool() {
+        }
+
+        public BufferPool(String name, long count, long totalCapacity, long used) {
+            this.name = name;
+            this.count = count;
+            this.totalCapacity = totalCapacity;
+            this.used = used;
+        }
+
+        public String name() {
+            return this.name;
+        }
+
+        public String getName() {
+            return this.name;
+        }
+
+        public long count() {
+            return this.count;
+        }
+
+        public long getCount() {
+            return this.count;
+        }
+
+        public ByteSizeValue totalCapacity() {
+            return new ByteSizeValue(totalCapacity);
+        }
+
+        public ByteSizeValue getTotalCapacity() {
+            return totalCapacity();
+        }
+
+        public ByteSizeValue used() {
+            return new ByteSizeValue(used);
+        }
+
+        public ByteSizeValue getUsed() {
+            return used();
+        }
+
+        @Override
+        public void readFrom(StreamInput in) throws IOException {
+            name = in.readString();
+            count = in.readLong();
+            totalCapacity = in.readLong();
+            used = in.readLong();
+        }
+
+        @Override
+        public void writeTo(StreamOutput out) throws IOException {
+            out.writeString(name);
+            out.writeLong(count);
+            out.writeLong(totalCapacity);
+            out.writeLong(used);
         }
     }
 }

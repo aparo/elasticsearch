@@ -27,7 +27,9 @@ import org.elasticsearch.ElasticSearchGenerationException;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.io.BytesStream;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -69,15 +71,11 @@ public class SearchSourceBuilder implements ToXContent {
 
     private QueryBuilder queryBuilder;
 
-    private byte[] queryBinary;
-    private int queryBinaryOffset;
-    private int queryBinaryLength;
+    private BytesReference queryBinary;
 
     private FilterBuilder filterBuilder;
 
-    private byte[] filterBinary;
-    private int filterBinaryOffset;
-    private int filterBinaryLength;
+    private BytesReference filterBinary;
 
     private int from = -1;
 
@@ -93,15 +91,15 @@ public class SearchSourceBuilder implements ToXContent {
 
     private Float minScore;
 
+    private long timeoutInMillis = -1;
+
     private List<String> fieldNames;
     private List<ScriptField> scriptFields;
     private List<PartialField> partialFields;
 
     private List<AbstractFacetBuilder> facets;
 
-    private byte[] facetsBinary;
-    private int facetBinaryOffset;
-    private int facetBinaryLength;
+    private BytesReference facetsBinary;
 
     private HighlightBuilder highlightBuilder;
 
@@ -137,9 +135,14 @@ public class SearchSourceBuilder implements ToXContent {
      * Constructs a new search source builder with a raw search query.
      */
     public SearchSourceBuilder query(byte[] queryBinary, int queryBinaryOffset, int queryBinaryLength) {
+        return query(new BytesArray(queryBinary, queryBinaryOffset, queryBinaryLength));
+    }
+
+    /**
+     * Constructs a new search source builder with a raw search query.
+     */
+    public SearchSourceBuilder query(BytesReference queryBinary) {
         this.queryBinary = queryBinary;
-        this.queryBinaryOffset = queryBinaryOffset;
-        this.queryBinaryLength = queryBinaryLength;
         return this;
     }
 
@@ -154,11 +157,7 @@ public class SearchSourceBuilder implements ToXContent {
      * Constructs a new search source builder with a query from a builder.
      */
     public SearchSourceBuilder query(XContentBuilder query) {
-        try {
-            return query(query.underlyingBytes(), 0, query.underlyingBytesLength());
-        } catch (IOException e) {
-            throw new ElasticSearchGenerationException("failed to generate query from builder", e);
-        }
+        return query(query.bytes());
     }
 
     /**
@@ -204,9 +203,15 @@ public class SearchSourceBuilder implements ToXContent {
      * (and not facets for example).
      */
     public SearchSourceBuilder filter(byte[] filterBinary, int filterBinaryOffset, int filterBinaryLength) {
+        return filter(new BytesArray(filterBinary, filterBinaryOffset, filterBinaryLength));
+    }
+
+    /**
+     * Sets a filter on the query executed that only applies to the search query
+     * (and not facets for example).
+     */
+    public SearchSourceBuilder filter(BytesReference filterBinary) {
         this.filterBinary = filterBinary;
-        this.filterBinaryOffset = filterBinaryOffset;
-        this.filterBinaryLength = filterBinaryLength;
         return this;
     }
 
@@ -214,11 +219,7 @@ public class SearchSourceBuilder implements ToXContent {
      * Constructs a new search source builder with a query from a builder.
      */
     public SearchSourceBuilder filter(XContentBuilder filter) {
-        try {
-            return filter(filter.underlyingBytes(), 0, filter.underlyingBytesLength());
-        } catch (IOException e) {
-            throw new ElasticSearchGenerationException("failed to generate filter from builder", e);
-        }
+        return filter(filter.bytes());
     }
 
     /**
@@ -273,6 +274,22 @@ public class SearchSourceBuilder implements ToXContent {
      */
     public SearchSourceBuilder version(Boolean version) {
         this.version = version;
+        return this;
+    }
+
+    /**
+     * An optional timeout to control how long search is allowed to take.
+     */
+    public SearchSourceBuilder timeout(TimeValue timeout) {
+        this.timeoutInMillis = timeout.millis();
+        return this;
+    }
+
+    /**
+     * An optional timeout to control how long search is allowed to take.
+     */
+    public SearchSourceBuilder timeout(String timeout) {
+        this.timeoutInMillis = TimeValue.parseTimeValue(timeout, null).millis();
         return this;
     }
 
@@ -337,9 +354,14 @@ public class SearchSourceBuilder implements ToXContent {
      * Sets a raw (xcontent / json) facets.
      */
     public SearchSourceBuilder facets(byte[] facetsBinary, int facetBinaryOffset, int facetBinaryLength) {
+        return facets(new BytesArray(facetsBinary, facetBinaryOffset, facetBinaryLength));
+    }
+
+    /**
+     * Sets a raw (xcontent / json) facets.
+     */
+    public SearchSourceBuilder facets(BytesReference facetsBinary) {
         this.facetsBinary = facetsBinary;
-        this.facetBinaryOffset = facetBinaryOffset;
-        this.facetBinaryLength = facetBinaryLength;
         return this;
     }
 
@@ -347,11 +369,7 @@ public class SearchSourceBuilder implements ToXContent {
      * Sets a raw (xcontent / json) facets.
      */
     public SearchSourceBuilder facets(XContentBuilder facets) {
-        try {
-            return facets(facets.underlyingBytes(), 0, facets.underlyingBytesLength());
-        } catch (IOException e) {
-            throw new ElasticSearchGenerationException("failed to generate filter from builder", e);
-        }
+        return facets(facets.bytes());
     }
 
     /**
@@ -528,25 +546,15 @@ public class SearchSourceBuilder implements ToXContent {
         }
     }
 
-    public BytesStream buildAsBytesStream(XContentType contentType) throws SearchSourceBuilderException {
-        try {
-            XContentBuilder builder = XContentFactory.contentBuilder(contentType);
-            toXContent(builder, ToXContent.EMPTY_PARAMS);
-            return builder.underlyingStream();
-        } catch (Exception e) {
-            throw new SearchSourceBuilderException("Failed to build search source", e);
-        }
-    }
-
-    public byte[] buildAsBytes() throws SearchSourceBuilderException {
+    public BytesReference buildAsBytes() throws SearchSourceBuilderException {
         return buildAsBytes(Requests.CONTENT_TYPE);
     }
 
-    public byte[] buildAsBytes(XContentType contentType) throws SearchSourceBuilderException {
+    public BytesReference buildAsBytes(XContentType contentType) throws SearchSourceBuilderException {
         try {
             XContentBuilder builder = XContentFactory.contentBuilder(contentType);
-            toXContent(builder, EMPTY_PARAMS);
-            return builder.copiedBytes();
+            toXContent(builder, ToXContent.EMPTY_PARAMS);
+            return builder.bytes();
         } catch (Exception e) {
             throw new SearchSourceBuilderException("Failed to build search source", e);
         }
@@ -564,16 +572,20 @@ public class SearchSourceBuilder implements ToXContent {
             builder.field("size", size);
         }
 
+        if (timeoutInMillis != -1) {
+            builder.field("timeout", timeoutInMillis);
+        }
+
         if (queryBuilder != null) {
             builder.field("query");
             queryBuilder.toXContent(builder, params);
         }
 
         if (queryBinary != null) {
-            if (XContentFactory.xContentType(queryBinary, queryBinaryOffset, queryBinaryLength) == builder.contentType()) {
-                builder.rawField("query", queryBinary, queryBinaryOffset, queryBinaryLength);
+            if (XContentFactory.xContentType(queryBinary) == builder.contentType()) {
+                builder.rawField("query", queryBinary);
             } else {
-                builder.field("query_binary", queryBinary, queryBinaryOffset, queryBinaryLength);
+                builder.field("query_binary", queryBinary);
             }
         }
 
@@ -583,10 +595,10 @@ public class SearchSourceBuilder implements ToXContent {
         }
 
         if (filterBinary != null) {
-            if (XContentFactory.xContentType(filterBinary, filterBinaryOffset, filterBinaryLength) == builder.contentType()) {
-                builder.rawField("filter", filterBinary, filterBinaryOffset, filterBinaryLength);
+            if (XContentFactory.xContentType(filterBinary) == builder.contentType()) {
+                builder.rawField("filter", filterBinary);
             } else {
-                builder.field("filter_binary", filterBinary, filterBinaryOffset, filterBinaryLength);
+                builder.field("filter_binary", filterBinary);
             }
         }
 
@@ -686,10 +698,10 @@ public class SearchSourceBuilder implements ToXContent {
         }
 
         if (facetsBinary != null) {
-            if (XContentFactory.xContentType(facetsBinary, facetBinaryOffset, facetBinaryLength) == builder.contentType()) {
-                builder.rawField("facets", facetsBinary, facetBinaryOffset, facetBinaryLength);
+            if (XContentFactory.xContentType(facetsBinary) == builder.contentType()) {
+                builder.rawField("facets", facetsBinary);
             } else {
-                builder.field("facets_binary", facetsBinary, facetBinaryOffset, facetBinaryLength);
+                builder.field("facets_binary", facetsBinary);
             }
         }
 

@@ -25,9 +25,11 @@ import org.apache.lucene.index.ExtendedIndexSearcher;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.CloseableComponent;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lucene.uid.UidField;
@@ -151,6 +153,31 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         IndexReader reader();
 
         ExtendedIndexSearcher searcher();
+    }
+
+    static class SimpleSearcher implements Searcher {
+
+        private final IndexSearcher searcher;
+
+        public SimpleSearcher(IndexSearcher searcher) {
+            this.searcher = searcher;
+        }
+
+        @Override
+        public IndexReader reader() {
+            return searcher.getIndexReader();
+        }
+
+        @Override
+        public ExtendedIndexSearcher searcher() {
+            return (ExtendedIndexSearcher) searcher;
+        }
+
+        @Override
+        public boolean release() throws ElasticSearchException {
+            // nothing to release here...
+            return true;
+        }
     }
 
     static class Refresh {
@@ -415,16 +442,8 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.doc.analyzer();
         }
 
-        public byte[] source() {
+        public BytesReference source() {
             return this.doc.source();
-        }
-
-        public int sourceOffset() {
-            return this.doc.sourceOffset();
-        }
-
-        public int sourceLength() {
-            return this.doc.sourceLength();
         }
 
         public UidField uidField() {
@@ -551,16 +570,8 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.doc.ttl();
         }
 
-        public byte[] source() {
+        public BytesReference source() {
             return this.doc.source();
-        }
-
-        public int sourceOffset() {
-            return this.doc.sourceOffset();
-        }
-
-        public int sourceLength() {
-            return this.doc.sourceLength();
         }
 
         public UidField uidField() {
@@ -692,7 +703,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
 
     static class DeleteByQuery {
         private final Query query;
-        private final byte[] source;
+        private final BytesReference source;
         private final String[] filteringAliases;
         private final Filter aliasFilter;
         private final String[] types;
@@ -700,7 +711,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         private long startTime;
         private long endTime;
 
-        public DeleteByQuery(Query query, byte[] source, @Nullable String[] filteringAliases, @Nullable Filter aliasFilter, String... types) {
+        public DeleteByQuery(Query query, BytesReference source, @Nullable String[] filteringAliases, @Nullable Filter aliasFilter, String... types) {
             this.query = query;
             this.source = source;
             this.types = types;
@@ -712,7 +723,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
             return this.query;
         }
 
-        public byte[] source() {
+        public BytesReference source() {
             return this.source;
         }
 

@@ -19,71 +19,77 @@
 
 package org.elasticsearch.client;
 
-import org.elasticsearch.action.ActionFuture;
-import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.*;
+import org.elasticsearch.action.admin.indices.IndicesAction;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
+import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequestBuilder;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesResponse;
 import org.elasticsearch.action.admin.indices.analyze.AnalyzeRequest;
+import org.elasticsearch.action.admin.indices.analyze.AnalyzeRequestBuilder;
 import org.elasticsearch.action.admin.indices.analyze.AnalyzeResponse;
 import org.elasticsearch.action.admin.indices.cache.clear.ClearIndicesCacheRequest;
+import org.elasticsearch.action.admin.indices.cache.clear.ClearIndicesCacheRequestBuilder;
 import org.elasticsearch.action.admin.indices.cache.clear.ClearIndicesCacheResponse;
 import org.elasticsearch.action.admin.indices.close.CloseIndexRequest;
+import org.elasticsearch.action.admin.indices.close.CloseIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.close.CloseIndexResponse;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.IndicesExistsRequestBuilder;
 import org.elasticsearch.action.admin.indices.exists.IndicesExistsResponse;
 import org.elasticsearch.action.admin.indices.flush.FlushRequest;
+import org.elasticsearch.action.admin.indices.flush.FlushRequestBuilder;
 import org.elasticsearch.action.admin.indices.flush.FlushResponse;
 import org.elasticsearch.action.admin.indices.gateway.snapshot.GatewaySnapshotRequest;
+import org.elasticsearch.action.admin.indices.gateway.snapshot.GatewaySnapshotRequestBuilder;
 import org.elasticsearch.action.admin.indices.gateway.snapshot.GatewaySnapshotResponse;
 import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingRequest;
+import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingRequestBuilder;
 import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingResponse;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequestBuilder;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest;
+import org.elasticsearch.action.admin.indices.open.OpenIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.open.OpenIndexResponse;
 import org.elasticsearch.action.admin.indices.optimize.OptimizeRequest;
+import org.elasticsearch.action.admin.indices.optimize.OptimizeRequestBuilder;
 import org.elasticsearch.action.admin.indices.optimize.OptimizeResponse;
 import org.elasticsearch.action.admin.indices.refresh.RefreshRequest;
+import org.elasticsearch.action.admin.indices.refresh.RefreshRequestBuilder;
 import org.elasticsearch.action.admin.indices.refresh.RefreshResponse;
 import org.elasticsearch.action.admin.indices.segments.IndicesSegmentResponse;
 import org.elasticsearch.action.admin.indices.segments.IndicesSegmentsRequest;
+import org.elasticsearch.action.admin.indices.segments.IndicesSegmentsRequestBuilder;
 import org.elasticsearch.action.admin.indices.settings.UpdateSettingsRequest;
+import org.elasticsearch.action.admin.indices.settings.UpdateSettingsRequestBuilder;
 import org.elasticsearch.action.admin.indices.settings.UpdateSettingsResponse;
 import org.elasticsearch.action.admin.indices.stats.IndicesStats;
 import org.elasticsearch.action.admin.indices.stats.IndicesStatsRequest;
+import org.elasticsearch.action.admin.indices.stats.IndicesStatsRequestBuilder;
 import org.elasticsearch.action.admin.indices.status.IndicesStatusRequest;
+import org.elasticsearch.action.admin.indices.status.IndicesStatusRequestBuilder;
 import org.elasticsearch.action.admin.indices.status.IndicesStatusResponse;
 import org.elasticsearch.action.admin.indices.template.delete.DeleteIndexTemplateRequest;
+import org.elasticsearch.action.admin.indices.template.delete.DeleteIndexTemplateRequestBuilder;
 import org.elasticsearch.action.admin.indices.template.delete.DeleteIndexTemplateResponse;
 import org.elasticsearch.action.admin.indices.template.put.PutIndexTemplateRequest;
+import org.elasticsearch.action.admin.indices.template.put.PutIndexTemplateRequestBuilder;
 import org.elasticsearch.action.admin.indices.template.put.PutIndexTemplateResponse;
 import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryRequest;
+import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryRequestBuilder;
 import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryResponse;
-import org.elasticsearch.client.action.admin.indices.alias.IndicesAliasesRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.analyze.AnalyzeRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.cache.clear.ClearIndicesCacheRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.close.CloseIndexRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.create.CreateIndexRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.delete.DeleteIndexRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.exists.IndicesExistsRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.flush.FlushRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.gateway.snapshot.GatewaySnapshotRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.mapping.delete.DeleteMappingRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.mapping.put.PutMappingRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.open.OpenIndexRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.optimize.OptimizeRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.refresh.RefreshRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.segments.IndicesSegmentsRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.settings.UpdateSettingsRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.stats.IndicesStatsRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.status.IndicesStatusRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.template.delete.DeleteIndexTemplateRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.template.put.PutIndexTemplateRequestBuilder;
-import org.elasticsearch.client.action.admin.indices.validate.query.ValidateQueryRequestBuilder;
+import org.elasticsearch.action.admin.indices.warmer.delete.DeleteWarmerRequest;
+import org.elasticsearch.action.admin.indices.warmer.delete.DeleteWarmerRequestBuilder;
+import org.elasticsearch.action.admin.indices.warmer.delete.DeleteWarmerResponse;
+import org.elasticsearch.action.admin.indices.warmer.put.PutWarmerRequest;
+import org.elasticsearch.action.admin.indices.warmer.put.PutWarmerRequestBuilder;
+import org.elasticsearch.action.admin.indices.warmer.put.PutWarmerResponse;
 import org.elasticsearch.common.Nullable;
 
 /**
@@ -92,6 +98,13 @@ import org.elasticsearch.common.Nullable;
  * @see AdminClient#indices()
  */
 public interface IndicesAdminClient {
+
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> ActionFuture<Response> execute(final IndicesAction<Request, Response, RequestBuilder> action, final Request request);
+
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> void execute(final IndicesAction<Request, Response, RequestBuilder> action, final Request request, ActionListener<Response> listener);
+
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> RequestBuilder prepareExecute(final IndicesAction<Request, Response, RequestBuilder> action);
+
 
     /**
      * Indices Exists.
@@ -563,4 +576,34 @@ public interface IndicesAdminClient {
      * Validate a query for correctness.
      */
     ValidateQueryRequestBuilder prepareValidateQuery(String... indices);
+
+    /**
+     * Puts an index search warmer to be applies when applicable.
+     */
+    ActionFuture<PutWarmerResponse> putWarmer(PutWarmerRequest request);
+
+    /**
+     * Puts an index search warmer to be applies when applicable.
+     */
+    void putWarmer(PutWarmerRequest request, ActionListener<PutWarmerResponse> listener);
+
+    /**
+     * Puts an index search warmer to be applies when applicable.
+     */
+    PutWarmerRequestBuilder preparePutWarmer(String name);
+
+    /**
+     * Deletes an index warmer.
+     */
+    ActionFuture<DeleteWarmerResponse> deleteWarmer(DeleteWarmerRequest request);
+
+    /**
+     * Deletes an index warmer.
+     */
+    void deleteWarmer(DeleteWarmerRequest request, ActionListener<DeleteWarmerResponse> listener);
+
+    /**
+     * Deletes an index warmer.
+     */
+    DeleteWarmerRequestBuilder prepareDeleteWarmer();
 }

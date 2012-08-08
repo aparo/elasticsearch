@@ -19,6 +19,9 @@
 
 package org.elasticsearch.common.io.stream;
 
+import org.elasticsearch.common.Bytes;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.BytesStream;
 
 import java.io.IOException;
@@ -40,7 +43,7 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
     protected int count;
 
     public BytesStreamOutput() {
-        this(126);
+        this(1024);
     }
 
     public BytesStreamOutput(int size) {
@@ -48,10 +51,28 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
     }
 
     @Override
+    public boolean seekPositionSupported() {
+        return true;
+    }
+
+    @Override
+    public long position() throws IOException {
+        return count;
+    }
+
+    @Override
+    public void seek(long position) throws IOException {
+        if (position > Integer.MAX_VALUE) {
+            throw new UnsupportedOperationException();
+        }
+        count = (int) position;
+    }
+
+    @Override
     public void writeByte(byte b) throws IOException {
         int newcount = count + 1;
         if (newcount > buf.length) {
-            buf = Arrays.copyOf(buf, Math.max(buf.length << 1, newcount));
+            buf = Arrays.copyOf(buf, Bytes.oversize(newcount, 1));
         }
         buf[count] = b;
         count = newcount;
@@ -64,7 +85,7 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
         }
         int newcount = count + length;
         if (newcount > buf.length) {
-            buf = Arrays.copyOf(buf, Math.max(buf.length << 1, newcount));
+            buf = Arrays.copyOf(buf, Bytes.oversize(newcount, 1));
         }
         System.arraycopy(b, offset, buf, count, length);
         count = newcount;
@@ -88,24 +109,9 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
         // nothing to do here
     }
 
-    /**
-     * Creates a newly allocated byte array. Its size is the current
-     * size of this output stream and the valid contents of the buffer
-     * have been copied into it.
-     *
-     * @return the current contents of this output stream, as a byte array.
-     * @see java.io.ByteArrayOutputStream#size()
-     */
-    public byte copiedByteArray()[] {
-        return Arrays.copyOf(buf, count);
-    }
-
-    /**
-     * Returns the underlying byte array. Note, use {@link #size()} in order to know
-     * the length of it.
-     */
-    public byte[] underlyingBytes() {
-        return buf;
+    @Override
+    public BytesReference bytes() {
+        return new BytesArray(buf, 0, count);
     }
 
     /**
@@ -117,63 +123,5 @@ public class BytesStreamOutput extends StreamOutput implements BytesStream {
      */
     public int size() {
         return count;
-    }
-
-
-    /**
-     * Writes a string.
-     */
-    // Override here since we can work on the byte array directly!
-    public void writeUTF(String str) throws IOException {
-        int strlen = str.length();
-        int utflen = 0;
-        int c = 0;
-
-        /* use charAt instead of copying String to char array */
-        for (int i = 0; i < strlen; i++) {
-            c = str.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F)) {
-                utflen++;
-            } else if (c > 0x07FF) {
-                utflen += 3;
-            } else {
-                utflen += 2;
-            }
-        }
-
-        int newcount = count + utflen + 4;
-        if (newcount > buf.length) {
-            buf = Arrays.copyOf(buf, Math.max(buf.length << 1, newcount));
-        }
-
-        byte[] bytearr = this.buf;
-
-        // same as writeInt
-        bytearr[count++] = (byte) (utflen >> 24);
-        bytearr[count++] = (byte) (utflen >> 16);
-        bytearr[count++] = (byte) (utflen >> 8);
-        bytearr[count++] = (byte) (utflen);
-
-        int i = 0;
-        for (i = 0; i < strlen; i++) {
-            c = str.charAt(i);
-            if (!((c >= 0x0001) && (c <= 0x007F))) break;
-            bytearr[count++] = (byte) c;
-        }
-
-        for (; i < strlen; i++) {
-            c = str.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F)) {
-                bytearr[count++] = (byte) c;
-
-            } else if (c > 0x07FF) {
-                bytearr[count++] = (byte) (0xE0 | ((c >> 12) & 0x0F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 6) & 0x3F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 0) & 0x3F));
-            } else {
-                bytearr[count++] = (byte) (0xC0 | ((c >> 6) & 0x1F));
-                bytearr[count++] = (byte) (0x80 | ((c >> 0) & 0x3F));
-            }
-        }
     }
 }

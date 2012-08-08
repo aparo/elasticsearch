@@ -25,15 +25,15 @@ import com.google.common.collect.Sets;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionRequest;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.action.support.BaseAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
@@ -48,6 +48,7 @@ import org.elasticsearch.transport.TransportChannel;
 import org.elasticsearch.transport.TransportService;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -56,7 +57,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  *
  */
-public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
+public class TransportBulkAction extends TransportAction<BulkRequest, BulkResponse> {
 
     private final boolean autoCreateIndex;
 
@@ -79,7 +80,7 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
         this.autoCreateIndex = settings.getAsBoolean("action.auto_create_index", true);
         this.allowIdGeneration = componentSettings.getAsBoolean("action.allow_id_generation", true);
 
-        transportService.registerHandler(TransportActions.BULK, new TransportHandler());
+        transportService.registerHandler(BulkAction.NAME, new TransportHandler());
     }
 
     @Override
@@ -138,6 +139,9 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
 
     private void executeBulk(final BulkRequest bulkRequest, final long startTime, final ActionListener<BulkResponse> listener) {
         ClusterState clusterState = clusterService.state();
+        // TODO use timeout to wait here if its blocked...
+        clusterState.blocks().globalBlockedRaiseException(ClusterBlockLevel.WRITE);
+
         MetaData metaData = clusterState.metaData();
         for (ActionRequest request : bulkRequest.requests) {
             if (request instanceof IndexRequest) {
@@ -147,11 +151,12 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
 
                 MappingMetaData mappingMd = null;
                 if (metaData.hasIndex(indexRequest.index())) {
-                    mappingMd = metaData.index(indexRequest.index()).mapping(indexRequest.type());
+                    mappingMd = metaData.index(indexRequest.index()).mappingOrDefault(indexRequest.type());
                 }
                 indexRequest.process(metaData, aliasOrIndex, mappingMd, allowIdGeneration);
             } else if (request instanceof DeleteRequest) {
                 DeleteRequest deleteRequest = (DeleteRequest) request;
+                deleteRequest.routing(clusterState.metaData().resolveIndexRouting(deleteRequest.routing(), deleteRequest.index()));
                 deleteRequest.index(clusterState.metaData().concreteIndex(deleteRequest.index()));
             }
         }
@@ -173,7 +178,7 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
                 list.add(new BulkItemRequest(i, request));
             } else if (request instanceof DeleteRequest) {
                 DeleteRequest deleteRequest = (DeleteRequest) request;
-                MappingMetaData mappingMd = clusterState.metaData().index(deleteRequest.index()).mapping(deleteRequest.type());
+                MappingMetaData mappingMd = clusterState.metaData().index(deleteRequest.index()).mappingOrDefault(deleteRequest.type());
                 if (mappingMd != null && mappingMd.routing().required() && deleteRequest.routing() == null) {
                     // if routing is required, and no routing on the delete request, we need to broadcast it....
                     GroupShardsIterator groupShards = clusterService.operationRouting().broadcastDeleteShards(clusterState, deleteRequest.index());
@@ -230,7 +235,7 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
                         for (BulkItemRequest request : requests) {
                             if (request.request() instanceof IndexRequest) {
                                 IndexRequest indexRequest = (IndexRequest) request.request();
-                                responses[request.id()] = new BulkItemResponse(request.id(), indexRequest.opType().toString().toLowerCase(),
+                                responses[request.id()] = new BulkItemResponse(request.id(), indexRequest.opType().toString().toLowerCase(Locale.ENGLISH),
                                         new BulkItemResponse.Failure(indexRequest.index(), indexRequest.type(), indexRequest.id(), message));
                             } else if (request.request() instanceof DeleteRequest) {
                                 DeleteRequest deleteRequest = (DeleteRequest) request.request();
@@ -277,7 +282,7 @@ public class TransportBulkAction extends BaseAction<BulkRequest, BulkResponse> {
                     try {
                         channel.sendResponse(e);
                     } catch (Exception e1) {
-                        logger.warn("Failed to send error response for action [" + TransportActions.BULK + "] and request [" + request + "]", e1);
+                        logger.warn("Failed to send error response for action [" + BulkAction.NAME + "] and request [" + request + "]", e1);
                     }
                 }
             });

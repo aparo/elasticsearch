@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import jsr166y.LinkedTransferQueue;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
+import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
@@ -82,14 +83,20 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
     private final CopyOnWriteArrayList<UnicastHostsProvider> hostsProviders = new CopyOnWriteArrayList<UnicastHostsProvider>();
 
     public UnicastZenPing(ThreadPool threadPool, TransportService transportService, ClusterName clusterName) {
-        this(EMPTY_SETTINGS, threadPool, transportService, clusterName);
+        this(EMPTY_SETTINGS, threadPool, transportService, clusterName, null);
     }
 
-    public UnicastZenPing(Settings settings, ThreadPool threadPool, TransportService transportService, ClusterName clusterName) {
+    public UnicastZenPing(Settings settings, ThreadPool threadPool, TransportService transportService, ClusterName clusterName, @Nullable Set<UnicastHostsProvider> unicastHostsProviders) {
         super(settings);
         this.threadPool = threadPool;
         this.transportService = transportService;
         this.clusterName = clusterName;
+
+        if (unicastHostsProviders != null) {
+            for (UnicastHostsProvider unicastHostsProvider : unicastHostsProviders) {
+                addHostsProvider(unicastHostsProvider);
+            }
+        }
 
         this.concurrentConnects = componentSettings.getAsInt("concurrent_connects", 10);
         String[] hostArr = componentSettings.getAsArray("hosts");
@@ -165,19 +172,20 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
     @Override
     public void ping(final PingListener listener, final TimeValue timeout) throws ElasticSearchException {
         final SendPingsHandler sendPingsHandler = new SendPingsHandler(pingIdGenerator.incrementAndGet());
-        receivedResponses.put(sendPingsHandler.id(), new ConcurrentHashMap<DiscoveryNode, PingResponse>());
+        receivedResponses.put(sendPingsHandler.id(), ConcurrentCollections.<DiscoveryNode, PingResponse>newConcurrentMap());
         sendPings(timeout, null, sendPingsHandler);
-        threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.CACHED, new Runnable() {
+        threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.GENERIC, new Runnable() {
             @Override
             public void run() {
                 sendPings(timeout, null, sendPingsHandler);
-                threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.CACHED, new Runnable() {
+                threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.GENERIC, new Runnable() {
                     @Override
                     public void run() {
                         sendPings(timeout, TimeValue.timeValueMillis(timeout.millis() / 2), sendPingsHandler);
                         ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.remove(sendPingsHandler.id());
                         listener.onPing(responses.values().toArray(new PingResponse[responses.size()]));
                         for (DiscoveryNode node : sendPingsHandler.nodeToDisconnect) {
+                            logger.trace("[{}] disconnecting from {}", sendPingsHandler.id(), node);
                             transportService.disconnectFromNode(node);
                         }
                         sendPingsHandler.close();
@@ -261,12 +269,21 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
                         try {
                             // connect to the node, see if we manage to do it, if not, bail
                             if (!nodeFoundByAddress) {
+                                logger.trace("[{}] connecting (light) to {}", sendPingsHandler.id(), nodeToSend);
                                 transportService.connectToNodeLight(nodeToSend);
                             } else {
+                                logger.trace("[{}] connecting to {}", sendPingsHandler.id(), nodeToSend);
                                 transportService.connectToNode(nodeToSend);
                             }
-                            // we are connected, send the ping request
-                            sendPingRequestToNode(sendPingsHandler.id(), timeout, pingRequest, latch, node, nodeToSend);
+                            logger.trace("[{}] connected to {}", sendPingsHandler.id(), node);
+                            if (receivedResponses.containsKey(sendPingsHandler.id())) {
+                                // we are connected and still in progress, send the ping request
+                                sendPingRequestToNode(sendPingsHandler.id(), timeout, pingRequest, latch, node, nodeToSend);
+                            } else {
+                                // connect took too long, just log it and bail
+                                latch.countDown();
+                                logger.trace("[{}] connect to {} was too long outside of ping window, bailing", sendPingsHandler.id(), node);
+                            }
                         } catch (ConnectTransportException e) {
                             // can't connect to the node
                             logger.trace("[{}] failed to connect to {}", e, sendPingsHandler.id(), nodeToSend);
@@ -288,7 +305,7 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
     }
 
     private void sendPingRequestToNode(final int id, TimeValue timeout, UnicastPingRequest pingRequest, final CountDownLatch latch, final DiscoveryNode node, final DiscoveryNode nodeToSend) {
-        logger.trace("[{}] connecting to {}", id, nodeToSend);
+        logger.trace("[{}] sending to {}", id, nodeToSend);
         transportService.sendRequest(nodeToSend, UnicastPingRequestHandler.ACTION, pingRequest, TransportRequestOptions.options().withTimeout((long) (timeout.millis() * 1.25)), new BaseTransportResponseHandler<UnicastPingResponse>() {
 
             @Override
@@ -342,6 +359,9 @@ public class UnicastZenPing extends AbstractLifecycleComponent<ZenPing> implemen
     }
 
     private UnicastPingResponse handlePingRequest(final UnicastPingRequest request) {
+        if (lifecycle.stoppedOrClosed()) {
+            throw new ElasticSearchIllegalStateException("received ping request while stopped/closed");
+        }
         temporalResponses.add(request.pingResponse);
         threadPool.schedule(TimeValue.timeValueMillis(request.timeout.millis() * 2), ThreadPool.Names.SAME, new Runnable() {
             @Override

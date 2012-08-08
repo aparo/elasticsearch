@@ -19,42 +19,32 @@
 
 package org.elasticsearch.client;
 
-import org.elasticsearch.action.ActionFuture;
-import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.*;
 import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.count.CountRequest;
+import org.elasticsearch.action.count.CountRequestBuilder;
 import org.elasticsearch.action.count.CountResponse;
 import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.delete.DeleteRequestBuilder;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.deletebyquery.DeleteByQueryRequest;
+import org.elasticsearch.action.deletebyquery.DeleteByQueryRequestBuilder;
 import org.elasticsearch.action.deletebyquery.DeleteByQueryResponse;
-import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.get.GetResponse;
-import org.elasticsearch.action.get.MultiGetRequest;
-import org.elasticsearch.action.get.MultiGetResponse;
+import org.elasticsearch.action.get.*;
 import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.mlt.MoreLikeThisRequest;
+import org.elasticsearch.action.mlt.MoreLikeThisRequestBuilder;
 import org.elasticsearch.action.percolate.PercolateRequest;
+import org.elasticsearch.action.percolate.PercolateRequestBuilder;
 import org.elasticsearch.action.percolate.PercolateResponse;
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.search.SearchScrollRequest;
+import org.elasticsearch.action.search.*;
 import org.elasticsearch.action.update.UpdateRequest;
+import org.elasticsearch.action.update.UpdateRequestBuilder;
 import org.elasticsearch.action.update.UpdateResponse;
-import org.elasticsearch.client.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.client.action.count.CountRequestBuilder;
-import org.elasticsearch.client.action.delete.DeleteRequestBuilder;
-import org.elasticsearch.client.action.deletebyquery.DeleteByQueryRequestBuilder;
-import org.elasticsearch.client.action.get.GetRequestBuilder;
-import org.elasticsearch.client.action.get.MultiGetRequestBuilder;
-import org.elasticsearch.client.action.index.IndexRequestBuilder;
-import org.elasticsearch.client.action.mlt.MoreLikeThisRequestBuilder;
-import org.elasticsearch.client.action.percolate.PercolateRequestBuilder;
-import org.elasticsearch.client.action.search.SearchRequestBuilder;
-import org.elasticsearch.client.action.search.SearchScrollRequestBuilder;
-import org.elasticsearch.client.action.update.UpdateRequestBuilder;
 import org.elasticsearch.common.Nullable;
 
 /**
@@ -81,6 +71,42 @@ public interface Client {
      * The admin client that can be used to perform administrative operations.
      */
     AdminClient admin();
+
+    /**
+     * Executes a generic action, denoted by an {@link Action}.
+     *
+     * @param action           The action type to execute.
+     * @param request          The action request.
+     * @param <Request>        Teh request type.
+     * @param <Response>       the response type.
+     * @param <RequestBuilder> The request builder type.
+     * @return A future allowing to get back the response.
+     */
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> ActionFuture<Response> execute(final Action<Request, Response, RequestBuilder> action, final Request request);
+
+    /**
+     * Executes a generic action, denoted by an {@link Action}.
+     *
+     * @param action           The action type to execute.
+     * @param request          Teh action request.
+     * @param listener         The listener to receive the response back.
+     * @param <Request>        The request type.
+     * @param <Response>       The response type.
+     * @param <RequestBuilder> The request builder type.
+     */
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> void execute(final Action<Request, Response, RequestBuilder> action, final Request request, ActionListener<Response> listener);
+
+    /**
+     * Prepares a request builder to execute, specified by {@link Action}.
+     *
+     * @param action           The action type to execute.
+     * @param <Request>        The request type.
+     * @param <Response>       The response type.
+     * @param <RequestBuilder> The request builder.
+     * @return The request builder, that can, at a later stage, execute the request.
+     */
+    <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> RequestBuilder prepareExecute(final Action<Request, Response, RequestBuilder> action);
+
 
     /**
      * Index a JSON source associated with a given index and type.
@@ -347,6 +373,21 @@ public interface Client {
      * A search scroll request to continue searching a previous scrollable search request.
      */
     SearchScrollRequestBuilder prepareSearchScroll(String scrollId);
+
+    /**
+     * Performs multiple search requests.
+     */
+    ActionFuture<MultiSearchResponse> multiSearch(MultiSearchRequest request);
+
+    /**
+     * Performs multiple search requests.
+     */
+    void multiSearch(MultiSearchRequest request, ActionListener<MultiSearchResponse> listener);
+
+    /**
+     * Performs multiple search requests.
+     */
+    MultiSearchRequestBuilder prepareMultiSearch();
 
     /**
      * A more like this action to search for documents that are "like" a specific document.

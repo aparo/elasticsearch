@@ -26,6 +26,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.loader.SettingsLoader;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -47,14 +48,18 @@ public class IndexTemplateMetaData {
 
     private final Settings settings;
 
+    // the mapping source should always include the type as top level
     private final ImmutableMap<String, CompressedString> mappings;
 
-    public IndexTemplateMetaData(String name, int order, String template, Settings settings, ImmutableMap<String, CompressedString> mappings) {
+    private final ImmutableMap<String, IndexMetaData.Custom> customs;
+
+    public IndexTemplateMetaData(String name, int order, String template, Settings settings, ImmutableMap<String, CompressedString> mappings, ImmutableMap<String, IndexMetaData.Custom> customs) {
         this.name = name;
         this.order = order;
         this.template = template;
         this.settings = settings;
         this.mappings = mappings;
+        this.customs = customs;
     }
 
     public String name() {
@@ -97,8 +102,46 @@ public class IndexTemplateMetaData {
         return this.mappings;
     }
 
+    public ImmutableMap<String, IndexMetaData.Custom> customs() {
+        return this.customs;
+    }
+
+    public ImmutableMap<String, IndexMetaData.Custom> getCustoms() {
+        return this.customs;
+    }
+
+    public <T extends IndexMetaData.Custom> T custom(String type) {
+        return (T) customs.get(type);
+    }
+
     public static Builder builder(String name) {
         return new Builder(name);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        IndexTemplateMetaData that = (IndexTemplateMetaData) o;
+
+        if (order != that.order) return false;
+        if (!mappings.equals(that.mappings)) return false;
+        if (!name.equals(that.name)) return false;
+        if (!settings.equals(that.settings)) return false;
+        if (!template.equals(that.template)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = name.hashCode();
+        result = 31 * result + order;
+        result = 31 * result + template.hashCode();
+        result = 31 * result + settings.hashCode();
+        result = 31 * result + mappings.hashCode();
+        return result;
     }
 
     public static class Builder {
@@ -113,6 +156,8 @@ public class IndexTemplateMetaData {
 
         private MapBuilder<String, CompressedString> mappings = MapBuilder.newMapBuilder();
 
+        private MapBuilder<String, IndexMetaData.Custom> customs = MapBuilder.newMapBuilder();
+
         public Builder(String name) {
             this.name = name;
         }
@@ -123,6 +168,7 @@ public class IndexTemplateMetaData {
             template(indexTemplateMetaData.template());
             settings(indexTemplateMetaData.settings());
             mappings.putAll(indexTemplateMetaData.mappings());
+            customs.putAll(indexTemplateMetaData.customs());
         }
 
         public Builder order(int order) {
@@ -164,8 +210,22 @@ public class IndexTemplateMetaData {
             return this;
         }
 
+        public Builder putCustom(String type, IndexMetaData.Custom customIndexMetaData) {
+            this.customs.put(type, customIndexMetaData);
+            return this;
+        }
+
+        public Builder removeCustom(String type) {
+            this.customs.remove(type);
+            return this;
+        }
+
+        public IndexMetaData.Custom getCustom(String type) {
+            return this.customs.get(type);
+        }
+
         public IndexTemplateMetaData build() {
-            return new IndexTemplateMetaData(name, order, template, settings, mappings.immutableMap());
+            return new IndexTemplateMetaData(name, order, template, settings, mappings.immutableMap(), customs.immutableMap());
         }
 
         public static void toXContent(IndexTemplateMetaData indexTemplateMetaData, XContentBuilder builder, ToXContent.Params params) throws IOException {
@@ -184,13 +244,33 @@ public class IndexTemplateMetaData {
             for (Map.Entry<String, CompressedString> entry : indexTemplateMetaData.mappings().entrySet()) {
                 byte[] data = entry.getValue().uncompressed();
                 XContentParser parser = XContentFactory.xContent(data).createParser(data);
-                Map<String, Object> mapping = parser.map();
-                parser.close();
+                Map<String, Object> mapping = parser.mapOrderedAndClose();
                 builder.map(mapping);
             }
             builder.endArray();
 
+            for (Map.Entry<String, IndexMetaData.Custom> entry : indexTemplateMetaData.customs().entrySet()) {
+                builder.startObject(entry.getKey(), XContentBuilder.FieldCaseConversion.NONE);
+                IndexMetaData.lookupFactorySafe(entry.getKey()).toXContent(entry.getValue(), builder, params);
+                builder.endObject();
+            }
+
             builder.endObject();
+        }
+
+        public static IndexTemplateMetaData fromXContentStandalone(XContentParser parser) throws IOException {
+            XContentParser.Token token = parser.nextToken();
+            if (token == null) {
+                throw new IOException("no data");
+            }
+            if (token != XContentParser.Token.START_OBJECT) {
+                throw new IOException("should start object");
+            }
+            token = parser.nextToken();
+            if (token != XContentParser.Token.FIELD_NAME) {
+                throw new IOException("the first field should be the template name");
+            }
+            return fromXContent(parser);
         }
 
         public static IndexTemplateMetaData fromXContent(XContentParser parser) throws IOException {
@@ -203,17 +283,31 @@ public class IndexTemplateMetaData {
                     currentFieldName = parser.currentName();
                 } else if (token == XContentParser.Token.START_OBJECT) {
                     if ("settings".equals(currentFieldName)) {
-                        ImmutableSettings.Builder settingsBuilder = ImmutableSettings.settingsBuilder();
-                        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
-                            String key = parser.currentName();
-                            token = parser.nextToken();
-                            String value = parser.text();
-                            settingsBuilder.put(key, value);
-                        }
-                        builder.settings(settingsBuilder.build());
+                        builder.settings(ImmutableSettings.settingsBuilder().put(SettingsLoader.Helper.loadNestedFromMap(parser.mapOrdered())));
                     } else if ("mappings".equals(currentFieldName)) {
+                        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                            if (token == XContentParser.Token.FIELD_NAME) {
+                                currentFieldName = parser.currentName();
+                            } else if (token == XContentParser.Token.START_OBJECT) {
+                                String mappingType = currentFieldName;
+                                Map<String, Object> mappingSource = MapBuilder.<String, Object>newMapBuilder().put(mappingType, parser.mapOrdered()).map();
+                                builder.putMapping(mappingType, XContentFactory.jsonBuilder().map(mappingSource).string());
+                            }
+                        }
+                    } else {
+                        // check if its a custom index metadata
+                        IndexMetaData.Custom.Factory<IndexMetaData.Custom> factory = IndexMetaData.lookupFactory(currentFieldName);
+                        if (factory == null) {
+                            //TODO warn
+                            parser.skipChildren();
+                        } else {
+                            builder.putCustom(factory.type(), factory.fromXContent(parser));
+                        }
+                    }
+                } else if (token == XContentParser.Token.START_ARRAY) {
+                    if ("mappings".equals(currentFieldName)) {
                         while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
-                            Map<String, Object> mapping = parser.map();
+                            Map<String, Object> mapping = parser.mapOrdered();
                             if (mapping.size() == 1) {
                                 String mappingType = mapping.keySet().iterator().next();
                                 String mappingSource = XContentFactory.jsonBuilder().map(mapping).string();
@@ -246,6 +340,12 @@ public class IndexTemplateMetaData {
             for (int i = 0; i < mappingsSize; i++) {
                 builder.putMapping(in.readUTF(), CompressedString.readCompressedString(in));
             }
+            int customSize = in.readVInt();
+            for (int i = 0; i < customSize; i++) {
+                String type = in.readUTF();
+                IndexMetaData.Custom customIndexMetaData = IndexMetaData.lookupFactorySafe(type).readFrom(in);
+                builder.putCustom(type, customIndexMetaData);
+            }
             return builder.build();
         }
 
@@ -258,6 +358,11 @@ public class IndexTemplateMetaData {
             for (Map.Entry<String, CompressedString> entry : indexTemplateMetaData.mappings().entrySet()) {
                 out.writeUTF(entry.getKey());
                 entry.getValue().writeTo(out);
+            }
+            out.writeVInt(indexTemplateMetaData.customs().size());
+            for (Map.Entry<String, IndexMetaData.Custom> entry : indexTemplateMetaData.customs().entrySet()) {
+                out.writeUTF(entry.getKey());
+                IndexMetaData.lookupFactorySafe(entry.getKey()).writeTo(entry.getValue(), out);
             }
         }
     }

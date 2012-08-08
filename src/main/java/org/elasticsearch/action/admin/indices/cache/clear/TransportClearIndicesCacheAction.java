@@ -21,12 +21,13 @@ package org.elasticsearch.action.admin.indices.cache.clear;
 
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ShardOperationFailedException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.inject.Inject;
@@ -62,7 +63,7 @@ public class TransportClearIndicesCacheAction extends TransportBroadcastOperatio
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.Cache.CLEAR;
+        return ClearIndicesCacheAction.NAME;
     }
 
     @Override
@@ -121,15 +122,15 @@ public class TransportClearIndicesCacheAction extends TransportBroadcastOperatio
             boolean clearedAtLeastOne = false;
             if (request.filterCache()) {
                 clearedAtLeastOne = true;
-                service.cache().filter().clear();
+                service.cache().filter().clear("api");
             }
             if (request.fieldDataCache()) {
                 clearedAtLeastOne = true;
                 if (request.fields() == null || request.fields().length == 0) {
-                    service.cache().fieldData().clear();
+                    service.cache().fieldData().clear("api");
                 } else {
                     for (String field : request.fields()) {
-                        service.cache().fieldData().clear(field);
+                        service.cache().fieldData().clear("api", field);
                     }
                 }
             }
@@ -145,10 +146,10 @@ public class TransportClearIndicesCacheAction extends TransportBroadcastOperatio
                 if (request.fields() != null && request.fields().length > 0) {
                     // only clear caches relating to the specified fields
                     for (String field : request.fields()) {
-                        service.cache().fieldData().clear(field);
+                        service.cache().fieldData().clear("api", field);
                     }
                 } else {
-                    service.cache().clear();
+                    service.cache().clear("api");
                 }
             }
             service.cache().invalidateCache();
@@ -160,7 +161,18 @@ public class TransportClearIndicesCacheAction extends TransportBroadcastOperatio
      * The refresh request works against *all* shards.
      */
     @Override
-    protected GroupShardsIterator shards(ClearIndicesCacheRequest request, String[] concreteIndices, ClusterState clusterState) {
+    protected GroupShardsIterator shards(ClusterState clusterState, ClearIndicesCacheRequest request, String[] concreteIndices) {
         return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true);
     }
+
+    @Override
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, ClearIndicesCacheRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, ClearIndicesCacheRequest request, String[] concreteIndices) {
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
+    }
+
 }

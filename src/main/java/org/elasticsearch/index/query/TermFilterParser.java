@@ -62,6 +62,28 @@ public class TermFilterParser implements FilterParser {
         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
+            } else if (token == XContentParser.Token.START_OBJECT) {
+                // also support a format of "term" : {"field_name" : { ... }}
+                fieldName = currentFieldName;
+                while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+                    if (token == XContentParser.Token.FIELD_NAME) {
+                        currentFieldName = parser.currentName();
+                    } else {
+                        if ("term".equals(currentFieldName)) {
+                            value = parser.text();
+                        } else if ("value".equals(currentFieldName)) {
+                            value = parser.text();
+                        } else if ("_name".equals(currentFieldName)) {
+                            filterName = parser.text();
+                        } else if ("_cache".equals(currentFieldName)) {
+                            cache = parser.booleanValue();
+                        } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
+                            cacheKey = new CacheKeyFilter.Key(parser.text());
+                        } else {
+                            throw new QueryParsingException(parseContext.index(), "[term] filter does not support [" + currentFieldName + "]");
+                        }
+                    }
+                }
             } else if (token.isValue()) {
                 if ("_name".equals(currentFieldName)) {
                     filterName = parser.text();
@@ -86,8 +108,15 @@ public class TermFilterParser implements FilterParser {
 
         Filter filter = null;
         MapperService.SmartNameFieldMappers smartNameFieldMappers = parseContext.smartFieldMappers(fieldName);
-        if (smartNameFieldMappers != null) {
-            if (smartNameFieldMappers.hasMapper()) {
+        if (smartNameFieldMappers != null && smartNameFieldMappers.hasMapper()) {
+            if (smartNameFieldMappers.explicitTypeInNameWithDocMapper()) {
+                String[] previousTypes = QueryParseContext.setTypesWithPrevious(new String[]{smartNameFieldMappers.docMapper().type()});
+                try {
+                    filter = smartNameFieldMappers.mapper().fieldFilter(value, parseContext);
+                } finally {
+                    QueryParseContext.setTypes(previousTypes);
+                }
+            } else {
                 filter = smartNameFieldMappers.mapper().fieldFilter(value, parseContext);
             }
         }

@@ -22,6 +22,7 @@ package org.elasticsearch.action.count;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationRequest;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
@@ -29,14 +30,12 @@ import java.io.IOException;
 
 /**
  * Internal count request executed directly against a specific index shard.
- *
- *
  */
 class ShardCountRequest extends BroadcastShardOperationRequest {
 
     private float minScore;
 
-    private byte[] querySource;
+    private BytesReference querySource;
     private int querySourceOffset;
     private int querySourceLength;
 
@@ -53,8 +52,6 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
         super(index, shardId);
         this.minScore = request.minScore();
         this.querySource = request.querySource();
-        this.querySourceOffset = request.querySourceOffset();
-        this.querySourceLength = request.querySourceLength();
         this.types = request.types();
         this.filteringAliases = filteringAliases;
     }
@@ -63,16 +60,8 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
         return minScore;
     }
 
-    public byte[] querySource() {
+    public BytesReference querySource() {
         return querySource;
-    }
-
-    public int querySourceOffset() {
-        return querySourceOffset;
-    }
-
-    public int querySourceLength() {
-        return querySourceLength;
     }
 
     public String[] types() {
@@ -87,10 +76,9 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
         minScore = in.readFloat();
-        querySourceLength = in.readVInt();
-        querySourceOffset = 0;
-        querySource = new byte[querySourceLength];
-        in.readFully(querySource);
+
+        querySource = in.readBytesReference();
+
         int typesSize = in.readVInt();
         if (typesSize > 0) {
             types = new String[typesSize];
@@ -111,8 +99,9 @@ class ShardCountRequest extends BroadcastShardOperationRequest {
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeFloat(minScore);
-        out.writeVInt(querySourceLength);
-        out.writeBytes(querySource, querySourceOffset, querySourceLength);
+
+        out.writeBytesReference(querySource);
+
         out.writeVInt(types.length);
         for (String type : types) {
             out.writeUTF(type);

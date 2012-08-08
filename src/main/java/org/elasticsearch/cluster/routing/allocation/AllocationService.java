@@ -19,6 +19,8 @@
 
 package org.elasticsearch.cluster.routing.allocation;
 
+import com.google.common.collect.Lists;
+import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.routing.*;
@@ -30,10 +32,7 @@ import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.node.settings.NodeSettingsService;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static com.google.common.collect.Sets.newHashSet;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.INITIALIZING;
@@ -72,6 +71,8 @@ public class AllocationService extends AbstractComponent {
      */
     public RoutingAllocation.Result applyStartedShards(ClusterState clusterState, List<? extends ShardRouting> startedShards) {
         RoutingNodes routingNodes = clusterState.routingNodes();
+        // shuffle the unassigned nodes, just so we won't have things like poison failed shards
+        Collections.shuffle(routingNodes.unassigned());
         StartedRerouteAllocation allocation = new StartedRerouteAllocation(allocationDeciders, routingNodes, clusterState.nodes(), startedShards);
         boolean changed = applyStartedShards(routingNodes, startedShards);
         if (!changed) {
@@ -89,6 +90,8 @@ public class AllocationService extends AbstractComponent {
      */
     public RoutingAllocation.Result applyFailedShard(ClusterState clusterState, ShardRouting failedShard) {
         RoutingNodes routingNodes = clusterState.routingNodes();
+        // shuffle the unassigned nodes, just so we won't have things like poison failed shards
+        Collections.shuffle(routingNodes.unassigned());
         FailedRerouteAllocation allocation = new FailedRerouteAllocation(allocationDeciders, routingNodes, clusterState.nodes(), failedShard);
         boolean changed = applyFailedShard(allocation);
         if (!changed) {
@@ -106,6 +109,8 @@ public class AllocationService extends AbstractComponent {
      */
     public RoutingAllocation.Result reroute(ClusterState clusterState) {
         RoutingNodes routingNodes = clusterState.routingNodes();
+        // shuffle the unassigned nodes, just so we won't have things like poison failed shards
+        Collections.shuffle(routingNodes.unassigned());
         RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, routingNodes, clusterState.nodes());
         if (!reroute(allocation)) {
             return new RoutingAllocation.Result(false, clusterState.routingTable(), allocation.explanation());
@@ -120,6 +125,8 @@ public class AllocationService extends AbstractComponent {
      */
     public RoutingAllocation.Result rerouteWithNoReassign(ClusterState clusterState) {
         RoutingNodes routingNodes = clusterState.routingNodes();
+        // shuffle the unassigned nodes, just so we won't have things like poison failed shards
+        Collections.shuffle(routingNodes.unassigned());
         RoutingAllocation allocation = new RoutingAllocation(allocationDeciders, routingNodes, clusterState.nodes());
         Iterable<DiscoveryNode> dataNodes = allocation.nodes().dataNodes().values();
         boolean changed = false;
@@ -223,6 +230,20 @@ public class AllocationService extends AbstractComponent {
                             changed = true;
                             shardEntry.moveFromPrimary();
                             shardEntry2.moveToPrimary();
+
+                            if (shardEntry2.relocatingNodeId() != null) {
+                                // its also relocating, make sure to move the other routing to primary
+                                RoutingNode node = routingNodes.node(shardEntry2.relocatingNodeId());
+                                if (node != null) {
+                                    for (MutableShardRouting shardRouting : node) {
+                                        if (shardRouting.shardId().equals(shardEntry2.shardId()) && !shardRouting.primary()) {
+                                            shardRouting.moveToPrimary();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
                             elected = true;
                             break;
                         }
@@ -246,7 +267,7 @@ public class AllocationService extends AbstractComponent {
     private void applyNewNodes(RoutingNodes routingNodes, Iterable<DiscoveryNode> liveNodes) {
         for (DiscoveryNode node : liveNodes) {
             if (!routingNodes.nodesToShards().containsKey(node.id())) {
-                RoutingNode routingNode = new RoutingNode(node);
+                RoutingNode routingNode = new RoutingNode(node.id(), node);
                 routingNodes.nodesToShards().put(node.id(), routingNode);
             }
         }
@@ -262,48 +283,87 @@ public class AllocationService extends AbstractComponent {
         for (RoutingNode routingNode : routingNodes) {
             for (Iterator<MutableShardRouting> shardsIterator = routingNode.shards().iterator(); shardsIterator.hasNext(); ) {
                 MutableShardRouting shardRoutingEntry = shardsIterator.next();
-                if (shardRoutingEntry.assignedToNode()) {
-                    // we store the relocation state here since when we call de-assign node
-                    // later on, we will loose this state
-                    boolean relocating = shardRoutingEntry.relocating();
-                    String relocatingNodeId = shardRoutingEntry.relocatingNodeId();
-                    // is this the destination shard that we are relocating an existing shard to?
-                    // we know this since it has a relocating node id (the node we relocate from) and our state is INITIALIZING (and not RELOCATING)
-                    boolean isRelocationDestinationShard = relocatingNodeId != null && shardRoutingEntry.initializing();
+                if (!shardRoutingEntry.assignedToNode()) {
+                    throw new ElasticSearchIllegalStateException(shardRoutingEntry.shardId() + " is not assigned to a node, but listed on as existing on node [" + routingNode.nodeId() + "]");
+                }
+                // we store the relocation state here since when we call de-assign node
+                // later on, we will loose this state
+                boolean relocating = shardRoutingEntry.relocating();
+                String relocatingNodeId = shardRoutingEntry.relocatingNodeId();
+                // is this the destination shard that we are relocating an existing shard to?
+                // we know this since it has a relocating node id (the node we relocate from) and our state is INITIALIZING (and not RELOCATING)
+                boolean isRelocationDestinationShard = relocatingNodeId != null && shardRoutingEntry.initializing();
 
-                    boolean currentNodeIsDead = false;
-                    if (!liveNodeIds.contains(shardRoutingEntry.currentNodeId())) {
+                boolean remove = false;
+                boolean currentNodeIsDead = false;
+                if (!liveNodeIds.contains(shardRoutingEntry.currentNodeId())) {
+                    changed = true;
+                    nodeIdsToRemove.add(shardRoutingEntry.currentNodeId());
+
+                    if (!isRelocationDestinationShard) {
+                        routingNodes.unassigned().add(shardRoutingEntry);
+                    }
+
+                    shardRoutingEntry.deassignNode();
+                    currentNodeIsDead = true;
+                    remove = true;
+                }
+
+                // move source shard back to active state and cancel relocation mode.
+                if (relocating && !liveNodeIds.contains(relocatingNodeId)) {
+                    nodeIdsToRemove.add(relocatingNodeId);
+                    if (!currentNodeIsDead) {
                         changed = true;
-                        nodeIdsToRemove.add(shardRoutingEntry.currentNodeId());
-
-                        if (!isRelocationDestinationShard) {
-                            routingNodes.unassigned().add(shardRoutingEntry);
-                        }
-
-                        shardRoutingEntry.deassignNode();
-                        currentNodeIsDead = true;
-                        shardsIterator.remove();
+                        shardRoutingEntry.cancelRelocation();
                     }
+                }
 
-                    // move source shard back to active state and cancel relocation mode.
-                    if (relocating && !liveNodeIds.contains(relocatingNodeId)) {
-                        nodeIdsToRemove.add(relocatingNodeId);
-                        if (!currentNodeIsDead) {
-                            changed = true;
-                            shardRoutingEntry.cancelRelocation();
-                        }
-                    }
+                if (isRelocationDestinationShard && !liveNodeIds.contains(relocatingNodeId)) {
+                    changed = true;
+                    remove = true;
+                }
 
-                    if (isRelocationDestinationShard && !liveNodeIds.contains(relocatingNodeId)) {
-                        changed = true;
-                        shardsIterator.remove();
-                    }
+                if (remove) {
+                    shardsIterator.remove();
                 }
             }
         }
         for (String nodeIdToRemove : nodeIdsToRemove) {
             routingNodes.nodesToShards().remove(nodeIdToRemove);
         }
+
+        // now, go over shards that are initializing and recovering from primary shards that are now down...
+        for (RoutingNode routingNode : routingNodes) {
+            for (Iterator<MutableShardRouting> shardsIterator = routingNode.shards().iterator(); shardsIterator.hasNext(); ) {
+                MutableShardRouting shardRoutingEntry = shardsIterator.next();
+                if (!shardRoutingEntry.assignedToNode()) {
+                    throw new ElasticSearchIllegalStateException(shardRoutingEntry.shardId() + " is not assigned to a node, but listed on as existing on node [" + routingNode.nodeId() + "]");
+                }
+                // we always recover from primaries, so we care about replicas that are not primaries
+                if (shardRoutingEntry.primary()) {
+                    continue;
+                }
+                // if its not initializing, then its not recovering from the primary
+                if (!shardRoutingEntry.initializing()) {
+                    continue;
+                }
+                // its initializing because its relocating from another node (its replica recovering from another replica)
+                if (shardRoutingEntry.relocatingNodeId() != null) {
+                    continue;
+                }
+                for (MutableShardRouting unassignedShardRouting : routingNodes.unassigned()) {
+                    // double check on the unassignedShardRouting.primary(), but it has to be a primary... (well, we double checked actually before...)
+                    if (unassignedShardRouting.shardId().equals(shardRoutingEntry.shardId()) && unassignedShardRouting.primary()) {
+                        // remove it...
+                        routingNodes.unassigned().add(shardRoutingEntry);
+                        shardRoutingEntry.deassignNode();
+                        shardsIterator.remove();
+                        break;
+                    }
+                }
+            }
+        }
+
         return changed;
     }
 
@@ -418,6 +478,22 @@ public class AllocationService extends AbstractComponent {
         // if in relocation no need to find a new target, just cancel the relocation.
         if (inRelocation) {
             return true; // lets true, so we reroute in this case
+        }
+
+        // move all the shards matching the failed shard to the end of the unassigned list
+        // so we give a chance for other allocations and won't create poison failed allocations
+        // that can keep other shards from being allocated (because of limits applied on how many
+        // shards we can start per node)
+        List<MutableShardRouting> shardsToMove = Lists.newArrayList();
+        for (Iterator<MutableShardRouting> it = allocation.routingNodes().unassigned().iterator(); it.hasNext(); ) {
+            MutableShardRouting shardRouting = it.next();
+            if (shardRouting.shardId().equals(failedShard.shardId())) {
+                it.remove();
+                shardsToMove.add(shardRouting);
+            }
+        }
+        if (!shardsToMove.isEmpty()) {
+            allocation.routingNodes().unassigned().addAll(shardsToMove);
         }
 
         // add the failed shard to the unassigned shards

@@ -51,7 +51,9 @@ public class FilteredQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         Query query = null;
+        boolean queryFound = false;
         Filter filter = null;
+        boolean filterFound = false;
         float boost = 1.0f;
         boolean cache = false;
         CacheKeyFilter.Key cacheKey = null;
@@ -63,9 +65,13 @@ public class FilteredQueryParser implements QueryParser {
                 currentFieldName = parser.currentName();
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if ("query".equals(currentFieldName)) {
+                    queryFound = true;
                     query = parseContext.parseInnerQuery();
                 } else if ("filter".equals(currentFieldName)) {
+                    filterFound = true;
                     filter = parseContext.parseInnerFilter();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[filtered] query does not support [" + currentFieldName + "]");
                 }
             } else if (token.isValue()) {
                 if ("boost".equals(currentFieldName)) {
@@ -74,14 +80,26 @@ public class FilteredQueryParser implements QueryParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[filtered] query does not support [" + currentFieldName + "]");
                 }
             }
         }
-        if (query == null) {
+        if (!queryFound) {
             throw new QueryParsingException(parseContext.index(), "[filtered] requires 'query' element");
         }
+        if (query == null) {
+            return null;
+        }
         if (filter == null) {
-            throw new QueryParsingException(parseContext.index(), "[filtered] requires 'filter' element");
+            if (!filterFound) {
+                // we allow for null filter, so it makes compositions on the client side to be simpler
+                return query;
+            } else {
+                // the filter was provided, but returned null, meaning we should discard it, this means no
+                // matches for this query...
+                return Queries.NO_MATCH_QUERY;
+            }
         }
 
         // cache if required

@@ -57,6 +57,7 @@ import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.index.shard.service.InternalIndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.indices.recovery.RecoveryFailedException;
+import org.elasticsearch.indices.recovery.RecoveryStatus;
 import org.elasticsearch.indices.recovery.RecoveryTarget;
 import org.elasticsearch.indices.recovery.StartRecoveryRequest;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -229,12 +230,12 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         for (final String index : indicesService.indices()) {
             if (!event.state().metaData().hasIndex(index)) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("[{}] deleting index", index);
+                    logger.debug("[{}] cleaning index, no longer part of the metadata", index);
                 }
                 try {
-                    indicesService.deleteIndex(index, "deleting index");
+                    indicesService.cleanIndex(index, "index no longer part of the metadata");
                 } catch (Exception e) {
-                    logger.warn("failed to delete index", e);
+                    logger.warn("failed to clean index", e);
                 }
                 // clear seen mappings as well
                 for (Tuple<String, String> tuple : seenMappings.keySet()) {
@@ -304,9 +305,16 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
     }
 
     private void applySettings(ClusterChangedEvent event) {
+        if (!event.metaDataChanged()) {
+            return;
+        }
         for (IndexMetaData indexMetaData : event.state().metaData()) {
             if (!indicesService.hasIndex(indexMetaData.index())) {
                 // we only create / update here
+                continue;
+            }
+            // if the index meta data didn't change, no need check for refreshed settings
+            if (!event.indexMetaDataChanged(indexMetaData)) {
                 continue;
             }
             String index = indexMetaData.index();
@@ -488,6 +496,20 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
 
             if (indexService.hasShard(shardId)) {
                 InternalIndexShard indexShard = (InternalIndexShard) indexService.shard(shardId);
+                ShardRouting currentRoutingEntry = indexShard.routingEntry();
+                // if the current and global routing are initializing, but are still not the same, its a different "shard" being allocated
+                // for example: a shard that recovers from one node and now needs to recover to another node,
+                //              or a replica allocated and then allocating a primary because the primary failed on another node
+                if (currentRoutingEntry.initializing() && shardRouting.initializing() && !currentRoutingEntry.equals(shardRouting)) {
+                    logger.debug("[{}][{}] removing shard (different instance of it allocated on this node, current [{}], global [{}])", shardRouting.index(), shardRouting.id(), currentRoutingEntry, shardRouting);
+                    // cancel recovery just in case we are in recovery (its fine if we are not in recovery, it will be a noop).
+                    recoveryTarget.cancelRecovery(indexShard);
+                    indexService.removeShard(shardRouting.id(), "removing shard (different instance of it allocated on this node)");
+                }
+            }
+
+            if (indexService.hasShard(shardId)) {
+                InternalIndexShard indexShard = (InternalIndexShard) indexService.shard(shardId);
                 if (!shardRouting.equals(indexShard.routingEntry())) {
                     indexShard.routingEntry(shardRouting);
                     indexService.shardInjector(shardId).getInstance(IndexShardGatewayService.class).routingStateChanged();
@@ -574,7 +596,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                     try {
                         // we are recovering a backup from a primary, so no need to mark it as relocated
                         final StartRecoveryRequest request = new StartRecoveryRequest(indexShard.shardId(), sourceNode, nodes.localNode(), false, indexShard.store().list());
-                        recoveryTarget.startRecovery(request, false, new PeerRecoveryListener(request, shardRouting, indexService));
+                        recoveryTarget.startRecovery(request, indexShard, new PeerRecoveryListener(request, shardRouting, indexService));
                     } catch (Exception e) {
                         handleRecoveryFailure(indexService, shardRouting, true, e);
                         break;
@@ -610,7 +632,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                     // we don't mark this one as relocated at the end, requests in any case are routed to both when its relocating
                     // and that way we handle the edge case where its mark as relocated, and we might need to roll it back...
                     final StartRecoveryRequest request = new StartRecoveryRequest(indexShard.shardId(), sourceNode, nodes.localNode(), false, indexShard.store().list());
-                    recoveryTarget.startRecovery(request, false, new PeerRecoveryListener(request, shardRouting, indexService));
+                    recoveryTarget.startRecovery(request, indexShard, new PeerRecoveryListener(request, shardRouting, indexService));
                 } catch (Exception e) {
                     handleRecoveryFailure(indexService, shardRouting, true, e);
                 }
@@ -638,13 +660,8 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
         }
 
         @Override
-        public void onRetryRecovery(TimeValue retryAfter) {
-            threadPool.schedule(retryAfter, ThreadPool.Names.CACHED, new Runnable() {
-                @Override
-                public void run() {
-                    recoveryTarget.startRecovery(request, true, PeerRecoveryListener.this);
-                }
-            });
+        public void onRetryRecovery(TimeValue retryAfter, RecoveryStatus recoveryStatus) {
+            recoveryTarget.retryRecovery(request, recoveryStatus, PeerRecoveryListener.this);
         }
 
         @Override
@@ -712,7 +729,7 @@ public class IndicesClusterStateService extends AbstractLifecycleComponent<Indic
                 return;
             }
             final ShardRouting fShardRouting = shardRouting;
-            threadPool.cached().execute(new Runnable() {
+            threadPool.generic().execute(new Runnable() {
                 @Override
                 public void run() {
                     synchronized (mutex) {

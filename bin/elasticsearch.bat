@@ -18,8 +18,22 @@ if "%ES_MAX_MEM%" == "" (
 set ES_MAX_MEM=1g
 )
 
+if NOT "%ES_HEAP_SIZE%" == "" (
+set ES_MIN_MEM=%ES_HEAP_SIZE%
+set ES_MAX_MEM=%ES_HEAP_SIZE%
+)
+
 set JAVA_OPTS=%JAVA_OPTS% -Xms%ES_MIN_MEM% -Xmx%ES_MAX_MEM%
-set JAVA_OPTS=%JAVA_OPTS% -Xss128k
+
+if NOT "%ES_HEAP_NEWSIZE%" == "" (
+set JAVA_OPTS=%JAVA_OPTS% -Xmn%ES_HEAP_NEWSIZE%
+)
+
+if NOT "%ES_DIRECT_SIZE%" == "" (
+set JAVA_OPTS=%JAVA_OPTS% -XX:MaxDirectMemorySize=%ES_DIRECT_SIZE%
+)
+
+set JAVA_OPTS=%JAVA_OPTS% -Xss256k
 
 REM Enable aggressive optimizations in the JVM
 REM    - Disabled by default as it might cause the JVM to crash
@@ -27,11 +41,12 @@ REM set JAVA_OPTS=%JAVA_OPTS% -XX:+AggressiveOpts
 
 set JAVA_OPTS=%JAVA_OPTS% -XX:+UseParNewGC
 set JAVA_OPTS=%JAVA_OPTS% -XX:+UseConcMarkSweepGC
-set JAVA_OPTS=%JAVA_OPTS% -XX:+CMSParallelRemarkEnabled
-set JAVA_OPTS=%JAVA_OPTS% -XX:SurvivorRatio=8
-set JAVA_OPTS=%JAVA_OPTS% -XX:MaxTenuringThreshold=1
+
 set JAVA_OPTS=%JAVA_OPTS% -XX:CMSInitiatingOccupancyFraction=75
 set JAVA_OPTS=%JAVA_OPTS% -XX:+UseCMSInitiatingOccupancyOnly
+
+REM When running under Java 7
+REM JAVA_OPTS=%JAVA_OPTS% -XX:+UseCondCardMark
 
 REM GC logging options -- uncomment to enable
 REM JAVA_OPTS=%JAVA_OPTS% -XX:+PrintGCDetails
@@ -47,7 +62,7 @@ REM The path to the heap dump location, note directory must exists and have enou
 REM space for a full heap dump.
 REM JAVA_OPTS=%JAVA_OPTS% -XX:HeapDumpPath=$ES_HOME/logs/heapdump.hprof
 
-set ES_CLASSPATH=%ES_CLASSPATH%;%ES_HOME%/lib/*;%ES_HOME%/lib/sigar/*
+set ES_CLASSPATH=%ES_CLASSPATH%;%ES_HOME%/lib/${project.build.finalName}.jar;%ES_HOME%/lib/*;%ES_HOME%/lib/sigar/*
 set ES_PARAMS=-Delasticsearch -Des-foreground=yes -Des.path.home="%ES_HOME%"
 
 "%JAVA_HOME%\bin\java" %JAVA_OPTS% %ES_JAVA_OPTS% %ES_PARAMS% %* -cp "%ES_CLASSPATH%" "org.elasticsearch.bootstrap.ElasticSearch"

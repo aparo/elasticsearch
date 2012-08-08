@@ -19,9 +19,12 @@
 
 package org.elasticsearch.test.unit.index.percolator;
 
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.ModulesBuilder;
+import org.elasticsearch.common.inject.util.Providers;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
@@ -34,15 +37,19 @@ import org.elasticsearch.index.cache.IndexCacheModule;
 import org.elasticsearch.index.engine.IndexEngineModule;
 import org.elasticsearch.index.mapper.MapperServiceModule;
 import org.elasticsearch.index.percolator.PercolatorExecutor;
+import org.elasticsearch.index.query.FilterBuilders;
 import org.elasticsearch.index.query.IndexQueryParserModule;
 import org.elasticsearch.index.settings.IndexSettingsModule;
 import org.elasticsearch.index.similarity.SimilarityModule;
 import org.elasticsearch.indices.query.IndicesQueriesModule;
 import org.elasticsearch.script.ScriptModule;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPoolModule;
+import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
+import static org.elasticsearch.index.query.QueryBuilders.constantScoreQuery;
 import static org.elasticsearch.index.query.QueryBuilders.termQuery;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -53,15 +60,17 @@ import static org.hamcrest.Matchers.*;
 @Test
 public class PercolatorExecutorTests {
 
+    private Injector injector;
+
     private PercolatorExecutor percolatorExecutor;
 
     @BeforeClass
     public void buildPercolatorService() {
         Settings settings = ImmutableSettings.settingsBuilder()
-                .put("index.cache.filter.type", "none")
+                //.put("index.cache.filter.type", "none")
                 .build();
         Index index = new Index("test");
-        Injector injector = new ModulesBuilder().add(
+        injector = new ModulesBuilder().add(
                 new SettingsModule(settings),
                 new ThreadPoolModule(settings),
                 new ScriptModule(settings),
@@ -78,11 +87,17 @@ public class PercolatorExecutorTests {
                     @Override
                     protected void configure() {
                         bind(PercolatorExecutor.class).asEagerSingleton();
+                        bind(ClusterService.class).toProvider(Providers.of((ClusterService) null));
                     }
                 }
         ).createInjector();
 
         percolatorExecutor = injector.getInstance(PercolatorExecutor.class);
+    }
+
+    @AfterClass
+    public void close() {
+        injector.getInstance(ThreadPool.class).shutdownNow();
     }
 
     @Test
@@ -92,13 +107,13 @@ public class PercolatorExecutorTests {
                 .field("field1", 1)
                 .field("field2", "value")
                 .endObject().endObject();
-        byte[] source = doc.copiedBytes();
+        BytesReference source = doc.bytes();
 
         XContentBuilder docWithType = XContentFactory.jsonBuilder().startObject().startObject("doc").startObject("type1")
                 .field("field1", 1)
                 .field("field2", "value")
                 .endObject().endObject().endObject();
-        byte[] sourceWithType = docWithType.copiedBytes();
+        BytesReference sourceWithType = docWithType.bytes();
 
         PercolatorExecutor.Response percolate = percolatorExecutor.percolate(new PercolatorExecutor.SourceRequest("type1", source));
         assertThat(percolate.matches(), hasSize(0));
@@ -125,5 +140,13 @@ public class PercolatorExecutorTests {
         percolate = percolatorExecutor.percolate(new PercolatorExecutor.SourceRequest("type1", source));
         assertThat(percolate.matches(), hasSize(1));
         assertThat(percolate.matches(), hasItems("test1"));
+
+        // add a range query (cached)
+        // add a query
+        percolatorExecutor.addQuery("test1", constantScoreQuery(FilterBuilders.rangeFilter("field2").from("value").includeLower(true)));
+
+        percolate = percolatorExecutor.percolate(new PercolatorExecutor.SourceRequest("type1", source));
+        assertThat(percolate.matches(), hasSize(1));
+        assertThat(percolate.matches(), hasItem("test1"));
     }
 }

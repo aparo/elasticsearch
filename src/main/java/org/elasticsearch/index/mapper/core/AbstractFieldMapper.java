@@ -224,12 +224,14 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         this.omitNorms = omitNorms;
         this.omitTermFreqAndPositions = omitTermFreqAndPositions;
         this.indexOptions = omitTermFreqAndPositions ? FieldInfo.IndexOptions.DOCS_ONLY : FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
-        if (indexAnalyzer == null && !index.isAnalyzed()) {
+        // automatically set to keyword analyzer if its indexed and not analyzed
+        if (indexAnalyzer == null && !index.isAnalyzed() && index.isIndexed()) {
             this.indexAnalyzer = Lucene.KEYWORD_ANALYZER;
         } else {
             this.indexAnalyzer = indexAnalyzer;
         }
-        if (searchAnalyzer == null && !index.isAnalyzed()) {
+        // automatically set to keyword analyzer if its indexed and not analyzed
+        if (searchAnalyzer == null && !index.isAnalyzed() && index.isIndexed()) {
             this.searchAnalyzer = Lucene.KEYWORD_ANALYZER;
         } else {
             this.searchAnalyzer = searchAnalyzer;
@@ -298,6 +300,11 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     @Override
     public Analyzer searchAnalyzer() {
+        return this.searchAnalyzer;
+    }
+
+    @Override
+    public Analyzer searchQuoteAnalyzer() {
         return this.searchAnalyzer;
     }
 
@@ -381,7 +388,21 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query prefixQuery(String value, @Nullable MultiTermQuery.RewriteMethod method, @Nullable QueryParseContext context) {
+        PrefixQuery query = new PrefixQuery(names().createIndexNameTerm(indexedValue(value)));
+        if (method != null) {
+            query.setRewriteMethod(method);
+        }
+        return query;
+    }
+
+    @Override
+    public Filter prefixFilter(String value, @Nullable QueryParseContext context) {
+        return new PrefixFilter(names().createIndexNameTerm(indexedValue(value)));
+    }
+
+    @Override
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return new TermRangeQuery(names.indexName(),
                 lowerTerm == null ? null : indexedValue(lowerTerm),
                 upperTerm == null ? null : indexedValue(upperTerm),
@@ -389,11 +410,16 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return new TermRangeFilter(names.indexName(),
                 lowerTerm == null ? null : indexedValue(lowerTerm),
                 upperTerm == null ? null : indexedValue(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        return null;
     }
 
     @Override
@@ -462,14 +488,14 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         if (boost != 1.0f) {
             builder.field("boost", boost);
         }
-        if (indexAnalyzer != null && searchAnalyzer != null && indexAnalyzer.name().equals(searchAnalyzer.name()) && !indexAnalyzer.name().startsWith("_")) {
+        if (indexAnalyzer != null && searchAnalyzer != null && indexAnalyzer.name().equals(searchAnalyzer.name()) && !indexAnalyzer.name().startsWith("_") && !indexAnalyzer.name().equals("default")) {
             // same analyzers, output it once
             builder.field("analyzer", indexAnalyzer.name());
         } else {
-            if (indexAnalyzer != null && !indexAnalyzer.name().startsWith("_")) {
+            if (indexAnalyzer != null && !indexAnalyzer.name().startsWith("_") && !indexAnalyzer.name().equals("default")) {
                 builder.field("index_analyzer", indexAnalyzer.name());
             }
-            if (searchAnalyzer != null && !searchAnalyzer.name().startsWith("_")) {
+            if (searchAnalyzer != null && !searchAnalyzer.name().startsWith("_") && !searchAnalyzer.name().equals("default")) {
                 builder.field("search_analyzer", searchAnalyzer.name());
             }
         }

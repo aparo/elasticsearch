@@ -29,7 +29,7 @@ import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.CacheRecycler;
 import org.elasticsearch.common.collect.BoundedTreeSet;
-import org.elasticsearch.common.thread.ThreadLocals;
+import org.elasticsearch.common.util.concurrent.ThreadLocals;
 import org.elasticsearch.index.cache.field.data.FieldDataCache;
 import org.elasticsearch.index.field.data.FieldDataType;
 import org.elasticsearch.index.field.data.longs.LongFieldData;
@@ -89,7 +89,7 @@ public class TermsLongFacetCollector extends AbstractFacetCollector {
             throw new ElasticSearchIllegalArgumentException("Field [" + fieldName + "] doesn't have a type, can't run terms long facet collector on it");
         }
         // add type filter if there is exact doc mapper associated with it
-        if (smartMappers.hasDocMapper() && smartMappers.explicitTypeInName()) {
+        if (smartMappers.explicitTypeInNameWithDocMapper()) {
             setFilter(context.filterCache().cache(smartMappers.docMapper().typeFilter()));
         }
 

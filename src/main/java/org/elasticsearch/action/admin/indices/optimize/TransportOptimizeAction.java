@@ -21,12 +21,13 @@ package org.elasticsearch.action.admin.indices.optimize;
 
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ShardOperationFailedException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
+import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.inject.Inject;
@@ -65,7 +66,7 @@ public class TransportOptimizeAction extends TransportBroadcastOperationAction<O
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.OPTIMIZE;
+        return OptimizeAction.NAME;
     }
 
     @Override
@@ -134,7 +135,17 @@ public class TransportOptimizeAction extends TransportBroadcastOperationAction<O
      * The refresh request works against *all* shards.
      */
     @Override
-    protected GroupShardsIterator shards(OptimizeRequest request, String[] concreteIndices, ClusterState clusterState) {
+    protected GroupShardsIterator shards(ClusterState clusterState, OptimizeRequest request, String[] concreteIndices) {
         return clusterState.routingTable().allActiveShardsGrouped(concreteIndices, true);
+    }
+
+    @Override
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, OptimizeRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.METADATA);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, OptimizeRequest request, String[] concreteIndices) {
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA, concreteIndices);
     }
 }

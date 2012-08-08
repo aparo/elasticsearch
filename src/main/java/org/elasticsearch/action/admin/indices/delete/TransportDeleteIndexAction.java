@@ -22,7 +22,6 @@ package org.elasticsearch.action.admin.indices.delete;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingRequest;
 import org.elasticsearch.action.admin.indices.mapping.delete.DeleteMappingResponse;
 import org.elasticsearch.action.admin.indices.mapping.delete.TransportDeleteMappingAction;
@@ -44,8 +43,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Delete index action.
- *
- *
  */
 public class TransportDeleteIndexAction extends TransportMasterNodeOperationAction<DeleteIndexRequest, DeleteIndexResponse> {
 
@@ -72,7 +69,7 @@ public class TransportDeleteIndexAction extends TransportMasterNodeOperationActi
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.DELETE;
+        return DeleteIndexAction.NAME;
     }
 
     @Override
@@ -87,7 +84,7 @@ public class TransportDeleteIndexAction extends TransportMasterNodeOperationActi
 
     @Override
     protected void doExecute(DeleteIndexRequest request, ActionListener<DeleteIndexResponse> listener) {
-        if (disableDeleteAllIndices && (request.indices() == null || request.indices().length == 0)) {
+        if (disableDeleteAllIndices && (request.indices() == null || request.indices().length == 0 || (request.indices().length == 1 && request.indices()[0].equals("_all")))) {
             throw new ElasticSearchIllegalArgumentException("deleting all indices is disabled");
         }
         request.indices(clusterService.state().metaData().concreteIndices(request.indices()));

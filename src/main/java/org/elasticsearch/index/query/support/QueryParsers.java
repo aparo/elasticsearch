@@ -40,9 +40,27 @@ public final class QueryParsers {
 
     }
 
-    public static MultiTermQuery.RewriteMethod parseRewriteMethod(@Nullable String rewriteMethod) {
+    public static void setRewriteMethod(MultiTermQuery query, @Nullable MultiTermQuery.RewriteMethod rewriteMethod) {
         if (rewriteMethod == null) {
-            return MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT;
+            return;
+        }
+        query.setRewriteMethod(rewriteMethod);
+    }
+
+    public static void setRewriteMethod(MultiTermQuery query, @Nullable String rewriteMethod) {
+        if (rewriteMethod == null) {
+            return;
+        }
+        query.setRewriteMethod(parseRewriteMethod(rewriteMethod));
+    }
+
+    public static MultiTermQuery.RewriteMethod parseRewriteMethod(@Nullable String rewriteMethod) {
+        return parseRewriteMethod(rewriteMethod, MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT);
+    }
+
+    public static MultiTermQuery.RewriteMethod parseRewriteMethod(@Nullable String rewriteMethod, @Nullable MultiTermQuery.RewriteMethod defaultRewriteMethod) {
+        if (rewriteMethod == null) {
+            return defaultRewriteMethod;
         }
         if ("constant_score_auto".equals(rewriteMethod) || "constant_score_auto".equals(rewriteMethod)) {
             return MultiTermQuery.CONSTANT_SCORE_AUTO_REWRITE_DEFAULT;
@@ -83,7 +101,7 @@ public final class QueryParsers {
         if (smartFieldMappers == null) {
             return query;
         }
-        if (!smartFieldMappers.hasDocMapper() || !smartFieldMappers.explicitTypeInName()) {
+        if (!smartFieldMappers.explicitTypeInNameWithDocMapper()) {
             return query;
         }
         DocumentMapper docMapper = smartFieldMappers.docMapper();
@@ -95,7 +113,7 @@ public final class QueryParsers {
         if (smartFieldMappers == null) {
             return filter;
         }
-        if (!smartFieldMappers.hasDocMapper() || !smartFieldMappers.explicitTypeInName()) {
+        if (!smartFieldMappers.explicitTypeInNameWithDocMapper()) {
             return filter;
         }
         DocumentMapper docMapper = smartFieldMappers.docMapper();

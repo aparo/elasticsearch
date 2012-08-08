@@ -22,7 +22,6 @@ package org.elasticsearch.action.admin.cluster.node.restart;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.nodes.NodeOperationRequest;
 import org.elasticsearch.action.support.nodes.TransportNodesOperationAction;
 import org.elasticsearch.cluster.ClusterName;
@@ -71,12 +70,12 @@ public class TransportNodesRestartAction extends TransportNodesOperationAction<N
 
     @Override
     protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.GENERIC;
     }
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Cluster.Node.RESTART;
+        return NodesRestartAction.NAME;
     }
 
     @Override
@@ -120,7 +119,7 @@ public class TransportNodesRestartAction extends TransportNodesOperationAction<N
             return new NodesRestartResponse.NodeRestartResponse(clusterService.state().nodes().localNode());
         }
         logger.info("Restarting in [{}]", request.delay);
-        threadPool.schedule(request.delay, ThreadPool.Names.CACHED, new Runnable() {
+        threadPool.schedule(request.delay, ThreadPool.Names.GENERIC, new Runnable() {
             @Override
             public void run() {
                 boolean restartWithWrapper = false;

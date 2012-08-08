@@ -23,7 +23,6 @@ import com.google.common.collect.Lists;
 import gnu.trove.impl.Constants;
 import gnu.trove.map.hash.TObjectFloatHashMap;
 import org.apache.lucene.queryParser.MapperQueryParser;
-import org.apache.lucene.queryParser.MultiFieldQueryParserSettings;
 import org.apache.lucene.queryParser.ParseException;
 import org.apache.lucene.queryParser.QueryParserSettings;
 import org.apache.lucene.search.BooleanQuery;
@@ -34,7 +33,7 @@ import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.mapper.internal.AllFieldMapper;
+import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.query.support.QueryParsers;
 
 import java.io.IOException;
@@ -67,8 +66,9 @@ public class QueryStringQueryParser implements QueryParser {
     public Query parse(QueryParseContext parseContext) throws IOException, QueryParsingException {
         XContentParser parser = parseContext.parser();
 
-        MultiFieldQueryParserSettings qpSettings = new MultiFieldQueryParserSettings();
-        qpSettings.defaultField(AllFieldMapper.NAME);
+        QueryParserSettings qpSettings = new QueryParserSettings();
+        qpSettings.defaultField(parseContext.defaultField());
+        qpSettings.lenient(parseContext.queryStringLenient());
         qpSettings.analyzeWildcard(defaultAnalyzeWildcard);
         qpSettings.allowLeadingWildcard(defaultAllowLeadingWildcard);
 
@@ -119,6 +119,8 @@ public class QueryStringQueryParser implements QueryParser {
                             }
                         }
                     }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[query_string] query does not support [" + currentFieldName + "]");
                 }
             } else if (token.isValue()) {
                 if ("query".equals(currentFieldName)) {
@@ -135,7 +137,17 @@ public class QueryStringQueryParser implements QueryParser {
                         throw new QueryParsingException(parseContext.index(), "Query default operator [" + op + "] is not allowed");
                     }
                 } else if ("analyzer".equals(currentFieldName)) {
-                    qpSettings.forcedAnalyzer(parseContext.analysisService().analyzer(parser.text()));
+                    NamedAnalyzer analyzer = parseContext.analysisService().analyzer(parser.text());
+                    if (analyzer == null) {
+                        throw new QueryParsingException(parseContext.index(), "[query_string] analyzer [" + parser.text() + "] not found");
+                    }
+                    qpSettings.forcedAnalyzer(analyzer);
+                } else if ("quote_analyzer".equals(currentFieldName) || "quoteAnalyzer".equals(currentFieldName)) {
+                    NamedAnalyzer analyzer = parseContext.analysisService().analyzer(parser.text());
+                    if (analyzer == null) {
+                        throw new QueryParsingException(parseContext.index(), "[query_string] quote_analyzer [" + parser.text() + "] not found");
+                    }
+                    qpSettings.forcedQuoteAnalyzer(analyzer);
                 } else if ("allow_leading_wildcard".equals(currentFieldName) || "allowLeadingWildcard".equals(currentFieldName)) {
                     qpSettings.allowLeadingWildcard(parser.booleanValue());
                 } else if ("auto_generate_phrase_queries".equals(currentFieldName) || "autoGeneratePhraseQueries".equals(currentFieldName)) {
@@ -150,6 +162,10 @@ public class QueryStringQueryParser implements QueryParser {
                     qpSettings.useDisMax(parser.booleanValue());
                 } else if ("fuzzy_prefix_length".equals(currentFieldName) || "fuzzyPrefixLength".equals(currentFieldName)) {
                     qpSettings.fuzzyPrefixLength(parser.intValue());
+                } else if ("fuzzy_max_expansions".equals(currentFieldName) || "fuzzyMaxExpansions".equals(currentFieldName)) {
+                    qpSettings.fuzzyMaxExpansions(parser.intValue());
+                } else if ("fuzzy_rewrite".equals(currentFieldName) || "fuzzyRewrite".equals(currentFieldName)) {
+                    qpSettings.fuzzyRewriteMethod(QueryParsers.parseRewriteMethod(parser.textOrNull()));
                 } else if ("phrase_slop".equals(currentFieldName) || "phraseSlop".equals(currentFieldName)) {
                     qpSettings.phraseSlop(parser.intValue());
                 } else if ("fuzzy_min_sim".equals(currentFieldName) || "fuzzyMinSim".equals(currentFieldName)) {
@@ -164,6 +180,12 @@ public class QueryStringQueryParser implements QueryParser {
                     qpSettings.rewriteMethod(QueryParsers.parseRewriteMethod(parser.textOrNull()));
                 } else if ("minimum_should_match".equals(currentFieldName) || "minimumShouldMatch".equals(currentFieldName)) {
                     qpSettings.minimumShouldMatch(parser.textOrNull());
+                } else if ("quote_field_suffix".equals(currentFieldName) || "quoteFieldSuffix".equals(currentFieldName)) {
+                    qpSettings.quoteFieldSuffix(parser.textOrNull());
+                } else if ("lenient".equalsIgnoreCase(currentFieldName)) {
+                    qpSettings.lenient(parser.booleanValue());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[query_string] query does not support [" + currentFieldName + "]");
                 }
             }
         }
@@ -171,29 +193,20 @@ public class QueryStringQueryParser implements QueryParser {
             throw new QueryParsingException(parseContext.index(), "query_string must be provided with a [query]");
         }
         qpSettings.defaultAnalyzer(parseContext.mapperService().searchAnalyzer());
+        qpSettings.defaultQuoteAnalyzer(parseContext.mapperService().searchQuoteAnalyzer());
 
         if (qpSettings.escape()) {
             qpSettings.queryString(org.apache.lucene.queryParser.QueryParser.escape(qpSettings.queryString()));
         }
+
+        qpSettings.queryTypes(parseContext.queryTypes());
 
         Query query = parseContext.indexCache().queryParserCache().get(qpSettings);
         if (query != null) {
             return query;
         }
 
-        MapperQueryParser queryParser;
-        if (qpSettings.fields() != null) {
-            if (qpSettings.fields().size() == 1) {
-                qpSettings.defaultField(qpSettings.fields().get(0));
-                queryParser = parseContext.singleQueryParser(qpSettings);
-            } else {
-                qpSettings.defaultField(null); // reset defaultField when using multi query parser
-                queryParser = parseContext.multiQueryParser(qpSettings);
-            }
-        } else {
-            queryParser = parseContext.singleQueryParser(qpSettings);
-        }
-
+        MapperQueryParser queryParser = parseContext.queryParser(qpSettings);
 
         try {
             query = queryParser.parse(qpSettings.queryString());

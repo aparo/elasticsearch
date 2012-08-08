@@ -62,6 +62,7 @@ import org.elasticsearch.index.shard.DocsStats;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.index.similarity.SimilarityModule;
+import org.elasticsearch.index.store.IndexStore;
 import org.elasticsearch.index.store.IndexStoreModule;
 import org.elasticsearch.index.store.StoreStats;
 import org.elasticsearch.indices.analysis.IndicesAnalysisService;
@@ -259,7 +260,6 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
         logger.debug("creating Index [{}], shards [{}]/[{}]", sIndexName, settings.get(SETTING_NUMBER_OF_SHARDS), settings.get(SETTING_NUMBER_OF_REPLICAS));
 
         Settings indexSettings = settingsBuilder()
-                .put("settingsType", "index")
                 .put(this.settings)
                 .put(settings)
                 .classLoader(settings.getClassLoader())
@@ -279,7 +279,7 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
         modules.add(new MapperServiceModule());
         modules.add(new IndexAliasesServiceModule());
         modules.add(new IndexGatewayModule(indexSettings, injector.getInstance(Gateway.class)));
-        modules.add(new IndexModule());
+        modules.add(new IndexModule(indexSettings));
         modules.add(new PercolatorModule());
 
         Injector indexInjector;
@@ -287,6 +287,8 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
             indexInjector = modules.createChildInjector(injector);
         } catch (CreationException e) {
             throw new IndexCreationException(index, Injectors.getFirstErrorFailure(e));
+        } catch (Throwable e) {
+            throw new IndexCreationException(index, e);
         }
 
         indicesInjectors.put(index.name(), indexInjector);
@@ -347,6 +349,8 @@ public class InternalIndicesService extends AbstractLifecycleComponent<IndicesSe
         indexInjector.getInstance(IndexGateway.class).close(delete);
         indexInjector.getInstance(MapperService.class).close();
         indexInjector.getInstance(IndexQueryParserService.class).close();
+
+        indexInjector.getInstance(IndexStore.class).close(delete);
 
         Injectors.close(injector);
 

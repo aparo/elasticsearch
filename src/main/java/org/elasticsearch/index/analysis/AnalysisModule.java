@@ -31,7 +31,6 @@ import org.elasticsearch.common.settings.NoClassSettingsException;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.analysis.compound.DictionaryCompoundWordTokenFilterFactory;
 import org.elasticsearch.index.analysis.compound.HyphenationCompoundWordTokenFilterFactory;
-import org.elasticsearch.index.analysis.phonetic.PhoneticTokenFilterFactory;
 import org.elasticsearch.indices.analysis.IndicesAnalysisService;
 
 import java.util.LinkedList;
@@ -111,6 +110,12 @@ public class AnalysisModule extends AbstractModule {
 
     private final LinkedList<AnalysisBinderProcessor> processors = Lists.newLinkedList();
 
+    private final Map<String, Class<? extends CharFilterFactory>> charFilters = Maps.newHashMap();
+    private final Map<String, Class<? extends TokenFilterFactory>> tokenFilters = Maps.newHashMap();
+    private final Map<String, Class<? extends TokenizerFactory>> tokenizers = Maps.newHashMap();
+    private final Map<String, Class<? extends AnalyzerProvider>> analyzers = Maps.newHashMap();
+
+
     public AnalysisModule(Settings settings) {
         this(settings, null);
     }
@@ -131,6 +136,26 @@ public class AnalysisModule extends AbstractModule {
         return this;
     }
 
+    public AnalysisModule addCharFilter(String name, Class<? extends CharFilterFactory> charFilter) {
+        charFilters.put(name, charFilter);
+        return this;
+    }
+
+    public AnalysisModule addTokenFilter(String name, Class<? extends TokenFilterFactory> tokenFilter) {
+        tokenFilters.put(name, tokenFilter);
+        return this;
+    }
+
+    public AnalysisModule addTokenizer(String name, Class<? extends TokenizerFactory> tokenizer) {
+        tokenizers.put(name, tokenizer);
+        return this;
+    }
+
+    public AnalysisModule addAnalyzer(String name, Class<? extends AnalyzerProvider> analyzer) {
+        analyzers.put(name, analyzer);
+        return this;
+    }
+
     @Override
     protected void configure() {
         MapBinder<String, CharFilterFactoryFactory> charFilterBinder
@@ -142,6 +167,7 @@ public class AnalysisModule extends AbstractModule {
         for (AnalysisBinderProcessor processor : processors) {
             processor.processCharFilters(charFiltersBindings);
         }
+        charFiltersBindings.charFilters.putAll(charFilters);
 
         Map<String, Settings> charFiltersSettings = settings.getGroups("index.analysis.char_filter");
         for (Map.Entry<String, Settings> entry : charFiltersSettings.entrySet()) {
@@ -201,6 +227,7 @@ public class AnalysisModule extends AbstractModule {
         for (AnalysisBinderProcessor processor : processors) {
             processor.processTokenFilters(tokenFiltersBindings);
         }
+        tokenFiltersBindings.tokenFilters.putAll(tokenFilters);
 
         Map<String, Settings> tokenFiltersSettings = settings.getGroups("index.analysis.filter");
         for (Map.Entry<String, Settings> entry : tokenFiltersSettings.entrySet()) {
@@ -258,6 +285,7 @@ public class AnalysisModule extends AbstractModule {
         for (AnalysisBinderProcessor processor : processors) {
             processor.processTokenizers(tokenizersBindings);
         }
+        tokenizersBindings.tokenizers.putAll(tokenizers);
 
         Map<String, Settings> tokenizersSettings = settings.getGroups("index.analysis.tokenizer");
         for (Map.Entry<String, Settings> entry : tokenizersSettings.entrySet()) {
@@ -316,6 +344,7 @@ public class AnalysisModule extends AbstractModule {
         for (AnalysisBinderProcessor processor : processors) {
             processor.processAnalyzers(analyzersBindings);
         }
+        analyzersBindings.analyzers.putAll(analyzers);
 
         Map<String, Settings> analyzersSettings = settings.getGroups("index.analysis.analyzer");
         for (Map.Entry<String, Settings> entry : analyzersSettings.entrySet()) {
@@ -407,6 +436,7 @@ public class AnalysisModule extends AbstractModule {
             tokenFiltersBindings.processTokenFilter("shingle", ShingleTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("unique", UniqueTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("truncate", TruncateTokenFilterFactory.class);
+            tokenFiltersBindings.processTokenFilter("trim", TrimTokenFilterFactory.class);
         }
 
         @Override
@@ -452,7 +482,6 @@ public class AnalysisModule extends AbstractModule {
             tokenFiltersBindings.processTokenFilter("elision", ElisionTokenFilterFactory.class);
 
             tokenFiltersBindings.processTokenFilter("pattern_replace", PatternReplaceTokenFilterFactory.class);
-            tokenFiltersBindings.processTokenFilter("phonetic", PhoneticTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("dictionary_decompounder", DictionaryCompoundWordTokenFilterFactory.class);
             tokenFiltersBindings.processTokenFilter("hyphenation_decompounder", HyphenationCompoundWordTokenFilterFactory.class);
 
@@ -499,6 +528,7 @@ public class AnalysisModule extends AbstractModule {
             analyzersBindings.processAnalyzer("hungarian", HungarianAnalyzerProvider.class);
             analyzersBindings.processAnalyzer("indonesian", IndonesianAnalyzerProvider.class);
             analyzersBindings.processAnalyzer("italian", ItalianAnalyzerProvider.class);
+            analyzersBindings.processAnalyzer("latvian", LatvianAnalyzerProvider.class);
             analyzersBindings.processAnalyzer("norwegian", NorwegianAnalyzerProvider.class);
             analyzersBindings.processAnalyzer("persian", PersianAnalyzerProvider.class);
             analyzersBindings.processAnalyzer("portuguese", PortugueseAnalyzerProvider.class);

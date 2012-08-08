@@ -22,7 +22,6 @@ package org.elasticsearch.action.admin.cluster.node.shutdown;
 import com.google.common.collect.Sets;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.ClusterService;
@@ -62,7 +61,7 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
         super(settings, transportService, clusterService, threadPool);
         this.node = node;
         this.clusterName = clusterName;
-        this.disabled = componentSettings.getAsBoolean("disabled", false);
+        this.disabled = settings.getAsBoolean("action.disable_shutdown", componentSettings.getAsBoolean("disabled", false));
         this.delay = componentSettings.getAsTime("delay", TimeValue.timeValueMillis(200));
 
         this.transportService.registerHandler(NodeShutdownRequestHandler.ACTION, new NodeShutdownRequestHandler());
@@ -70,12 +69,12 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
 
     @Override
     protected String executor() {
-        return ThreadPool.Names.CACHED;
+        return ThreadPool.Names.GENERIC;
     }
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Cluster.Node.SHUTDOWN;
+        return NodesShutdownAction.NAME;
     }
 
     @Override
@@ -106,7 +105,7 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
         if (disabled) {
             throw new ElasticSearchIllegalStateException("Shutdown is disabled");
         }
-        Set<DiscoveryNode> nodes = Sets.newHashSet();
+        final Set<DiscoveryNode> nodes = Sets.newHashSet();
         if (state.nodes().isAllNodes(request.nodesIds)) {
             logger.info("[cluster_shutdown]: requested, shutting down in [{}]", request.delay);
             nodes.addAll(state.nodes().dataNodes().values());
@@ -123,8 +122,8 @@ public class TransportNodesShutdownAction extends TransportMasterNodeOperationAc
                     logger.trace("[cluster_shutdown]: stopping the cluster service so no re-routing will occur");
                     clusterService.stop();
 
-                    final CountDownLatch latch = new CountDownLatch(state.nodes().size());
-                    for (final DiscoveryNode node : state.nodes()) {
+                    final CountDownLatch latch = new CountDownLatch(nodes.size());
+                    for (final DiscoveryNode node : nodes) {
                         if (node.id().equals(state.nodes().masterNodeId())) {
                             // don't shutdown the master yet...
                             latch.countDown();

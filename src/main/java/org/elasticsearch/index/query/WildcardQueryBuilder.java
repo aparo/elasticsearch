@@ -33,7 +33,7 @@ import java.io.IOException;
  *
  *
  */
-public class WildcardQueryBuilder extends BaseQueryBuilder {
+public class WildcardQueryBuilder extends BaseQueryBuilder implements BoostableQueryBuilder<WildcardQueryBuilder> {
 
     private final String name;
 
@@ -76,7 +76,7 @@ public class WildcardQueryBuilder extends BaseQueryBuilder {
     @Override
     public void doXContent(XContentBuilder builder, Params params) throws IOException {
         builder.startObject(WildcardQueryParser.NAME);
-        if (boost == -1 && rewrite != null) {
+        if (boost == -1 && rewrite == null) {
             builder.field(name, wildcard);
         } else {
             builder.startObject(name);

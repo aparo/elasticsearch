@@ -32,6 +32,7 @@ import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.network.NetworkInfo;
 import org.elasticsearch.monitor.os.OsInfo;
 import org.elasticsearch.monitor.process.ProcessInfo;
+import org.elasticsearch.threadpool.ThreadPoolInfo;
 import org.elasticsearch.transport.TransportInfo;
 
 import java.io.IOException;
@@ -42,31 +43,42 @@ import java.util.Map;
  */
 public class NodeInfo extends NodeOperationResponse {
 
+    @Nullable
     private ImmutableMap<String, String> serviceAttributes;
 
     @Nullable
     private String hostname;
 
+    @Nullable
     private Settings settings;
 
+    @Nullable
     private OsInfo os;
 
+    @Nullable
     private ProcessInfo process;
 
+    @Nullable
     private JvmInfo jvm;
 
+    @Nullable
+    private ThreadPoolInfo threadPool;
+
+    @Nullable
     private NetworkInfo network;
 
+    @Nullable
     private TransportInfo transport;
 
+    @Nullable
     private HttpInfo http;
 
     NodeInfo() {
     }
 
-    public NodeInfo(@Nullable String hostname, DiscoveryNode node, ImmutableMap<String, String> serviceAttributes, Settings settings,
-                    OsInfo os, ProcessInfo process, JvmInfo jvm, NetworkInfo network,
-                    TransportInfo transport, @Nullable HttpInfo http) {
+    public NodeInfo(@Nullable String hostname, DiscoveryNode node, @Nullable ImmutableMap<String, String> serviceAttributes, @Nullable Settings settings,
+                    @Nullable OsInfo os, @Nullable ProcessInfo process, @Nullable JvmInfo jvm, @Nullable ThreadPoolInfo threadPool, @Nullable NetworkInfo network,
+                    @Nullable TransportInfo transport, @Nullable HttpInfo http) {
         super(node);
         this.hostname = hostname;
         this.serviceAttributes = serviceAttributes;
@@ -74,6 +86,7 @@ public class NodeInfo extends NodeOperationResponse {
         this.os = os;
         this.process = process;
         this.jvm = jvm;
+        this.threadPool = threadPool;
         this.network = network;
         this.transport = transport;
         this.http = http;
@@ -98,6 +111,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * The service attributes of the node.
      */
+    @Nullable
     public ImmutableMap<String, String> serviceAttributes() {
         return this.serviceAttributes;
     }
@@ -105,6 +119,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * The attributes of the node.
      */
+    @Nullable
     public ImmutableMap<String, String> getServiceAttributes() {
         return serviceAttributes();
     }
@@ -112,6 +127,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * The settings of the node.
      */
+    @Nullable
     public Settings settings() {
         return this.settings;
     }
@@ -119,6 +135,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * The settings of the node.
      */
+    @Nullable
     public Settings getSettings() {
         return settings();
     }
@@ -126,6 +143,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * Operating System level information.
      */
+    @Nullable
     public OsInfo os() {
         return this.os;
     }
@@ -133,6 +151,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * Operating System level information.
      */
+    @Nullable
     public OsInfo getOs() {
         return os();
     }
@@ -140,6 +159,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * Process level information.
      */
+    @Nullable
     public ProcessInfo process() {
         return process;
     }
@@ -147,6 +167,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * Process level information.
      */
+    @Nullable
     public ProcessInfo getProcess() {
         return process();
     }
@@ -154,6 +175,7 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * JVM level information.
      */
+    @Nullable
     public JvmInfo jvm() {
         return jvm;
     }
@@ -161,13 +183,25 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * JVM level information.
      */
+    @Nullable
     public JvmInfo getJvm() {
         return jvm();
+    }
+
+    @Nullable
+    public ThreadPoolInfo threadPool() {
+        return this.threadPool;
+    }
+
+    @Nullable
+    public ThreadPoolInfo getThreadPool() {
+        return threadPool();
     }
 
     /**
      * Network level information.
      */
+    @Nullable
     public NetworkInfo network() {
         return network;
     }
@@ -175,22 +209,27 @@ public class NodeInfo extends NodeOperationResponse {
     /**
      * Network level information.
      */
+    @Nullable
     public NetworkInfo getNetwork() {
         return network();
     }
 
+    @Nullable
     public TransportInfo transport() {
         return transport;
     }
 
+    @Nullable
     public TransportInfo getTransport() {
         return transport();
     }
 
+    @Nullable
     public HttpInfo http() {
         return http;
     }
 
+    @Nullable
     public HttpInfo getHttp() {
         return http();
     }
@@ -207,13 +246,17 @@ public class NodeInfo extends NodeOperationResponse {
         if (in.readBoolean()) {
             hostname = in.readUTF();
         }
-        ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
-        int size = in.readVInt();
-        for (int i = 0; i < size; i++) {
-            builder.put(in.readUTF(), in.readUTF());
+        if (in.readBoolean()) {
+            ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+            int size = in.readVInt();
+            for (int i = 0; i < size; i++) {
+                builder.put(in.readUTF(), in.readUTF());
+            }
+            serviceAttributes = builder.build();
         }
-        serviceAttributes = builder.build();
-        settings = ImmutableSettings.readSettingsFromStream(in);
+        if (in.readBoolean()) {
+            settings = ImmutableSettings.readSettingsFromStream(in);
+        }
         if (in.readBoolean()) {
             os = OsInfo.readOsInfo(in);
         }
@@ -222,6 +265,9 @@ public class NodeInfo extends NodeOperationResponse {
         }
         if (in.readBoolean()) {
             jvm = JvmInfo.readJvmInfo(in);
+        }
+        if (in.readBoolean()) {
+            threadPool = ThreadPoolInfo.readThreadPoolInfo(in);
         }
         if (in.readBoolean()) {
             network = NetworkInfo.readNetworkInfo(in);
@@ -243,12 +289,22 @@ public class NodeInfo extends NodeOperationResponse {
             out.writeBoolean(true);
             out.writeUTF(hostname);
         }
-        out.writeVInt(serviceAttributes.size());
-        for (Map.Entry<String, String> entry : serviceAttributes.entrySet()) {
-            out.writeUTF(entry.getKey());
-            out.writeUTF(entry.getValue());
+        if (serviceAttributes() == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeVInt(serviceAttributes.size());
+            for (Map.Entry<String, String> entry : serviceAttributes.entrySet()) {
+                out.writeUTF(entry.getKey());
+                out.writeUTF(entry.getValue());
+            }
         }
-        ImmutableSettings.writeSettingsToStream(settings, out);
+        if (settings == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            ImmutableSettings.writeSettingsToStream(settings, out);
+        }
         if (os == null) {
             out.writeBoolean(false);
         } else {
@@ -266,6 +322,12 @@ public class NodeInfo extends NodeOperationResponse {
         } else {
             out.writeBoolean(true);
             jvm.writeTo(out);
+        }
+        if (threadPool == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            threadPool.writeTo(out);
         }
         if (network == null) {
             out.writeBoolean(false);

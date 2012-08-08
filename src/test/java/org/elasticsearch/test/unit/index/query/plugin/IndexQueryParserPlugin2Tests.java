@@ -19,8 +19,11 @@
 
 package org.elasticsearch.test.unit.index.query.plugin;
 
+import org.elasticsearch.cluster.ClusterService;
+import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.ModulesBuilder;
+import org.elasticsearch.common.inject.util.Providers;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
@@ -35,6 +38,7 @@ import org.elasticsearch.index.settings.IndexSettingsModule;
 import org.elasticsearch.index.similarity.SimilarityModule;
 import org.elasticsearch.indices.query.IndicesQueriesModule;
 import org.elasticsearch.script.ScriptModule;
+import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPoolModule;
 import org.testng.annotations.Test;
 
@@ -66,7 +70,13 @@ public class IndexQueryParserPlugin2Tests {
                 new IndexEngineModule(settings),
                 new SimilarityModule(settings),
                 queryParserModule,
-                new IndexNameModule(index)
+                new IndexNameModule(index),
+                new AbstractModule() {
+                    @Override
+                    protected void configure() {
+                        bind(ClusterService.class).toProvider(Providers.of((ClusterService) null));
+                    }
+                }
         ).createInjector();
 
         IndexQueryParserService indexQueryParserService = injector.getInstance(IndexQueryParserService.class);
@@ -77,5 +87,7 @@ public class IndexQueryParserPlugin2Tests {
 
         PluginJsonFilterParser myJsonFilterParser = (PluginJsonFilterParser) indexQueryParserService.filterParser("my");
         assertThat(myJsonFilterParser.names()[0], equalTo("my"));
+
+        injector.getInstance(ThreadPool.class).shutdownNow();
     }
 }

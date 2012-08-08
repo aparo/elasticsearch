@@ -23,14 +23,13 @@ import org.apache.lucene.document.Fieldable;
 import org.apache.lucene.index.Term;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.get.GetRequest;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.get.TransportGetAction;
 import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.search.TransportSearchAction;
-import org.elasticsearch.action.support.BaseAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.common.inject.Inject;
@@ -58,10 +57,8 @@ import static org.elasticsearch.search.builder.SearchSourceBuilder.searchSource;
 
 /**
  * The more like this action.
- *
- *
  */
-public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest, SearchResponse> {
+public class TransportMoreLikeThisAction extends TransportAction<MoreLikeThisRequest, SearchResponse> {
 
     private final TransportSearchAction searchAction;
 
@@ -80,7 +77,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
         this.indicesService = indicesService;
         this.clusterService = clusterService;
 
-        transportService.registerHandler(TransportActions.MORE_LIKE_THIS, new TransportHandler());
+        transportService.registerHandler(MoreLikeThisAction.NAME, new TransportHandler());
     }
 
     @Override
@@ -184,7 +181,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
                         .listenerThreaded(request.listenerThreaded());
 
                 if (request.searchSource() != null) {
-                    searchRequest.source(request.searchSource(), request.searchSourceOffset(), request.searchSourceLength(), request.searchSourceUnsafe());
+                    searchRequest.source(request.searchSource(), request.searchSourceUnsafe());
                 }
                 searchAction.execute(searchRequest, new ActionListener<SearchResponse>() {
                     @Override
@@ -211,7 +208,7 @@ public class TransportMoreLikeThisAction extends BaseAction<MoreLikeThisRequest,
         if (getResponse.source() == null) {
             return;
         }
-        docMapper.parse(SourceToParse.source(getResponse.sourceRef().bytes(), getResponse.sourceRef().offset(), getResponse.sourceRef().length()).type(request.type()).id(request.id()), new DocumentMapper.ParseListenerAdapter() {
+        docMapper.parse(SourceToParse.source(getResponse.sourceRef()).type(request.type()).id(request.id()), new DocumentMapper.ParseListenerAdapter() {
             @Override
             public boolean beforeFieldAdded(FieldMapper fieldMapper, Fieldable field, Object parseContext) {
                 if (fieldMapper instanceof InternalMapper) {

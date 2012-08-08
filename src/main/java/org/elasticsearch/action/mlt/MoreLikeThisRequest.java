@@ -19,19 +19,17 @@
 
 package org.elasticsearch.action.mlt;
 
-import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.ElasticSearchGenerationException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.Actions;
+import org.elasticsearch.action.ValidateActions;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.client.Requests;
-import org.elasticsearch.common.Bytes;
 import org.elasticsearch.common.Required;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.io.BytesStream;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -41,7 +39,6 @@ import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Map;
 
 import static org.elasticsearch.search.Scroll.readScroll;
@@ -51,7 +48,6 @@ import static org.elasticsearch.search.Scroll.readScroll;
  * to check against to fetched based on the index, type and id provided. Best created with {@link org.elasticsearch.client.Requests#moreLikeThisRequest(String)}.
  * <p/>
  * <p>Note, the {@link #index()}, {@link #type(String)} and {@link #id(String)} are required.
- *
  *
  * @see org.elasticsearch.client.Client#moreLikeThis(MoreLikeThisRequest)
  * @see org.elasticsearch.client.Requests#moreLikeThisRequest(String)
@@ -87,9 +83,7 @@ public class MoreLikeThisRequest implements ActionRequest {
     private String[] searchTypes;
     private Scroll searchScroll;
 
-    private byte[] searchSource;
-    private int searchSourceOffset;
-    private int searchSourceLength;
+    private BytesReference searchSource;
     private boolean searchSourceUnsafe;
 
     private boolean threadedListener = false;
@@ -316,8 +310,7 @@ public class MoreLikeThisRequest implements ActionRequest {
 
     void beforeLocalFork() {
         if (searchSourceUnsafe) {
-            searchSource = Arrays.copyOfRange(searchSource, searchSourceOffset, searchSourceOffset + searchSourceLength);
-            searchSourceOffset = 0;
+            searchSource = searchSource.copyBytesArray();
             searchSourceUnsafe = false;
         }
     }
@@ -327,11 +320,8 @@ public class MoreLikeThisRequest implements ActionRequest {
      * more like this documents.
      */
     public MoreLikeThisRequest searchSource(SearchSourceBuilder sourceBuilder) {
-        BytesStream bos = sourceBuilder.buildAsBytesStream(Requests.CONTENT_TYPE);
-        this.searchSource = bos.underlyingBytes();
-        this.searchSourceOffset = 0;
-        this.searchSourceLength = bos.size();
-        this.searchSourceUnsafe = true;
+        this.searchSource = sourceBuilder.buildAsBytes(Requests.CONTENT_TYPE);
+        this.searchSourceUnsafe = false;
         return this;
     }
 
@@ -340,11 +330,8 @@ public class MoreLikeThisRequest implements ActionRequest {
      * more like this documents.
      */
     public MoreLikeThisRequest searchSource(String searchSource) {
-        UnicodeUtil.UTF8Result result = Unicode.fromStringAsUtf8(searchSource);
-        this.searchSource = result.result;
-        this.searchSourceOffset = 0;
-        this.searchSourceLength = result.length;
-        this.searchSourceUnsafe = true;
+        this.searchSource = new BytesArray(searchSource);
+        this.searchSourceUnsafe = false;
         return this;
     }
 
@@ -359,15 +346,9 @@ public class MoreLikeThisRequest implements ActionRequest {
     }
 
     public MoreLikeThisRequest searchSource(XContentBuilder builder) {
-        try {
-            this.searchSource = builder.underlyingBytes();
-            this.searchSourceOffset = 0;
-            this.searchSourceLength = builder.underlyingBytesLength();
-            this.searchSourceUnsafe = false;
-            return this;
-        } catch (IOException e) {
-            throw new ElasticSearchGenerationException("Failed to generate [" + builder + "]", e);
-        }
+        this.searchSource = builder.bytes();
+        this.searchSourceUnsafe = false;
+        return this;
     }
 
     /**
@@ -383,9 +364,15 @@ public class MoreLikeThisRequest implements ActionRequest {
      * more like this documents.
      */
     public MoreLikeThisRequest searchSource(byte[] searchSource, int offset, int length, boolean unsafe) {
+        return searchSource(new BytesArray(searchSource, offset, length), unsafe);
+    }
+
+    /**
+     * An optional search source request allowing to control the search request for the
+     * more like this documents.
+     */
+    public MoreLikeThisRequest searchSource(BytesReference searchSource, boolean unsafe) {
         this.searchSource = searchSource;
-        this.searchSourceOffset = offset;
-        this.searchSourceLength = length;
         this.searchSourceUnsafe = unsafe;
         return this;
     }
@@ -394,16 +381,8 @@ public class MoreLikeThisRequest implements ActionRequest {
      * An optional search source request allowing to control the search request for the
      * more like this documents.
      */
-    public byte[] searchSource() {
+    public BytesReference searchSource() {
         return this.searchSource;
-    }
-
-    public int searchSourceOffset() {
-        return searchSourceOffset;
-    }
-
-    public int searchSourceLength() {
-        return searchSourceLength;
     }
 
     public boolean searchSourceUnsafe() {
@@ -526,13 +505,13 @@ public class MoreLikeThisRequest implements ActionRequest {
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
         if (index == null) {
-            validationException = Actions.addValidationError("index is missing", validationException);
+            validationException = ValidateActions.addValidationError("index is missing", validationException);
         }
         if (type == null) {
-            validationException = Actions.addValidationError("type is missing", validationException);
+            validationException = ValidateActions.addValidationError("type is missing", validationException);
         }
         if (id == null) {
-            validationException = Actions.addValidationError("id is missing", validationException);
+            validationException = ValidateActions.addValidationError("id is missing", validationException);
         }
         return validationException;
     }
@@ -616,14 +595,7 @@ public class MoreLikeThisRequest implements ActionRequest {
         }
 
         searchSourceUnsafe = false;
-        searchSourceOffset = 0;
-        searchSourceLength = in.readVInt();
-        if (searchSourceLength == 0) {
-            searchSource = Bytes.EMPTY_ARRAY;
-        } else {
-            searchSource = new byte[searchSourceLength];
-            in.readFully(searchSource);
-        }
+        searchSource = in.readBytesReference();
 
         searchSize = in.readVInt();
         searchFrom = in.readVInt();
@@ -689,12 +661,7 @@ public class MoreLikeThisRequest implements ActionRequest {
             out.writeBoolean(true);
             searchScroll.writeTo(out);
         }
-        if (searchSource == null) {
-            out.writeVInt(0);
-        } else {
-            out.writeVInt(searchSourceLength);
-            out.writeBytes(searchSource, searchSourceOffset, searchSourceLength);
-        }
+        out.writeBytesReference(searchSource);
 
         out.writeVInt(searchSize);
         out.writeVInt(searchFrom);

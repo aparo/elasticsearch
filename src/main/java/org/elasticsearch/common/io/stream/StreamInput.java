@@ -20,22 +20,21 @@
 package org.elasticsearch.common.io.stream;
 
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.text.StringAndBytesText;
+import org.elasticsearch.common.text.Text;
+import org.joda.time.DateTime;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UTFDataFormatException;
 import java.util.*;
 
 /**
  *
  */
 public abstract class StreamInput extends InputStream {
-
-    /**
-     * working arrays initialized on demand by readUTF
-     */
-    private byte bytearr[] = new byte[80];
-    protected char chararr[] = new char[80];
 
     /**
      * Reads and returns a single byte.
@@ -50,6 +49,28 @@ public abstract class StreamInput extends InputStream {
      * @param len    the number of bytes to read
      */
     public abstract void readBytes(byte[] b, int offset, int len) throws IOException;
+
+    /**
+     * Reads a bytes reference from this stream, might hold an actual reference to the underlying
+     * bytes of the stream.
+     */
+    public BytesReference readBytesReference() throws IOException {
+        int length = readVInt();
+        return readBytesReference(length);
+    }
+
+    /**
+     * Reads a bytes reference from this stream, might hold an actual reference to the underlying
+     * bytes of the stream.
+     */
+    public BytesReference readBytesReference(int length) throws IOException {
+        if (length == 0) {
+            return BytesArray.EMPTY;
+        }
+        byte[] bytes = new byte[length];
+        readBytes(bytes, 0, length);
+        return new BytesArray(bytes, 0, length);
+    }
 
     public void readFully(byte[] b) throws IOException {
         readBytes(b, 0, b.length);
@@ -132,35 +153,38 @@ public abstract class StreamInput extends InputStream {
         return i | ((b & 0x7FL) << 56);
     }
 
-    // COPIED from DataInputStream
-
-    public String readUTF() throws IOException {
-        int utflen = readInt();
-        if (utflen == 0) {
-            return "";
+    /**
+     * @deprecated use {@link #readOptionalString()}
+     */
+    @Nullable
+    @Deprecated
+    public String readOptionalUTF() throws IOException {
+        if (readBoolean()) {
+            return readUTF();
         }
-        if (bytearr.length < utflen) {
-            bytearr = new byte[utflen * 2];
-            chararr = new char[utflen * 2];
+        return null;
+    }
+
+    public Text readText() throws IOException {
+        // use StringAndBytes so we can cache the string if its ever converted to it
+        int length = readInt();
+        return new StringAndBytesText(readBytesReference(length));
+    }
+
+    @Nullable
+    public String readOptionalString() throws IOException {
+        if (readBoolean()) {
+            return readString();
         }
-        char[] chararr = this.chararr;
-        byte[] bytearr = this.bytearr;
+        return null;
+    }
 
-        int c, char2, char3;
-        int count = 0;
-        int chararr_count = 0;
-
-        readBytes(bytearr, 0, utflen);
-
-        while (count < utflen) {
-            c = (int) bytearr[count] & 0xff;
-            if (c > 127) break;
-            count++;
-            chararr[chararr_count++] = (char) c;
-        }
-
-        while (count < utflen) {
-            c = (int) bytearr[count] & 0xff;
+    public String readString() throws IOException {
+        int charCount = readVInt();
+        char[] chars = CachedStreamInput.getCharArray(charCount);
+        int c, charIndex = 0;
+        while (charIndex < charCount) {
+            c = readByte() & 0xff;
             switch (c >> 4) {
                 case 0:
                 case 1:
@@ -170,47 +194,26 @@ public abstract class StreamInput extends InputStream {
                 case 5:
                 case 6:
                 case 7:
-                    /* 0xxxxxxx*/
-                    count++;
-                    chararr[chararr_count++] = (char) c;
+                    chars[charIndex++] = (char) c;
                     break;
                 case 12:
                 case 13:
-                    /* 110x xxxx   10xx xxxx*/
-                    count += 2;
-                    if (count > utflen)
-                        throw new UTFDataFormatException(
-                                "malformed input: partial character at end");
-                    char2 = (int) bytearr[count - 1];
-                    if ((char2 & 0xC0) != 0x80)
-                        throw new UTFDataFormatException(
-                                "malformed input around byte " + count);
-                    chararr[chararr_count++] = (char) (((c & 0x1F) << 6) |
-                            (char2 & 0x3F));
+                    chars[charIndex++] = (char) ((c & 0x1F) << 6 | readByte() & 0x3F);
                     break;
                 case 14:
-                    /* 1110 xxxx  10xx xxxx  10xx xxxx */
-                    count += 3;
-                    if (count > utflen)
-                        throw new UTFDataFormatException(
-                                "malformed input: partial character at end");
-                    char2 = (int) bytearr[count - 2];
-                    char3 = (int) bytearr[count - 1];
-                    if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80))
-                        throw new UTFDataFormatException(
-                                "malformed input around byte " + (count - 1));
-                    chararr[chararr_count++] = (char) (((c & 0x0F) << 12) |
-                            ((char2 & 0x3F) << 6) |
-                            ((char3 & 0x3F) << 0));
+                    chars[charIndex++] = (char) ((c & 0x0F) << 12 | (readByte() & 0x3F) << 6 | (readByte() & 0x3F) << 0);
                     break;
-                default:
-                    /* 10xx xxxx,  1111 xxxx */
-                    throw new UTFDataFormatException(
-                            "malformed input around byte " + count);
             }
         }
-        // The number of chars produced may be less than utflen
-        return new String(chararr, 0, chararr_count);
+        return new String(chars, 0, charCount);
+    }
+
+    /**
+     * @deprecated use {@link #readString()}
+     */
+    @Deprecated
+    public String readUTF() throws IOException {
+        return readString();
     }
 
 
@@ -253,64 +256,85 @@ public abstract class StreamInput extends InputStream {
 //        return len;
 //    }
 
-    public
+    public String[] readStringArray() throws IOException {
+        int size = readVInt();
+        if (size == 0) {
+            return Strings.EMPTY_ARRAY;
+        }
+        String[] ret = new String[size];
+        for (int i = 0; i < size; i++) {
+            ret[i] = readString();
+        }
+        return ret;
+    }
+
     @Nullable
-    Map<String, Object> readMap() throws IOException {
-        return (Map<String, Object>) readFieldValue();
+    public Map<String, Object> readMap() throws IOException {
+        return (Map<String, Object>) readGenericValue();
     }
 
     @SuppressWarnings({"unchecked"})
-    private
     @Nullable
-    Object readFieldValue() throws IOException {
+    public Object readGenericValue() throws IOException {
         byte type = readByte();
-        if (type == -1) {
-            return null;
-        } else if (type == 0) {
-            return readUTF();
-        } else if (type == 1) {
-            return readInt();
-        } else if (type == 2) {
-            return readLong();
-        } else if (type == 3) {
-            return readFloat();
-        } else if (type == 4) {
-            return readDouble();
-        } else if (type == 5) {
-            return readBoolean();
-        } else if (type == 6) {
-            int bytesSize = readVInt();
-            byte[] value = new byte[bytesSize];
-            readFully(value);
-            return value;
-        } else if (type == 7) {
-            int size = readVInt();
-            List list = new ArrayList(size);
-            for (int i = 0; i < size; i++) {
-                list.add(readFieldValue());
-            }
-            return list;
-        } else if (type == 8) {
-            int size = readVInt();
-            Object[] list = new Object[size];
-            for (int i = 0; i < size; i++) {
-                list[i] = readFieldValue();
-            }
-            return list;
-        } else if (type == 9 || type == 10) {
-            int size = readVInt();
-            Map map;
-            if (type == 9) {
-                map = new LinkedHashMap(size);
-            } else {
-                map = new HashMap(size);
-            }
-            for (int i = 0; i < size; i++) {
-                map.put(readUTF(), readFieldValue());
-            }
-            return map;
-        } else {
-            throw new IOException("Can't read unknown type [" + type + "]");
+        switch (type) {
+            case -1:
+                return null;
+            case 0:
+                return readString();
+            case 1:
+                return readInt();
+            case 2:
+                return readLong();
+            case 3:
+                return readFloat();
+            case 4:
+                return readDouble();
+            case 5:
+                return readBoolean();
+            case 6:
+                int bytesSize = readVInt();
+                byte[] value = new byte[bytesSize];
+                readBytes(value, 0, bytesSize);
+                return value;
+            case 7:
+                int size = readVInt();
+                List list = new ArrayList(size);
+                for (int i = 0; i < size; i++) {
+                    list.add(readGenericValue());
+                }
+                return list;
+            case 8:
+                int size8 = readVInt();
+                Object[] list8 = new Object[size8];
+                for (int i = 0; i < size8; i++) {
+                    list8[i] = readGenericValue();
+                }
+                return list8;
+            case 9:
+                int size9 = readVInt();
+                Map map9 = new LinkedHashMap(size9);
+                for (int i = 0; i < size9; i++) {
+                    map9.put(readString(), readGenericValue());
+                }
+                return map9;
+            case 10:
+                int size10 = readVInt();
+                Map map10 = new HashMap(size10);
+                for (int i = 0; i < size10; i++) {
+                    map10.put(readString(), readGenericValue());
+                }
+                return map10;
+            case 11:
+                return readByte();
+            case 12:
+                return new Date(readLong());
+            case 13:
+                return new DateTime(readLong());
+            case 14:
+                return readBytesReference();
+            default:
+                throw new IOException("Can't read unknown type [" + type + "]");
         }
     }
 }

@@ -75,7 +75,8 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
         @Override
         public ShortFieldMapper build(BuilderContext context) {
             ShortFieldMapper fieldMapper = new ShortFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue);
+                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
+                    ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -103,9 +104,9 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
 
     protected ShortFieldMapper(Names names, int precisionStep, String fuzzyFactor, Field.Index index, Field.Store store,
                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                               Short nullValue) {
+                               Short nullValue, boolean ignoreMalformed) {
         super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                new NamedAnalyzer("_short/" + precisionStep, new NumericIntegerAnalyzer(precisionStep)),
+                ignoreMalformed, new NamedAnalyzer("_short/" + precisionStep, new NumericIntegerAnalyzer(precisionStep)),
                 new NamedAnalyzer("_short/max", new NumericIntegerAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -168,7 +169,7 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeQuery.newIntRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Integer.parseInt(lowerTerm),
                 upperTerm == null ? null : Integer.parseInt(upperTerm),
@@ -183,7 +184,7 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFilter.newIntRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Integer.parseInt(lowerTerm),
                 upperTerm == null ? null : Integer.parseInt(upperTerm),
@@ -191,11 +192,22 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFieldDataFilter.newShortRange(fieldDataCache, names.indexName(),
                 lowerTerm == null ? null : Short.parseShort(lowerTerm),
                 upperTerm == null ? null : Short.parseShort(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return NumericRangeFilter.newIntRange(names.indexName(), precisionStep,
+                nullValue.intValue(),
+                nullValue.intValue(),
+                true, true);
     }
 
     @Override
@@ -204,7 +216,7 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
         short value;
         float boost = this.boost;
         if (context.externalValueSet()) {

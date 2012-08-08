@@ -20,10 +20,12 @@
 package org.elasticsearch.rest.action.admin.indices.validate.query;
 
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.support.broadcast.BroadcastOperationThreading;
+import org.elasticsearch.action.admin.indices.validate.query.QueryExplanation;
 import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryRequest;
 import org.elasticsearch.action.admin.indices.validate.query.ValidateQueryResponse;
+import org.elasticsearch.action.support.broadcast.BroadcastOperationThreading;
 import org.elasticsearch.client.Client;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
@@ -59,7 +61,6 @@ public class RestValidateQueryAction extends BaseRestHandler {
     @Override
     public void handleRequest(final RestRequest request, final RestChannel channel) {
         ValidateQueryRequest validateQueryRequest = new ValidateQueryRequest(RestActions.splitIndices(request.param("index")));
-        // we just send back a response, no need to fork a listener
         validateQueryRequest.listenerThreaded(false);
         try {
             BroadcastOperationThreading operationThreading = BroadcastOperationThreading.fromString(request.param("operation_threading"), BroadcastOperationThreading.SINGLE_THREAD);
@@ -69,19 +70,24 @@ public class RestValidateQueryAction extends BaseRestHandler {
             }
             validateQueryRequest.operationThreading(operationThreading);
             if (request.hasContent()) {
-                validateQueryRequest.query(request.contentByteArray(), request.contentByteArrayOffset(), request.contentLength(), true);
+                validateQueryRequest.query(request.content(), request.contentUnsafe());
             } else {
                 String source = request.param("source");
                 if (source != null) {
                     validateQueryRequest.query(source);
                 } else {
-                    byte[] querySource = RestActions.parseQuerySource(request);
+                    BytesReference querySource = RestActions.parseQuerySource(request);
                     if (querySource != null) {
-                        validateQueryRequest.query(querySource);
+                        validateQueryRequest.query(querySource, false);
                     }
                 }
             }
             validateQueryRequest.types(splitTypes(request.param("type")));
+            if (request.paramAsBoolean("explain", false)) {
+                validateQueryRequest.explain(true);
+            } else {
+                validateQueryRequest.explain(false);
+            }
         } catch (Exception e) {
             try {
                 XContentBuilder builder = RestXContentBuilder.restContentBuilder(request);
@@ -102,6 +108,24 @@ public class RestValidateQueryAction extends BaseRestHandler {
 
                     buildBroadcastShardsHeader(builder, response);
 
+                    if (response.queryExplanations() != null && !response.queryExplanations().isEmpty()) {
+                        builder.startArray("explanations");
+                        for (QueryExplanation explanation : response.queryExplanations()) {
+                            builder.startObject();
+                            if (explanation.index() != null) {
+                                builder.field("index", explanation.index(), XContentBuilder.FieldCaseConversion.NONE);
+                            }
+                            builder.field("valid", explanation.valid());
+                            if (explanation.error() != null) {
+                                builder.field("error", explanation.error());
+                            }
+                            if (explanation.explanation() != null) {
+                                builder.field("explanation", explanation.explanation());
+                            }
+                            builder.endObject();
+                        }
+                        builder.endArray();
+                    }
                     builder.endObject();
                     channel.sendResponse(new XContentRestResponse(request, OK, builder));
                 } catch (Exception e) {

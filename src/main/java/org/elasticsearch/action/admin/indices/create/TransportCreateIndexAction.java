@@ -20,7 +20,6 @@
 package org.elasticsearch.action.admin.indices.create;
 
 import org.elasticsearch.ElasticSearchException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.master.TransportMasterNodeOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
@@ -37,8 +36,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Create index action.
- *
- *
  */
 public class TransportCreateIndexAction extends TransportMasterNodeOperationAction<CreateIndexRequest, CreateIndexResponse> {
 
@@ -58,7 +55,7 @@ public class TransportCreateIndexAction extends TransportMasterNodeOperationActi
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.CREATE;
+        return CreateIndexAction.NAME;
     }
 
     @Override
@@ -86,19 +83,23 @@ public class TransportCreateIndexAction extends TransportMasterNodeOperationActi
         final AtomicReference<CreateIndexResponse> responseRef = new AtomicReference<CreateIndexResponse>();
         final AtomicReference<Throwable> failureRef = new AtomicReference<Throwable>();
         final CountDownLatch latch = new CountDownLatch(1);
-        createIndexService.createIndex(new MetaDataCreateIndexService.Request(cause, request.index()).settings(request.settings()).mappings(request.mappings()).timeout(request.timeout()), new MetaDataCreateIndexService.Listener() {
-            @Override
-            public void onResponse(MetaDataCreateIndexService.Response response) {
-                responseRef.set(new CreateIndexResponse(response.acknowledged()));
-                latch.countDown();
-            }
+        createIndexService.createIndex(new MetaDataCreateIndexService.Request(cause, request.index()).settings(request.settings())
+                .mappings(request.mappings())
+                .customs(request.customs())
+                .timeout(request.timeout()),
+                new MetaDataCreateIndexService.Listener() {
+                    @Override
+                    public void onResponse(MetaDataCreateIndexService.Response response) {
+                        responseRef.set(new CreateIndexResponse(response.acknowledged()));
+                        latch.countDown();
+                    }
 
-            @Override
-            public void onFailure(Throwable t) {
-                failureRef.set(t);
-                latch.countDown();
-            }
-        });
+                    @Override
+                    public void onFailure(Throwable t) {
+                        failureRef.set(t);
+                        latch.countDown();
+                    }
+                });
 
         try {
             latch.await();

@@ -23,8 +23,6 @@ import org.elasticsearch.common.Nullable;
 
 /**
  * A static factory for simple "import static" usage.
- *
- *
  */
 public abstract class QueryBuilders {
 
@@ -42,7 +40,7 @@ public abstract class QueryBuilders {
      * @param text The query text (to be analyzed).
      * @deprecated use {@link #textQuery(String, Object)} instead
      */
-    public static TextQueryBuilder text(String name, Object text) {
+    public static MatchQueryBuilder text(String name, Object text) {
         return textQuery(name, text);
     }
 
@@ -51,9 +49,20 @@ public abstract class QueryBuilders {
      *
      * @param name The field name.
      * @param text The query text (to be analyzed).
+     * @deprecated Use {@link #matchQuery(String, Object)}
      */
-    public static TextQueryBuilder textQuery(String name, Object text) {
-        return new TextQueryBuilder(name, text).type(TextQueryBuilder.Type.BOOLEAN);
+    public static MatchQueryBuilder textQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.BOOLEAN);
+    }
+
+    /**
+     * Creates a match query with type "BOOLEAN" for the provided field name and text.
+     *
+     * @param name The field name.
+     * @param text The query text (to be analyzed).
+     */
+    public static MatchQueryBuilder matchQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.BOOLEAN);
     }
 
     /**
@@ -63,7 +72,7 @@ public abstract class QueryBuilders {
      * @param text The query text (to be analyzed).
      * @deprecated use {@link #textPhraseQuery(String, Object)} instead
      */
-    public static TextQueryBuilder textPhrase(String name, Object text) {
+    public static MatchQueryBuilder textPhrase(String name, Object text) {
         return textPhraseQuery(name, text);
     }
 
@@ -72,9 +81,20 @@ public abstract class QueryBuilders {
      *
      * @param name The field name.
      * @param text The query text (to be analyzed).
+     * @deprecated Use {@link #matchPhraseQuery(String, Object)}
      */
-    public static TextQueryBuilder textPhraseQuery(String name, Object text) {
-        return new TextQueryBuilder(name, text).type(TextQueryBuilder.Type.PHRASE);
+    public static MatchQueryBuilder textPhraseQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
+    }
+
+    /**
+     * Creates a text query with type "PHRASE" for the provided field name and text.
+     *
+     * @param name The field name.
+     * @param text The query text (to be analyzed).
+     */
+    public static MatchQueryBuilder matchPhraseQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
     }
 
     /**
@@ -84,7 +104,7 @@ public abstract class QueryBuilders {
      * @param text The query text (to be analyzed).
      * @deprecated use {@link #textPhrasePrefixQuery(String, Object)} instead
      */
-    public static TextQueryBuilder textPhrasePrefix(String name, Object text) {
+    public static MatchQueryBuilder textPhrasePrefix(String name, Object text) {
         return textPhrasePrefixQuery(name, text);
     }
 
@@ -93,9 +113,20 @@ public abstract class QueryBuilders {
      *
      * @param name The field name.
      * @param text The query text (to be analyzed).
+     * @deprecated Use {@link #matchPhrasePrefixQuery(String, Object)}
      */
-    public static TextQueryBuilder textPhrasePrefixQuery(String name, Object text) {
-        return new TextQueryBuilder(name, text).type(TextQueryBuilder.Type.PHRASE_PREFIX);
+    public static MatchQueryBuilder textPhrasePrefixQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE_PREFIX);
+    }
+
+    /**
+     * Creates a match query with type "PHRASE_PREFIX" for the provided field name and text.
+     *
+     * @param name The field name.
+     * @param text The query text (to be analyzed).
+     */
+    public static MatchQueryBuilder matchPhrasePrefixQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE_PREFIX);
     }
 
     /**
@@ -389,7 +420,7 @@ public abstract class QueryBuilders {
      * @param filterBuilder The filter to apply on the query
      * @deprecated Use filteredQuery instead (rename)
      */
-    public static FilteredQueryBuilder filtered(QueryBuilder queryBuilder, FilterBuilder filterBuilder) {
+    public static FilteredQueryBuilder filtered(QueryBuilder queryBuilder, @Nullable FilterBuilder filterBuilder) {
         return new FilteredQueryBuilder(queryBuilder, filterBuilder);
     }
 
@@ -399,7 +430,7 @@ public abstract class QueryBuilders {
      * @param queryBuilder  The query to apply the filter to
      * @param filterBuilder The filter to apply on the query
      */
-    public static FilteredQueryBuilder filteredQuery(QueryBuilder queryBuilder, FilterBuilder filterBuilder) {
+    public static FilteredQueryBuilder filteredQuery(QueryBuilder queryBuilder, @Nullable FilterBuilder filterBuilder) {
         return new FilteredQueryBuilder(queryBuilder, filterBuilder);
     }
 

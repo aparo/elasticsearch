@@ -22,7 +22,7 @@ package org.elasticsearch.index.query;
 import com.google.common.collect.Lists;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Filter;
-import org.apache.lucene.search.PublicTermsFilter;
+import org.apache.lucene.search.XTermsFilter;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.AndFilter;
 import org.elasticsearch.common.lucene.search.TermFilter;
@@ -88,6 +88,8 @@ public class TermsFilterParser implements FilterParser {
                     cache = parser.booleanValue();
                 } else if ("_cache_key".equals(currentFieldName) || "_cacheKey".equals(currentFieldName)) {
                     cacheKey = new CacheKeyFilter.Key(parser.text());
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[terms] filter does not support [" + currentFieldName + "]");
                 }
             }
         }
@@ -98,103 +100,113 @@ public class TermsFilterParser implements FilterParser {
 
         FieldMapper fieldMapper = null;
         smartNameFieldMappers = parseContext.smartFieldMappers(fieldName);
+        String[] previousTypes = null;
         if (smartNameFieldMappers != null) {
             if (smartNameFieldMappers.hasMapper()) {
                 fieldMapper = smartNameFieldMappers.mapper();
                 fieldName = fieldMapper.names().indexName();
             }
+            // if we have a doc mapper, its explicit type, mark it
+            if (smartNameFieldMappers.explicitTypeInNameWithDocMapper()) {
+                previousTypes = QueryParseContext.setTypesWithPrevious(new String[]{smartNameFieldMappers.docMapper().type()});
+            }
         }
 
+        try {
+            Filter filter;
+            if ("plain".equals(execution)) {
+                Term[] filterTerms = new Term[terms.size()];
+                if (fieldMapper != null) {
+                    for (int i = 0; i < filterTerms.length; i++) {
+                        filterTerms[i] = fieldMapper.names().createIndexNameTerm(fieldMapper.indexedValue(terms.get(i)));
+                    }
+                } else {
+                    for (int i = 0; i < filterTerms.length; i++) {
+                        filterTerms[i] = new Term(fieldName, terms.get(i));
+                    }
+                }
+                filter = new XTermsFilter(filterTerms);
+                // cache the whole filter by default, or if explicitly told to
+                if (cache == null || cache) {
+                    filter = parseContext.cacheFilter(filter, cacheKey);
+                }
+            } else if ("bool".equals(execution)) {
+                XBooleanFilter boolFiler = new XBooleanFilter();
+                if (fieldMapper != null) {
+                    for (String term : terms) {
+                        boolFiler.addShould(parseContext.cacheFilter(fieldMapper.fieldFilter(term, parseContext), null));
+                    }
+                } else {
+                    for (String term : terms) {
+                        boolFiler.addShould(parseContext.cacheFilter(new TermFilter(new Term(fieldName, term)), null));
+                    }
+                }
+                filter = boolFiler;
+                // only cache if explicitly told to, since we cache inner filters
+                if (cache != null && cache) {
+                    filter = parseContext.cacheFilter(filter, cacheKey);
+                }
+            } else if ("bool_nocache".equals(execution)) {
+                XBooleanFilter boolFiler = new XBooleanFilter();
+                if (fieldMapper != null) {
+                    for (String term : terms) {
+                        boolFiler.addShould(fieldMapper.fieldFilter(term, parseContext));
+                    }
+                } else {
+                    for (String term : terms) {
+                        boolFiler.addShould(new TermFilter(new Term(fieldName, term)));
+                    }
+                }
+                filter = boolFiler;
+                // cache the whole filter by default, or if explicitly told to
+                if (cache == null || cache) {
+                    filter = parseContext.cacheFilter(filter, cacheKey);
+                }
+            } else if ("and".equals(execution)) {
+                List<Filter> filters = Lists.newArrayList();
+                if (fieldMapper != null) {
+                    for (String term : terms) {
+                        filters.add(parseContext.cacheFilter(fieldMapper.fieldFilter(term, parseContext), null));
+                    }
+                } else {
+                    for (String term : terms) {
+                        filters.add(parseContext.cacheFilter(new TermFilter(new Term(fieldName, term)), null));
+                    }
+                }
+                filter = new AndFilter(filters);
+                // only cache if explicitly told to, since we cache inner filters
+                if (cache != null && cache) {
+                    filter = parseContext.cacheFilter(filter, cacheKey);
+                }
+            } else if ("and_nocache".equals(execution)) {
+                List<Filter> filters = Lists.newArrayList();
+                if (fieldMapper != null) {
+                    for (String term : terms) {
+                        filters.add(fieldMapper.fieldFilter(term, parseContext));
+                    }
+                } else {
+                    for (String term : terms) {
+                        filters.add(new TermFilter(new Term(fieldName, term)));
+                    }
+                }
+                filter = new AndFilter(filters);
+                // cache the whole filter by default, or if explicitly told to
+                if (cache == null || cache) {
+                    filter = parseContext.cacheFilter(filter, cacheKey);
+                }
+            } else {
+                throw new QueryParsingException(parseContext.index(), "bool filter execution value [" + execution + "] not supported");
+            }
 
-        Filter filter;
-        if ("plain".equals(execution)) {
-            PublicTermsFilter termsFilter = new PublicTermsFilter();
-            if (fieldMapper != null) {
-                for (String term : terms) {
-                    termsFilter.addTerm(fieldMapper.names().createIndexNameTerm(fieldMapper.indexedValue(term)));
-                }
-            } else {
-                for (String term : terms) {
-                    termsFilter.addTerm(new Term(fieldName, term));
-                }
+            filter = wrapSmartNameFilter(filter, smartNameFieldMappers, parseContext);
+            if (filterName != null) {
+                parseContext.addNamedFilter(filterName, filter);
             }
-            filter = termsFilter;
-            // cache the whole filter by default, or if explicitly told to
-            if (cache == null || cache) {
-                filter = parseContext.cacheFilter(filter, cacheKey);
+            return filter;
+        } finally {
+            if (smartNameFieldMappers != null && smartNameFieldMappers.explicitTypeInNameWithDocMapper()) {
+                QueryParseContext.setTypes(previousTypes);
             }
-        } else if ("bool".equals(execution)) {
-            XBooleanFilter boolFiler = new XBooleanFilter();
-            if (fieldMapper != null) {
-                for (String term : terms) {
-                    boolFiler.addShould(parseContext.cacheFilter(fieldMapper.fieldFilter(term, parseContext), null));
-                }
-            } else {
-                for (String term : terms) {
-                    boolFiler.addShould(parseContext.cacheFilter(new TermFilter(new Term(fieldName, term)), null));
-                }
-            }
-            filter = boolFiler;
-            // only cache if explicitly told to, since we cache inner filters
-            if (cache != null && cache) {
-                filter = parseContext.cacheFilter(filter, cacheKey);
-            }
-        } else if ("bool_nocache".equals(execution)) {
-            XBooleanFilter boolFiler = new XBooleanFilter();
-            if (fieldMapper != null) {
-                for (String term : terms) {
-                    boolFiler.addShould(fieldMapper.fieldFilter(term, parseContext));
-                }
-            } else {
-                for (String term : terms) {
-                    boolFiler.addShould(new TermFilter(new Term(fieldName, term)));
-                }
-            }
-            filter = boolFiler;
-            // cache the whole filter by default, or if explicitly told to
-            if (cache == null || cache) {
-                filter = parseContext.cacheFilter(filter, cacheKey);
-            }
-        } else if ("and".equals(execution)) {
-            List<Filter> filters = Lists.newArrayList();
-            if (fieldMapper != null) {
-                for (String term : terms) {
-                    filters.add(parseContext.cacheFilter(fieldMapper.fieldFilter(term, parseContext), null));
-                }
-            } else {
-                for (String term : terms) {
-                    filters.add(parseContext.cacheFilter(new TermFilter(new Term(fieldName, term)), null));
-                }
-            }
-            filter = new AndFilter(filters);
-            // only cache if explicitly told to, since we cache inner filters
-            if (cache != null && cache) {
-                filter = parseContext.cacheFilter(filter, cacheKey);
-            }
-        } else if ("and_nocache".equals(execution)) {
-            List<Filter> filters = Lists.newArrayList();
-            if (fieldMapper != null) {
-                for (String term : terms) {
-                    filters.add(fieldMapper.fieldFilter(term, parseContext));
-                }
-            } else {
-                for (String term : terms) {
-                    filters.add(new TermFilter(new Term(fieldName, term)));
-                }
-            }
-            filter = new AndFilter(filters);
-            // cache the whole filter by default, or if explicitly told to
-            if (cache == null || cache) {
-                filter = parseContext.cacheFilter(filter, cacheKey);
-            }
-        } else {
-            throw new QueryParsingException(parseContext.index(), "bool filter execution value [" + execution + "] not supported");
         }
-
-        filter = wrapSmartNameFilter(filter, smartNameFieldMappers, parseContext);
-        if (filterName != null) {
-            parseContext.addNamedFilter(filterName, filter);
-        }
-        return filter;
     }
 }

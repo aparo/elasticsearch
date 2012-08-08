@@ -20,7 +20,7 @@
 package org.elasticsearch.action.get;
 
 import org.elasticsearch.action.ActionRequestValidationException;
-import org.elasticsearch.action.Actions;
+import org.elasticsearch.action.ValidateActions;
 import org.elasticsearch.action.support.single.shard.SingleShardOperationRequest;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Required;
@@ -35,7 +35,6 @@ import java.io.IOException;
  * <p/>
  * <p>The operation requires the {@link #index()}, {@link #type(String)} and {@link #id(String)}
  * to be set.
- *
  *
  * @see org.elasticsearch.action.get.GetResponse
  * @see org.elasticsearch.client.Requests#getRequest(String)
@@ -84,10 +83,10 @@ public class GetRequest extends SingleShardOperationRequest {
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = super.validate();
         if (type == null) {
-            validationException = Actions.addValidationError("type is missing", validationException);
+            validationException = ValidateActions.addValidationError("type is missing", validationException);
         }
         if (id == null) {
-            validationException = Actions.addValidationError("id is missing", validationException);
+            validationException = ValidateActions.addValidationError("id is missing", validationException);
         }
         return validationException;
     }
@@ -118,6 +117,17 @@ public class GetRequest extends SingleShardOperationRequest {
     @Required
     public GetRequest id(String id) {
         this.id = id;
+        return this;
+    }
+
+    /**
+     * Sets the parent id of this document. Will simply set the routing to this value, as it is only
+     * used for routing with delete requests.
+     */
+    public GetRequest parent(String parent) {
+        if (routing == null) {
+            routing = parent;
+        }
         return this;
     }
 

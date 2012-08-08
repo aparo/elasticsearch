@@ -21,6 +21,8 @@ package org.elasticsearch.indices.recovery;
 
 import org.apache.lucene.store.IndexOutput;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
+import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.index.shard.service.InternalIndexShard;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
@@ -38,6 +40,20 @@ public class RecoveryStatus {
         FINALIZE,
         DONE
     }
+
+    final ShardId shardId;
+    final long recoveryId;
+    final InternalIndexShard indexShard;
+
+    public RecoveryStatus(long recoveryId, InternalIndexShard indexShard) {
+        this.recoveryId = recoveryId;
+        this.indexShard = indexShard;
+        this.shardId = indexShard.shardId();
+    }
+
+    volatile Thread recoveryThread;
+    volatile boolean canceled;
+    volatile boolean sentCanceledToSource;
 
     ConcurrentMap<String, IndexOutput> openIndexOutputs = ConcurrentCollections.newConcurrentMap();
     ConcurrentMap<String, String> checksums = ConcurrentCollections.newConcurrentMap();

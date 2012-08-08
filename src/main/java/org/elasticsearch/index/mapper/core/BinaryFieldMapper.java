@@ -24,10 +24,10 @@ import org.apache.lucene.document.Fieldable;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.Base64;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.compress.lzf.LZF;
-import org.elasticsearch.common.compress.lzf.LZFDecoder;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.io.stream.CachedStreamOutput;
-import org.elasticsearch.common.io.stream.LZFStreamOutput;
+import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -49,6 +49,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final long COMPRESS_THRESHOLD = -1;
+        public static final Field.Store STORE = Field.Store.YES;
     }
 
     public static class Builder extends AbstractFieldMapper.Builder<Builder, BinaryFieldMapper> {
@@ -59,6 +60,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
         public Builder(String name) {
             super(name);
+            store = Defaults.STORE;
             builder = this;
         }
 
@@ -79,7 +81,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
         @Override
         public BinaryFieldMapper build(BuilderContext context) {
-            return new BinaryFieldMapper(buildNames(context), compress, compressThreshold);
+            return new BinaryFieldMapper(buildNames(context), store, compress, compressThreshold);
         }
     }
 
@@ -111,8 +113,8 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
     private long compressThreshold;
 
-    protected BinaryFieldMapper(Names names, Boolean compress, long compressThreshold) {
-        super(names, Field.Index.NO, Field.Store.YES, Field.TermVector.NO, 1.0f, true, true, null, null);
+    protected BinaryFieldMapper(Names names, Field.Store store, Boolean compress, long compressThreshold) {
+        super(names, Field.Index.NO, store, Field.TermVector.NO, 1.0f, true, true, null, null);
         this.compress = compress;
         this.compressThreshold = compressThreshold;
     }
@@ -125,14 +127,14 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
     @Override
     public byte[] value(Fieldable field) {
         byte[] value = field.getBinaryValue();
-        if (value != null && LZF.isCompressed(value)) {
-            try {
-                return LZFDecoder.decode(value);
-            } catch (IOException e) {
-                throw new ElasticSearchParseException("failed to decompress source", e);
-            }
+        if (value == null) {
+            return value;
         }
-        return value;
+        try {
+            return CompressorFactory.uncompressIfNeeded(new BytesArray(value)).toBytes();
+        } catch (IOException e) {
+            throw new ElasticSearchParseException("failed to decompress source", e);
+        }
     }
 
     @Override
@@ -157,20 +159,23 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
     @Override
     protected Field parseCreateField(ParseContext context) throws IOException {
+        if (!stored()) {
+            return null;
+        }
         byte[] value;
         if (context.parser().currentToken() == XContentParser.Token.VALUE_NULL) {
             return null;
         } else {
             value = context.parser().binaryValue();
-            if (compress != null && compress && !LZF.isCompressed(value, 0, value.length)) {
+            if (compress != null && compress && !CompressorFactory.isCompressed(value, 0, value.length)) {
                 if (compressThreshold == -1 || value.length > compressThreshold) {
                     CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
-                    LZFStreamOutput streamOutput = cachedEntry.cachedLZFBytes();
+                    StreamOutput streamOutput = cachedEntry.bytes(CompressorFactory.defaultCompressor());
                     streamOutput.writeBytes(value, 0, value.length);
-                    streamOutput.flush();
+                    streamOutput.close();
                     // we copy over the byte array, since we need to push back the cached entry
                     // TODO, we we had a handle into when we are done with parsing, then we push back then and not copy over bytes
-                    value = cachedEntry.bytes().copiedByteArray();
+                    value = cachedEntry.bytes().bytes().copyBytesArray().toBytes();
                     CachedStreamOutput.pushEntry(cachedEntry);
                 }
             }

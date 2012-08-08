@@ -22,7 +22,6 @@ package org.elasticsearch.index.query;
 import gnu.trove.list.array.TFloatArrayList;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
-import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.function.BoostScoreFunction;
@@ -30,7 +29,6 @@ import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery
 import org.elasticsearch.common.lucene.search.function.ScoreFunction;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.script.SearchScript;
-import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,14 +55,17 @@ public class CustomFiltersScoreQueryParser implements QueryParser {
         XContentParser parser = parseContext.parser();
 
         Query query = null;
+        boolean queryFound = false;
         float boost = 1.0f;
         String scriptLang = null;
         Map<String, Object> vars = null;
 
         FiltersFunctionScoreQuery.ScoreMode scoreMode = FiltersFunctionScoreQuery.ScoreMode.First;
         ArrayList<Filter> filters = new ArrayList<Filter>();
+        boolean filtersFound = false;
         ArrayList<String> scripts = new ArrayList<String>();
         TFloatArrayList boosts = new TFloatArrayList();
+        float maxBoost = Float.MAX_VALUE;
 
         String currentFieldName = null;
         XContentParser.Token token;
@@ -74,14 +75,19 @@ public class CustomFiltersScoreQueryParser implements QueryParser {
             } else if (token == XContentParser.Token.START_OBJECT) {
                 if ("query".equals(currentFieldName)) {
                     query = parseContext.parseInnerQuery();
+                    queryFound = true;
                 } else if ("params".equals(currentFieldName)) {
                     vars = parser.map();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[custom_filters_score] query does not support [" + currentFieldName + "]");
                 }
             } else if (token == XContentParser.Token.START_ARRAY) {
                 if ("filters".equals(currentFieldName)) {
+                    filtersFound = true;
                     while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
                         String script = null;
                         Filter filter = null;
+                        boolean filterFound = false;
                         float fboost = Float.NaN;
                         while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
                             if (token == XContentParser.Token.FIELD_NAME) {
@@ -89,6 +95,7 @@ public class CustomFiltersScoreQueryParser implements QueryParser {
                             } else if (token == XContentParser.Token.START_OBJECT) {
                                 if ("filter".equals(currentFieldName)) {
                                     filter = parseContext.parseInnerFilter();
+                                    filterFound = true;
                                 }
                             } else if (token.isValue()) {
                                 if ("script".equals(currentFieldName)) {
@@ -101,13 +108,17 @@ public class CustomFiltersScoreQueryParser implements QueryParser {
                         if (script == null && fboost == -1) {
                             throw new QueryParsingException(parseContext.index(), "[custom_filters_score] missing 'script' or 'boost' in filters array element");
                         }
-                        if (filter == null) {
+                        if (!filterFound) {
                             throw new QueryParsingException(parseContext.index(), "[custom_filters_score] missing 'filter' in filters array element");
                         }
-                        filters.add(filter);
-                        scripts.add(script);
-                        boosts.add(fboost);
+                        if (filter != null) {
+                            filters.add(filter);
+                            scripts.add(script);
+                            boosts.add(fboost);
+                        }
                     }
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[custom_filters_score] query does not support [" + currentFieldName + "]");
                 }
             } else if (token.isValue()) {
                 if ("lang".equals(currentFieldName)) {
@@ -129,35 +140,42 @@ public class CustomFiltersScoreQueryParser implements QueryParser {
                     } else if ("first".equals(sScoreMode)) {
                         scoreMode = FiltersFunctionScoreQuery.ScoreMode.First;
                     } else {
-                        throw new QueryParsingException(parseContext.index(), "illegal score_mode for nested query [" + sScoreMode + "]");
+                        throw new QueryParsingException(parseContext.index(), "[custom_filters_score] illegal score_mode [" + sScoreMode + "]");
                     }
+                } else if ("max_boost".equals(currentFieldName) || "maxBoost".equals(currentFieldName)) {
+                    maxBoost = parser.floatValue();
+                } else {
+                    throw new QueryParsingException(parseContext.index(), "[custom_filters_score] query does not support [" + currentFieldName + "]");
                 }
             }
         }
-        if (query == null) {
+        if (!queryFound) {
             throw new QueryParsingException(parseContext.index(), "[custom_filters_score] requires 'query' field");
         }
-        if (filters.isEmpty()) {
+        if (query == null) {
+            return null;
+        }
+        if (!filtersFound) {
             throw new QueryParsingException(parseContext.index(), "[custom_filters_score] requires 'filters' field");
         }
-
-        SearchContext context = SearchContext.current();
-        if (context == null) {
-            throw new ElasticSearchIllegalStateException("No search context on going...");
+        // if all filter elements returned null, just use the query
+        if (filters.isEmpty()) {
+            return query;
         }
+
         FiltersFunctionScoreQuery.FilterFunction[] filterFunctions = new FiltersFunctionScoreQuery.FilterFunction[filters.size()];
         for (int i = 0; i < filterFunctions.length; i++) {
             ScoreFunction scoreFunction;
             String script = scripts.get(i);
             if (script != null) {
-                SearchScript searchScript = context.scriptService().search(context.lookup(), scriptLang, script, vars);
+                SearchScript searchScript = parseContext.scriptService().search(parseContext.lookup(), scriptLang, script, vars);
                 scoreFunction = new CustomScoreQueryParser.ScriptScoreFunction(script, vars, searchScript);
             } else {
                 scoreFunction = new BoostScoreFunction(boosts.get(i));
             }
             filterFunctions[i] = new FiltersFunctionScoreQuery.FilterFunction(filters.get(i), scoreFunction);
         }
-        FiltersFunctionScoreQuery functionScoreQuery = new FiltersFunctionScoreQuery(query, scoreMode, filterFunctions);
+        FiltersFunctionScoreQuery functionScoreQuery = new FiltersFunctionScoreQuery(query, scoreMode, filterFunctions, maxBoost);
         functionScoreQuery.setBoost(boost);
         return functionScoreQuery;
     }

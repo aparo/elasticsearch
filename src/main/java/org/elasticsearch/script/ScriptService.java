@@ -19,9 +19,10 @@
 
 package org.elasticsearch.script;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.MapMaker;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
@@ -54,7 +55,10 @@ public class ScriptService extends AbstractComponent {
 
     private final ConcurrentMap<String, CompiledScript> staticCache = ConcurrentCollections.newConcurrentMap();
 
-    private final ConcurrentMap<CacheKey, CompiledScript> cache = new MapMaker().softValues().makeMap();
+    // TODO expose some cache aspects like expiration and max size
+    private final Cache<CacheKey, CompiledScript> cache = CacheBuilder.newBuilder().build();
+
+    private final boolean disableDynamic;
 
     public ScriptService(Settings settings) {
         this(settings, new Environment(), ImmutableSet.<ScriptEngineService>builder()
@@ -68,6 +72,7 @@ public class ScriptService extends AbstractComponent {
         super(settings);
 
         this.defaultLang = componentSettings.get("default_lang", "mvel");
+        this.disableDynamic = componentSettings.getAsBoolean("disable_dynamic", false);
 
         ImmutableMap.Builder<String, ScriptEngineService> builder = ImmutableMap.builder();
         for (ScriptEngineService scriptEngine : scriptEngines) {
@@ -140,8 +145,11 @@ public class ScriptService extends AbstractComponent {
         if (lang == null) {
             lang = defaultLang;
         }
+        if (dynamicScriptDisabled(lang)) {
+            throw new ScriptException("dynamic scripting disabled");
+        }
         CacheKey cacheKey = new CacheKey(lang, script);
-        compiled = cache.get(cacheKey);
+        compiled = cache.getIfPresent(cacheKey);
         if (compiled != null) {
             return compiled;
         }
@@ -172,7 +180,7 @@ public class ScriptService extends AbstractComponent {
     }
 
     public SearchScript search(MapperService mapperService, FieldDataCache fieldDataCache, String lang, String script, @Nullable Map<String, Object> vars) {
-        return search(compile(lang, script), new SearchLookup(mapperService, fieldDataCache), vars);
+        return search(compile(lang, script), new SearchLookup(mapperService, fieldDataCache, null), vars);
     }
 
     public Object execute(CompiledScript compiledScript, Map vars) {
@@ -180,7 +188,15 @@ public class ScriptService extends AbstractComponent {
     }
 
     public void clear() {
-        cache.clear();
+        cache.invalidateAll();
+    }
+
+    private boolean dynamicScriptDisabled(String lang) {
+        if (!disableDynamic) {
+            return false;
+        }
+        // we allow "native" executions since they register through plugins, so they are "allowed"
+        return !"native".equals(lang);
     }
 
     public static class CacheKey {

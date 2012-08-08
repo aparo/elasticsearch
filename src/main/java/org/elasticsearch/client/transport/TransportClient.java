@@ -21,8 +21,7 @@ package org.elasticsearch.client.transport;
 
 import com.google.common.collect.ImmutableList;
 import org.elasticsearch.ElasticSearchException;
-import org.elasticsearch.action.ActionFuture;
-import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.*;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.count.CountRequest;
@@ -40,19 +39,18 @@ import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.mlt.MoreLikeThisRequest;
 import org.elasticsearch.action.percolate.PercolateRequest;
 import org.elasticsearch.action.percolate.PercolateResponse;
-import org.elasticsearch.action.search.SearchRequest;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.action.search.SearchScrollRequest;
+import org.elasticsearch.action.search.*;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.AdminClient;
 import org.elasticsearch.client.support.AbstractClient;
-import org.elasticsearch.client.transport.action.ClientTransportActionModule;
 import org.elasticsearch.client.transport.support.InternalTransportClient;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.CacheRecycler;
 import org.elasticsearch.common.collect.Tuple;
+import org.elasticsearch.common.component.LifecycleComponent;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.inject.Injector;
 import org.elasticsearch.common.inject.ModulesBuilder;
 import org.elasticsearch.common.io.CachedStreams;
@@ -60,12 +58,14 @@ import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.ImmutableSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
-import org.elasticsearch.common.thread.ThreadLocals;
 import org.elasticsearch.common.transport.TransportAddress;
+import org.elasticsearch.common.util.concurrent.ThreadLocals;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.env.EnvironmentModule;
 import org.elasticsearch.monitor.MonitorService;
 import org.elasticsearch.node.internal.InternalSettingsPerparer;
+import org.elasticsearch.plugins.PluginsModule;
+import org.elasticsearch.plugins.PluginsService;
 import org.elasticsearch.search.TransportSearchModule;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.threadpool.ThreadPoolModule;
@@ -91,6 +91,8 @@ public class TransportClient extends AbstractClient {
 
     private final Environment environment;
 
+
+    private final PluginsService pluginsService;
 
     private final TransportClientNodesService nodesService;
 
@@ -145,13 +147,19 @@ public class TransportClient extends AbstractClient {
      */
     public TransportClient(Settings pSettings, boolean loadConfigSettings) throws ElasticSearchException {
         Tuple<Settings, Environment> tuple = InternalSettingsPerparer.prepareSettings(pSettings, loadConfigSettings);
-        this.settings = settingsBuilder().put(tuple.v1())
+        Settings settings = settings = settingsBuilder().put(tuple.v1())
                 .put("network.server", false)
                 .put("node.client", true)
                 .build();
         this.environment = tuple.v2();
 
+        this.pluginsService = new PluginsService(tuple.v1(), tuple.v2());
+        this.settings = pluginsService.updatedSettings();
+
+        CompressorFactory.configure(settings);
+
         ModulesBuilder modules = new ModulesBuilder();
+        modules.add(new PluginsModule(settings, pluginsService));
         modules.add(new EnvironmentModule(environment));
         modules.add(new SettingsModule(settings));
         modules.add(new NetworkModule());
@@ -159,7 +167,7 @@ public class TransportClient extends AbstractClient {
         modules.add(new ThreadPoolModule(settings));
         modules.add(new TransportSearchModule());
         modules.add(new TransportModule(settings));
-        modules.add(new ClientTransportActionModule());
+        modules.add(new ActionModule(true));
         modules.add(new ClientTransportModule());
 
         injector = modules.createInjector();
@@ -189,6 +197,13 @@ public class TransportClient extends AbstractClient {
     }
 
     /**
+     * Returns the listed nodes in the transport client (ones added to it).
+     */
+    public ImmutableList<DiscoveryNode> listedNodes() {
+        return nodesService.listedNodes();
+    }
+
+    /**
      * Adds a transport address that will be used to connect to.
      * <p/>
      * <p>The Node this transport address represents will be used if its possible to connect to it.
@@ -197,7 +212,20 @@ public class TransportClient extends AbstractClient {
      * <p>In order to get the list of all the current connected nodes, please see {@link #connectedNodes()}.
      */
     public TransportClient addTransportAddress(TransportAddress transportAddress) {
-        nodesService.addTransportAddress(transportAddress);
+        nodesService.addTransportAddresses(transportAddress);
+        return this;
+    }
+
+    /**
+     * Adds a list of transport addresses that will be used to connect to.
+     * <p/>
+     * <p>The Node this transport address represents will be used if its possible to connect to it.
+     * If it is unavailable, it will be automatically connected to once it is up.
+     * <p/>
+     * <p>In order to get the list of all the current connected nodes, please see {@link #connectedNodes()}.
+     */
+    public TransportClient addTransportAddresses(TransportAddress... transportAddress) {
+        nodesService.addTransportAddresses(transportAddress);
         return this;
     }
 
@@ -220,6 +248,10 @@ public class TransportClient extends AbstractClient {
             injector.getInstance(MonitorService.class).close();
         } catch (Exception e) {
             // ignore, might not be bounded
+        }
+
+        for (Class<? extends LifecycleComponent> plugin : pluginsService.services()) {
+            injector.getInstance(plugin).close();
         }
 
         injector.getInstance(ThreadPool.class).shutdown();
@@ -247,6 +279,16 @@ public class TransportClient extends AbstractClient {
     @Override
     public AdminClient admin() {
         return internalClient.admin();
+    }
+
+    @Override
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> ActionFuture<Response> execute(Action<Request, Response, RequestBuilder> action, Request request) {
+        return internalClient.execute(action, request);
+    }
+
+    @Override
+    public <Request extends ActionRequest, Response extends ActionResponse, RequestBuilder extends ActionRequestBuilder<Request, Response>> void execute(Action<Request, Response, RequestBuilder> action, Request request, ActionListener<Response> listener) {
+        internalClient.execute(action, request, listener);
     }
 
     @Override
@@ -347,6 +389,16 @@ public class TransportClient extends AbstractClient {
     @Override
     public void searchScroll(SearchScrollRequest request, ActionListener<SearchResponse> listener) {
         internalClient.searchScroll(request, listener);
+    }
+
+    @Override
+    public ActionFuture<MultiSearchResponse> multiSearch(MultiSearchRequest request) {
+        return internalClient.multiSearch(request);
+    }
+
+    @Override
+    public void multiSearch(MultiSearchRequest request, ActionListener<MultiSearchResponse> listener) {
+        internalClient.multiSearch(request, listener);
     }
 
     @Override

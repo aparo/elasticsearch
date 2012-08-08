@@ -19,6 +19,8 @@
 
 package org.elasticsearch.transport.netty;
 
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.bytes.ChannelBufferBytesReference;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.jboss.netty.buffer.ChannelBuffer;
 
@@ -27,14 +29,16 @@ import java.io.IOException;
 
 /**
  * A Netty {@link org.jboss.netty.buffer.ChannelBuffer} based {@link org.elasticsearch.common.io.stream.StreamInput}.
- *
- *
  */
 public class ChannelBufferStreamInput extends StreamInput {
 
     private final ChannelBuffer buffer;
     private final int startIndex;
     private final int endIndex;
+
+    public ChannelBufferStreamInput(ChannelBuffer buffer) {
+        this(buffer, buffer.readableBytes());
+    }
 
     public ChannelBufferStreamInput(ChannelBuffer buffer, int length) {
         if (length > buffer.readableBytes()) {
@@ -46,11 +50,11 @@ public class ChannelBufferStreamInput extends StreamInput {
         buffer.markReaderIndex();
     }
 
-    /**
-     * Returns the number of read bytes by this stream so far.
-     */
-    public int readBytes() {
-        return buffer.readerIndex() - startIndex;
+    @Override
+    public BytesReference readBytesReference(int length) throws IOException {
+        ChannelBufferBytesReference ref = new ChannelBufferBytesReference(buffer.slice(buffer.readerIndex(), length));
+        buffer.skipBytes(length);
+        return ref;
     }
 
     @Override
@@ -114,9 +118,6 @@ public class ChannelBufferStreamInput extends StreamInput {
 
     @Override
     public byte readByte() throws IOException {
-        if (available() == 0) {
-            throw new EOFException();
-        }
         return buffer.readByte();
     }
 

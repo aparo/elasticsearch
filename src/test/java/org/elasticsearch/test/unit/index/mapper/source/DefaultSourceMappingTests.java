@@ -20,9 +20,13 @@
 package org.elasticsearch.test.unit.index.mapper.source;
 
 import org.apache.lucene.document.Fieldable;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.mapper.*;
+import org.elasticsearch.index.mapper.DocumentMapper;
+import org.elasticsearch.index.mapper.MapperParsingException;
+import org.elasticsearch.index.mapper.MapperService;
+import org.elasticsearch.index.mapper.ParsedDocument;
 import org.elasticsearch.test.unit.index.mapper.MapperTests;
 import org.testng.annotations.Test;
 
@@ -37,6 +41,73 @@ import static org.hamcrest.Matchers.equalTo;
 public class DefaultSourceMappingTests {
 
     @Test
+    public void testNoFormat() throws Exception {
+        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_source").endObject()
+                .endObject().endObject().string();
+
+        DocumentMapper documentMapper = MapperTests.newParser().parse(mapping);
+        ParsedDocument doc = documentMapper.parse("type", "1", XContentFactory.jsonBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(XContentFactory.xContentType(doc.source()), equalTo(XContentType.JSON));
+
+        documentMapper = MapperTests.newParser().parse(mapping);
+        doc = documentMapper.parse("type", "1", XContentFactory.smileBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(XContentFactory.xContentType(doc.source()), equalTo(XContentType.SMILE));
+    }
+
+    @Test
+    public void testJsonFormat() throws Exception {
+        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_source").field("format", "json").endObject()
+                .endObject().endObject().string();
+
+        DocumentMapper documentMapper = MapperTests.newParser().parse(mapping);
+        ParsedDocument doc = documentMapper.parse("type", "1", XContentFactory.jsonBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(XContentFactory.xContentType(doc.source()), equalTo(XContentType.JSON));
+
+        documentMapper = MapperTests.newParser().parse(mapping);
+        doc = documentMapper.parse("type", "1", XContentFactory.smileBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(XContentFactory.xContentType(doc.source()), equalTo(XContentType.JSON));
+    }
+
+    @Test
+    public void testJsonFormatCompressed() throws Exception {
+        String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_source").field("format", "json").field("compress", true).endObject()
+                .endObject().endObject().string();
+
+        DocumentMapper documentMapper = MapperTests.newParser().parse(mapping);
+        ParsedDocument doc = documentMapper.parse("type", "1", XContentFactory.jsonBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(CompressorFactory.isCompressed(doc.source()), equalTo(true));
+        byte[] uncompressed = CompressorFactory.uncompressIfNeeded(doc.source()).toBytes();
+        assertThat(XContentFactory.xContentType(uncompressed), equalTo(XContentType.JSON));
+
+        documentMapper = MapperTests.newParser().parse(mapping);
+        doc = documentMapper.parse("type", "1", XContentFactory.smileBuilder().startObject()
+                .field("field", "value")
+                .endObject().bytes());
+
+        assertThat(CompressorFactory.isCompressed(doc.source()), equalTo(true));
+        uncompressed = CompressorFactory.uncompressIfNeeded(doc.source()).toBytes();
+        assertThat(XContentFactory.xContentType(uncompressed), equalTo(XContentType.JSON));
+    }
+
+    @Test
     public void testIncludeExclude() throws Exception {
         String mapping = XContentFactory.jsonBuilder().startObject().startObject("type")
                 .startObject("_source").field("includes", new String[]{"path1*"}).endObject()
@@ -47,7 +118,7 @@ public class DefaultSourceMappingTests {
         ParsedDocument doc = documentMapper.parse("type", "1", XContentFactory.jsonBuilder().startObject()
                 .startObject("path1").field("field1", "value1").endObject()
                 .startObject("path2").field("field2", "value2").endObject()
-                .endObject().copiedBytes());
+                .endObject().bytes());
 
         Fieldable sourceField = doc.rootDoc().getFieldable("_source");
         Map<String, Object> sourceAsMap = XContentFactory.xContent(XContentType.JSON).createParser(sourceField.getBinaryValue(), sourceField.getBinaryOffset(), sourceField.getBinaryLength()).mapAndClose();

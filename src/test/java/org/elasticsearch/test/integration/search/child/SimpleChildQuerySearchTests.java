@@ -64,6 +64,32 @@ public class SimpleChildQuerySearchTests extends AbstractNodesTests {
     }
 
     @Test
+    public void multiLevelChild() throws Exception {
+        client.admin().indices().prepareDelete().execute().actionGet();
+
+        client.admin().indices().prepareCreate("test").setSettings(ImmutableSettings.settingsBuilder().put("index.number_of_shards", 1)).execute().actionGet();
+        client.admin().cluster().prepareHealth().setWaitForGreenStatus().execute().actionGet();
+        client.admin().indices().preparePutMapping("test").setType("child").setSource(XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_parent").field("type", "parent").endObject()
+                .endObject().endObject()).execute().actionGet();
+        client.admin().indices().preparePutMapping("test").setType("grandchild").setSource(XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_parent").field("type", "child").endObject()
+                .endObject().endObject()).execute().actionGet();
+
+        client.prepareIndex("test", "parent", "p1").setSource("p_field", "p_value1").execute().actionGet();
+        client.prepareIndex("test", "child", "c1").setSource("c_field", "c_value1").setParent("p1").execute().actionGet();
+        client.prepareIndex("test", "grandchild", "gc1").setSource("gc_field", "gc_value1").setParent("c1").setRouting("gc1").execute().actionGet();
+
+        client.admin().indices().prepareRefresh().execute().actionGet();
+
+        SearchResponse searchResponse = client.prepareSearch("test")
+                .setQuery(filteredQuery(matchAllQuery(), hasChildFilter("child", filteredQuery(termQuery("c_field", "c_value1"), hasChildFilter("grandchild", termQuery("gc_field", "gc_value1"))))))
+                .execute().actionGet();
+        assertThat("Failures " + Arrays.toString(searchResponse.shardFailures()), searchResponse.shardFailures().length, equalTo(0));
+        assertThat(searchResponse.hits().totalHits(), equalTo(1l));
+    }
+
+    @Test
     public void simpleChildQuery() throws Exception {
         client.admin().indices().prepareDelete().execute().actionGet();
 
@@ -528,4 +554,54 @@ public class SimpleChildQuerySearchTests extends AbstractNodesTests {
                 .execute().actionGet();
         assertThat("Failures " + Arrays.toString(searchResponse.shardFailures()), searchResponse.shardFailures().length, equalTo(0));
     }
+
+    @Test
+    public void testTopChildrenReSearchBug() throws Exception {
+        client.admin().indices().prepareDelete().execute().actionGet();
+
+        client.admin().indices().prepareCreate("test").setSettings(ImmutableSettings.settingsBuilder().put("index.number_of_shards", 1)).execute().actionGet();
+        client.admin().cluster().prepareHealth().setWaitForGreenStatus().execute().actionGet();
+        client.admin().indices().preparePutMapping("test").setType("child").setSource(XContentFactory.jsonBuilder().startObject().startObject("type")
+                .startObject("_parent").field("type", "parent").endObject()
+                .endObject().endObject()).execute().actionGet();
+
+
+        int numberOfParents = 4;
+        int numberOfChildrenPerParent = 123;
+        for (int i = 1; i <= numberOfParents; i++) {
+            String parentId = String.format("p%d", i);
+            client.prepareIndex("test", "parent", parentId)
+                    .setSource("p_field", String.format("p_value%d", i))
+                    .execute()
+                    .actionGet();
+            for (int j = 1; j <= numberOfChildrenPerParent; j++) {
+                client.prepareIndex("test", "child", String.format("%s_c%d", parentId, j))
+                        .setSource(
+                                "c_field1", parentId,
+                                "c_field2", i % 2 == 0 ? "even" : "not_even"
+                        ).setParent(parentId)
+                        .execute()
+                        .actionGet();
+            }
+        }
+
+        client.admin().indices().prepareRefresh().execute().actionGet();
+
+        SearchResponse searchResponse = client.prepareSearch("test")
+                .setQuery(topChildrenQuery("child", termQuery("c_field1", "p3")))
+                .execute().actionGet();
+        assertThat("Failures " + Arrays.toString(searchResponse.shardFailures()), searchResponse.shardFailures().length, equalTo(0));
+        assertThat(searchResponse.failedShards(), equalTo(0));
+        assertThat(searchResponse.hits().totalHits(), equalTo(1l));
+        assertThat(searchResponse.hits().getAt(0).id(), equalTo("p3"));
+
+        searchResponse = client.prepareSearch("test")
+                .setQuery(topChildrenQuery("child", termQuery("c_field2", "even")))
+                .execute().actionGet();
+        assertThat("Failures " + Arrays.toString(searchResponse.shardFailures()), searchResponse.shardFailures().length, equalTo(0));
+        assertThat(searchResponse.failedShards(), equalTo(0));
+        assertThat(searchResponse.hits().totalHits(), equalTo(2l));
+        assertThat(searchResponse.hits().getAt(0).id(), equalTo("p2"));
+    }
+
 }

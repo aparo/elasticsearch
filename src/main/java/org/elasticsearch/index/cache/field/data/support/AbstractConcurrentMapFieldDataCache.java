@@ -19,9 +19,12 @@
 
 package org.elasticsearch.index.cache.field.data.support;
 
+import com.google.common.cache.Cache;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.SegmentReader;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.index.AbstractIndexComponent;
 import org.elasticsearch.index.Index;
@@ -32,62 +35,57 @@ import org.elasticsearch.index.settings.IndexSettings;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
  *
  */
-public abstract class AbstractConcurrentMapFieldDataCache extends AbstractIndexComponent implements FieldDataCache, IndexReader.ReaderFinishedListener {
+public abstract class AbstractConcurrentMapFieldDataCache extends AbstractIndexComponent implements FieldDataCache, SegmentReader.CoreClosedListener {
 
-    private final ConcurrentMap<Object, ConcurrentMap<String, FieldData>> cache;
+    private final ConcurrentMap<Object, Cache<String, FieldData>> cache;
 
     private final Object creationMutex = new Object();
 
     protected AbstractConcurrentMapFieldDataCache(Index index, @IndexSettings Settings indexSettings) {
         super(index, indexSettings);
-        // weak keys is fine, it will only be cleared once IndexReader references will be removed
-        // (assuming clear(...) will not be called)
-        this.cache = new ConcurrentHashMap<Object, ConcurrentMap<String, FieldData>>();
+        this.cache = ConcurrentCollections.newConcurrentMap();
     }
 
     @Override
     public void close() throws ElasticSearchException {
-        clear();
+        clear("close");
     }
 
     @Override
-    public void clear(String fieldName) {
-        for (Map.Entry<Object, ConcurrentMap<String, FieldData>> entry : cache.entrySet()) {
-            entry.getValue().remove(fieldName);
+    public void clear(String reason, String fieldName) {
+        logger.debug("clearing field [{}] cache, reason [{}]", fieldName, reason);
+        for (Map.Entry<Object, Cache<String, FieldData>> entry : cache.entrySet()) {
+            entry.getValue().invalidate(fieldName);
         }
     }
 
     @Override
-    public void clear() {
+    public void clear(String reason) {
+        logger.debug("full cache clear, reason [{}]", reason);
         cache.clear();
     }
 
     @Override
-    public void finished(IndexReader reader) {
-        clear(reader);
+    public void onClose(SegmentReader owner) {
+        clear(owner);
     }
 
     @Override
     public void clear(IndexReader reader) {
-        ConcurrentMap<String, FieldData> map = cache.remove(reader.getCoreCacheKey());
-        // help soft/weak handling GC
-        if (map != null) {
-            map.clear();
-        }
+        cache.remove(reader.getCoreCacheKey());
     }
 
     @Override
     public long sizeInBytes() {
         // the overhead of the map is not really relevant...
         long sizeInBytes = 0;
-        for (ConcurrentMap<String, FieldData> map : cache.values()) {
-            for (FieldData fieldData : map.values()) {
+        for (Cache<String, FieldData> map : cache.values()) {
+            for (FieldData fieldData : map.asMap().values()) {
                 sizeInBytes += fieldData.sizeInBytes();
             }
         }
@@ -97,8 +95,8 @@ public abstract class AbstractConcurrentMapFieldDataCache extends AbstractIndexC
     @Override
     public long sizeInBytes(String fieldName) {
         long sizeInBytes = 0;
-        for (ConcurrentMap<String, FieldData> map : cache.values()) {
-            FieldData fieldData = map.get(fieldName);
+        for (Cache<String, FieldData> map : cache.values()) {
+            FieldData fieldData = map.getIfPresent(fieldName);
             if (fieldData != null) {
                 sizeInBytes += fieldData.sizeInBytes();
             }
@@ -108,31 +106,43 @@ public abstract class AbstractConcurrentMapFieldDataCache extends AbstractIndexC
 
     @Override
     public FieldData cache(FieldDataType type, IndexReader reader, String fieldName) throws IOException {
-        ConcurrentMap<String, FieldData> fieldDataCache = cache.get(reader.getCoreCacheKey());
+        Cache<String, FieldData> fieldDataCache = cache.get(reader.getCoreCacheKey());
         if (fieldDataCache == null) {
             synchronized (creationMutex) {
                 fieldDataCache = cache.get(reader.getCoreCacheKey());
                 if (fieldDataCache == null) {
                     fieldDataCache = buildFieldDataMap();
-                    reader.addReaderFinishedListener(this);
+                    if (reader instanceof SegmentReader) {
+                        ((SegmentReader) reader).addCoreClosedListener(this);
+                    }
                     cache.put(reader.getCoreCacheKey(), fieldDataCache);
                 }
             }
         }
-        FieldData fieldData = fieldDataCache.get(fieldName);
+        FieldData fieldData = fieldDataCache.getIfPresent(fieldName);
         if (fieldData == null) {
             synchronized (fieldDataCache) {
-                fieldData = fieldDataCache.get(fieldName);
+                fieldData = fieldDataCache.getIfPresent(fieldName);
                 if (fieldData == null) {
-                    fieldData = FieldData.load(type, reader, fieldName);
-                    fieldDataCache.put(fieldName, fieldData);
+                    try {
+                        long time = System.nanoTime();
+                        fieldData = FieldData.load(type, reader, fieldName);
+                        fieldDataCache.put(fieldName, fieldData);
+                        long took = System.nanoTime() - time;
+                        if (logger.isTraceEnabled()) {
+                            logger.trace("loaded field [{}] for reader [{}], took [{}], took_millis [{}]", fieldName, reader, TimeValue.timeValueNanos(took), took / 1000);
+                        }
+                    } catch (OutOfMemoryError e) {
+                        logger.warn("loading field [" + fieldName + "] caused out of memory failure", e);
+                        final OutOfMemoryError outOfMemoryError = new OutOfMemoryError("loading field [" + fieldName + "] caused out of memory failure");
+                        outOfMemoryError.initCause(e);
+                        throw outOfMemoryError;
+                    }
                 }
             }
         }
         return fieldData;
     }
 
-    protected ConcurrentMap<String, FieldData> buildFieldDataMap() {
-        return ConcurrentCollections.newConcurrentMap();
-    }
+    protected abstract Cache<String, FieldData> buildFieldDataMap();
 }

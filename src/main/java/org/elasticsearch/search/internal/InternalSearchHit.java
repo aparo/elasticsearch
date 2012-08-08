@@ -24,20 +24,21 @@ import org.apache.lucene.search.Explanation;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.Unicode;
-import org.elasticsearch.common.compress.lzf.LZF;
-import org.elasticsearch.common.compress.lzf.LZFDecoder;
+import org.elasticsearch.common.bytes.BytesArray;
+import org.elasticsearch.common.bytes.BytesReference;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.text.Text;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentBuilderString;
-import org.elasticsearch.common.xcontent.XContentFactory;
-import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.rest.action.support.RestXContentBuilder;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHitField;
 import org.elasticsearch.search.SearchShardTarget;
 import org.elasticsearch.search.highlight.HighlightField;
+import org.elasticsearch.search.lookup.SourceLookup;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -66,7 +67,7 @@ public class InternalSearchHit implements SearchHit {
 
     private long version = -1;
 
-    private byte[] source;
+    private BytesReference source;
 
     private Map<String, SearchHitField> fields = ImmutableMap.of();
 
@@ -82,6 +83,7 @@ public class InternalSearchHit implements SearchHit {
     private SearchShardTarget shard;
 
     private Map<String, Object> sourceAsMap;
+    private byte[] sourceAsBytes;
 
     private InternalSearchHit() {
 
@@ -91,7 +93,7 @@ public class InternalSearchHit implements SearchHit {
         this.docId = docId;
         this.id = id;
         this.type = type;
-        this.source = source;
+        this.source = source == null ? null : new BytesArray(source);
         this.fields = fields;
     }
 
@@ -161,19 +163,41 @@ public class InternalSearchHit implements SearchHit {
         return type();
     }
 
+
+    /**
+     * Returns bytes reference, also un compress the source if needed.
+     */
+    public BytesReference sourceRef() {
+        try {
+            this.source = CompressorFactory.uncompressIfNeeded(this.source);
+            return this.source;
+        } catch (IOException e) {
+            throw new ElasticSearchParseException("failed to decompress source", e);
+        }
+    }
+
+    @Override
+    public BytesReference getSourceRef() {
+        return sourceRef();
+    }
+
+    /**
+     * Internal source representation, might be compressed....
+     */
+    public BytesReference internalSourceRef() {
+        return source;
+    }
+
     @Override
     public byte[] source() {
         if (source == null) {
             return null;
         }
-        if (LZF.isCompressed(source)) {
-            try {
-                this.source = LZFDecoder.decode(source);
-            } catch (IOException e) {
-                throw new ElasticSearchParseException("failed to decompress source", e);
-            }
+        if (sourceAsBytes != null) {
+            return sourceAsBytes;
         }
-        return this.source;
+        this.sourceAsBytes = sourceRef().toBytes();
+        return this.sourceAsBytes;
     }
 
     @Override
@@ -191,7 +215,16 @@ public class InternalSearchHit implements SearchHit {
         if (source == null) {
             return null;
         }
-        return Unicode.fromBytes(source());
+        try {
+            return XContentHelper.convertToJson(sourceRef(), false);
+        } catch (IOException e) {
+            throw new ElasticSearchParseException("failed to convert source to a json string");
+        }
+    }
+
+    @Override
+    public String getSourceAsString() {
+        return sourceAsString();
     }
 
     @SuppressWarnings({"unchecked"})
@@ -203,20 +236,9 @@ public class InternalSearchHit implements SearchHit {
         if (sourceAsMap != null) {
             return sourceAsMap;
         }
-        byte[] source = source();
-        XContentParser parser = null;
-        try {
-            parser = XContentFactory.xContent(source).createParser(source);
-            sourceAsMap = parser.map();
-            parser.close();
-            return sourceAsMap;
-        } catch (Exception e) {
-            throw new ElasticSearchParseException("Failed to parse source to map", e);
-        } finally {
-            if (parser != null) {
-                parser.close();
-            }
-        }
+
+        sourceAsMap = SourceLookup.sourceAsMap(source);
+        return sourceAsMap;
     }
 
     @Override
@@ -391,7 +413,7 @@ public class InternalSearchHit implements SearchHit {
                     builder.nullValue();
                 } else {
                     builder.startArray();
-                    for (String fragment : field.fragments()) {
+                    for (Text fragment : field.fragments()) {
                         builder.value(fragment);
                     }
                     builder.endArray();
@@ -452,15 +474,14 @@ public class InternalSearchHit implements SearchHit {
         id = in.readUTF();
         type = in.readUTF();
         version = in.readLong();
-        int size = in.readVInt();
-        if (size > 0) {
-            source = new byte[size];
-            in.readFully(source);
+        source = in.readBytesReference();
+        if (source.length() == 0) {
+            source = null;
         }
         if (in.readBoolean()) {
             explanation = readExplanation(in);
         }
-        size = in.readVInt();
+        int size = in.readVInt();
         if (size == 0) {
             fields = ImmutableMap.of();
         } else if (size == 1) {
@@ -586,12 +607,7 @@ public class InternalSearchHit implements SearchHit {
         out.writeUTF(id);
         out.writeUTF(type);
         out.writeLong(version);
-        if (source == null) {
-            out.writeVInt(0);
-        } else {
-            out.writeVInt(source.length);
-            out.writeBytes(source);
-        }
+        out.writeBytesReference(source);
         if (explanation == null) {
             out.writeBoolean(false);
         } else {

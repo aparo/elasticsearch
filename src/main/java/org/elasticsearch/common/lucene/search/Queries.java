@@ -33,11 +33,13 @@ public class Queries {
 
     // We don't use MatchAllDocsQuery, its slower than the one below ... (much slower)
     public final static Query MATCH_ALL_QUERY = new DeletionAwareConstantScoreQuery(new MatchAllDocsFilter());
+    public final static Query NO_MATCH_QUERY = MatchNoDocsQuery.INSTANCE;
 
     /**
      * A match all docs filter. Note, requires no caching!.
      */
     public final static Filter MATCH_ALL_FILTER = new MatchAllDocsFilter();
+    public final static Filter MATCH_NO_FILTER = new MatchNoDocsFilter();
 
     private final static Field disjuncts;
 

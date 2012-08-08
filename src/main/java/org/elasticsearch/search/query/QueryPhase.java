@@ -24,6 +24,7 @@ import org.apache.lucene.search.*;
 import org.elasticsearch.action.search.SearchType;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.Lucene;
+import org.elasticsearch.common.lucene.search.Queries;
 import org.elasticsearch.common.lucene.search.function.BoostScoreFunction;
 import org.elasticsearch.common.lucene.search.function.FunctionScoreQuery;
 import org.elasticsearch.index.query.ParsedQuery;
@@ -67,6 +68,7 @@ public class QueryPhase implements SearchPhase {
                 .put("track_scores", new TrackScoresParseElement())
                 .put("min_score", new MinScoreParseElement())
                 .put("minScore", new MinScoreParseElement())
+                .put("timeout", new TimeoutParseElement())
                 .putAll(facetPhase.parseElements());
         return parseElements.build();
     }
@@ -81,12 +83,19 @@ public class QueryPhase implements SearchPhase {
         }
         Filter searchFilter = context.mapperService().searchFilter(context.types());
         if (searchFilter != null) {
-            context.parsedQuery(new ParsedQuery(new FilteredQuery(context.query(), context.filterCache().cache(searchFilter)), context.parsedQuery()));
+            if (Queries.isMatchAllQuery(context.query())) {
+                Query q = new DeletionAwareConstantScoreQuery(context.filterCache().cache(searchFilter));
+                q.setBoost(context.query().getBoost());
+                context.parsedQuery(new ParsedQuery(q, context.parsedQuery()));
+            } else {
+                context.parsedQuery(new ParsedQuery(new FilteredQuery(context.query(), context.filterCache().cache(searchFilter)), context.parsedQuery()));
+            }
         }
         facetPhase.preProcess(context);
     }
 
     public void execute(SearchContext searchContext) throws QueryPhaseExecutionException {
+        searchContext.queryResult().searchTimedOut(false);
         // set the filter on the searcher
         if (searchContext.scopePhases() != null) {
             // we have scoped queries, refresh the id cache
@@ -96,13 +105,10 @@ public class QueryPhase implements SearchPhase {
                 throw new QueryPhaseExecutionException(searchContext, "Failed to refresh id cache for child queries", e);
             }
 
-            // process scoped queries (from the last to the first, working with the parsing option here)
-            for (int i = searchContext.scopePhases().size() - 1; i >= 0; i--) {
-                ScopePhase scopePhase = searchContext.scopePhases().get(i);
-
+            // the first scope level is the most nested child
+            for (ScopePhase scopePhase : searchContext.scopePhases()) {
                 if (scopePhase instanceof ScopePhase.TopDocsPhase) {
                     ScopePhase.TopDocsPhase topDocsPhase = (ScopePhase.TopDocsPhase) scopePhase;
-                    topDocsPhase.clear();
                     int numDocs = (searchContext.from() + searchContext.size());
                     if (numDocs == 0) {
                         numDocs = 1;
@@ -110,6 +116,7 @@ public class QueryPhase implements SearchPhase {
                     try {
                         numDocs *= topDocsPhase.factor();
                         while (true) {
+                            topDocsPhase.clear();
                             if (topDocsPhase.scope() != null) {
                                 searchContext.searcher().processingScope(topDocsPhase.scope());
                             }

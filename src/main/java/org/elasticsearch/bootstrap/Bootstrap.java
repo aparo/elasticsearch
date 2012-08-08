@@ -21,7 +21,6 @@ package org.elasticsearch.bootstrap;
 
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
-import org.elasticsearch.common.Classes;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.CreationException;
 import org.elasticsearch.common.inject.spi.Message;
@@ -88,7 +87,7 @@ public class Bootstrap {
 
     private static void setupLogging(Tuple<Settings, Environment> tuple) {
         try {
-            Classes.getDefaultClassLoader().loadClass("org.apache.log4j.Logger");
+            tuple.v1().getClassLoader().loadClass("org.apache.log4j.Logger");
             LogConfigurator.configure(tuple.v1());
         } catch (ClassNotFoundException e) {
             // no log4j
@@ -152,7 +151,7 @@ public class Bootstrap {
                     FileSystemUtils.mkdirs(fPidFile.getParentFile());
                 }
                 RandomAccessFile rafPidFile = new RandomAccessFile(fPidFile, "rw");
-                rafPidFile.writeBytes(Long.toString(JvmInfo.jvmInfo().pid()) + "\n");
+                rafPidFile.writeBytes(Long.toString(JvmInfo.jvmInfo().pid()));
                 rafPidFile.close();
 
                 fPidFile.deleteOnExit();
@@ -225,7 +224,7 @@ public class Bootstrap {
                         // bail out
                     }
                 }
-            }, "es[keepAlive]");
+            }, "elasticsearch[keepAlive/" + Version.CURRENT + "]");
             keepAliveThread.setDaemon(false);
             keepAliveThread.start();
         } catch (Throwable e) {

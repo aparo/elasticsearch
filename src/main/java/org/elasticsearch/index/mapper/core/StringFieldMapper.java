@@ -19,12 +19,16 @@
 
 package org.elasticsearch.index.mapper.core;
 
+import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.search.Filter;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.analysis.NamedCustomAnalyzer;
 import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.internal.AllFieldMapper;
 
@@ -44,11 +48,19 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     public static class Defaults extends AbstractFieldMapper.Defaults {
         // NOTE, when adding defaults here, make sure you add them in the builder
         public static final String NULL_VALUE = null;
+        public static final int POSITION_OFFSET_GAP = 0;
+        public static final int IGNORE_ABOVE = -1;
     }
 
     public static class Builder extends AbstractFieldMapper.OpenBuilder<Builder, StringFieldMapper> {
 
         protected String nullValue = Defaults.NULL_VALUE;
+
+        protected int positionOffsetGap = Defaults.POSITION_OFFSET_GAP;
+
+        protected NamedAnalyzer searchQuotedAnalyzer;
+
+        protected int ignoreAbove = Defaults.IGNORE_ABOVE;
 
         public Builder(String name) {
             super(name);
@@ -67,10 +79,39 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
         }
 
         @Override
+        public Builder searchAnalyzer(NamedAnalyzer searchAnalyzer) {
+            super.searchAnalyzer(searchAnalyzer);
+            if (searchQuotedAnalyzer == null) {
+                searchQuotedAnalyzer = searchAnalyzer;
+            }
+            return this;
+        }
+
+        public Builder positionOffsetGap(int positionOffsetGap) {
+            this.positionOffsetGap = positionOffsetGap;
+            return this;
+        }
+
+        public Builder searchQuotedAnalyzer(NamedAnalyzer analyzer) {
+            this.searchQuotedAnalyzer = analyzer;
+            return builder;
+        }
+
+        public Builder ignoreAbove(int ignoreAbove) {
+            this.ignoreAbove = ignoreAbove;
+            return this;
+        }
+
+        @Override
         public StringFieldMapper build(BuilderContext context) {
+            if (positionOffsetGap > 0) {
+                indexAnalyzer = new NamedCustomAnalyzer(indexAnalyzer, positionOffsetGap);
+                searchAnalyzer = new NamedCustomAnalyzer(searchAnalyzer, positionOffsetGap);
+                searchQuotedAnalyzer = new NamedCustomAnalyzer(searchQuotedAnalyzer, positionOffsetGap);
+            }
             StringFieldMapper fieldMapper = new StringFieldMapper(buildNames(context),
                     index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, nullValue,
-                    indexAnalyzer, searchAnalyzer);
+                    indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer, positionOffsetGap, ignoreAbove);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -86,6 +127,27 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
                 Object propNode = entry.getValue();
                 if (propName.equals("null_value")) {
                     builder.nullValue(propNode.toString());
+                } else if (propName.equals("search_quote_analyzer")) {
+                    NamedAnalyzer analyzer = parserContext.analysisService().analyzer(propNode.toString());
+                    if (analyzer == null) {
+                        throw new MapperParsingException("Analyzer [" + propNode.toString() + "] not found for field [" + name + "]");
+                    }
+                    builder.searchQuotedAnalyzer(analyzer);
+                } else if (propName.equals("position_offset_gap")) {
+                    builder.positionOffsetGap(XContentMapValues.nodeIntegerValue(propNode, -1));
+                    // we need to update to actual analyzers if they are not set in this case...
+                    // so we can inject the position offset gap...
+                    if (builder.indexAnalyzer == null) {
+                        builder.indexAnalyzer = parserContext.analysisService().defaultIndexAnalyzer();
+                    }
+                    if (builder.searchAnalyzer == null) {
+                        builder.searchAnalyzer = parserContext.analysisService().defaultSearchAnalyzer();
+                    }
+                    if (builder.searchQuotedAnalyzer == null) {
+                        builder.searchQuotedAnalyzer = parserContext.analysisService().defaultSearchQuoteAnalyzer();
+                    }
+                } else if (propName.equals("ignore_above")) {
+                    builder.ignoreAbove(XContentMapValues.nodeIntegerValue(propNode, -1));
                 }
             }
             return builder;
@@ -96,11 +158,28 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
 
     private Boolean includeInAll;
 
+    private int positionOffsetGap;
+
+    private NamedAnalyzer searchQuotedAnalyzer;
+
+    private int ignoreAbove;
+
     protected StringFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
                                 float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
                                 String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
+        this(names, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, nullValue, indexAnalyzer,
+                searchAnalyzer, searchAnalyzer, Defaults.POSITION_OFFSET_GAP, Defaults.IGNORE_ABOVE);
+    }
+
+    protected StringFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
+                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
+                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
+                                NamedAnalyzer searchQuotedAnalyzer, int positionOffsetGap, int ignoreAbove) {
         super(names, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, indexAnalyzer, searchAnalyzer);
         this.nullValue = nullValue;
+        this.positionOffsetGap = positionOffsetGap;
+        this.searchQuotedAnalyzer = searchQuotedAnalyzer != null ? searchQuotedAnalyzer : this.searchAnalyzer;
+        this.ignoreAbove = ignoreAbove;
     }
 
     @Override
@@ -142,6 +221,23 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
         return true;
     }
 
+    public int getPositionOffsetGap() {
+        return this.positionOffsetGap;
+    }
+
+    @Override
+    public Analyzer searchQuoteAnalyzer() {
+        return this.searchQuotedAnalyzer;
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return fieldFilter(nullValue, null);
+    }
+
     @Override
     protected Field parseCreateField(ParseContext context) throws IOException {
         String value = nullValue;
@@ -173,6 +269,9 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
         if (value == null) {
             return null;
         }
+        if (ignoreAbove > 0 && value.length() > ignoreAbove) {
+            return null;
+        }
         if (context.includeInAll(includeInAll, this)) {
             context.allEntries().addText(names.fullName(), value, boost);
         }
@@ -199,6 +298,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
         if (!mergeContext.mergeFlags().simulate()) {
             this.includeInAll = ((StringFieldMapper) mergeWith).includeInAll;
             this.nullValue = ((StringFieldMapper) mergeWith).nullValue;
+            this.ignoreAbove = ((StringFieldMapper) mergeWith).ignoreAbove;
         }
     }
 
@@ -225,6 +325,15 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
         }
         if (includeInAll != null) {
             builder.field("include_in_all", includeInAll);
+        }
+        if (positionOffsetGap != Defaults.POSITION_OFFSET_GAP) {
+            builder.field("position_offset_gap", positionOffsetGap);
+        }
+        if (searchQuotedAnalyzer != null && searchAnalyzer != searchQuotedAnalyzer) {
+            builder.field("search_quote_analyzer", searchQuotedAnalyzer.name());
+        }
+        if (ignoreAbove != Defaults.IGNORE_ABOVE) {
+            builder.field("ignore_above", ignoreAbove);
         }
     }
 }

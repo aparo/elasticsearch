@@ -24,7 +24,6 @@ import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.delete.TransportDeleteAction;
@@ -35,23 +34,28 @@ import org.elasticsearch.action.support.single.instance.TransportInstanceSingleO
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.PlainShardIterator;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
+import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.engine.DocumentMissingException;
 import org.elasticsearch.index.engine.DocumentSourceMissingException;
 import org.elasticsearch.index.engine.VersionConflictEngineException;
+import org.elasticsearch.index.get.GetField;
 import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
-import org.elasticsearch.index.mapper.internal.TimestampFieldMapper;
+import org.elasticsearch.index.mapper.internal.TTLFieldMapper;
 import org.elasticsearch.index.service.IndexService;
 import org.elasticsearch.index.shard.IllegalIndexShardStateException;
 import org.elasticsearch.index.shard.ShardId;
@@ -59,11 +63,15 @@ import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.script.ExecutableScript;
 import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.search.lookup.SourceLookup;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
 
 /**
  */
@@ -89,7 +97,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
 
     @Override
     protected String transportAction() {
-        return TransportActions.UPDATE;
+        return UpdateAction.NAME;
     }
 
     @Override
@@ -108,8 +116,13 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
     }
 
     @Override
-    protected void checkBlock(UpdateRequest request, ClusterState state) {
-        state.blocks().indexBlockedRaiseException(ClusterBlockLevel.WRITE, request.index());
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, UpdateRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.WRITE);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, UpdateRequest request) {
+        return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.index());
     }
 
     @Override
@@ -146,57 +159,34 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
         IndexService indexService = indicesService.indexServiceSafe(request.index());
         IndexShard indexShard = indexService.shardSafe(request.shardId());
 
-        GetResult getResult = indexShard.getService().get(request.type(), request.id(),
-                new String[]{SourceFieldMapper.NAME, RoutingFieldMapper.NAME, ParentFieldMapper.NAME, TimestampFieldMapper.NAME}, true);
+        long getDate = System.currentTimeMillis();
+        final GetResult getResult = indexShard.getService().get(request.type(), request.id(),
+                new String[]{SourceFieldMapper.NAME, RoutingFieldMapper.NAME, ParentFieldMapper.NAME, TTLFieldMapper.NAME}, true);
 
         // no doc, what to do, what to do...
         if (!getResult.exists()) {
-            listener.onFailure(new DocumentMissingException(new ShardId(request.index(), request.shardId()), request.type(), request.id()));
-            return;
-        }
-
-        if (getResult.internalSourceRef() == null) {
-            // no source, we can't do nothing, through a failure...
-            listener.onFailure(new DocumentSourceMissingException(new ShardId(request.index(), request.shardId()), request.type(), request.id()));
-            return;
-        }
-
-        Tuple<XContentType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(getResult.internalSourceRef().bytes(), getResult.internalSourceRef().offset(), getResult.internalSourceRef().length(), true);
-        Map<String, Object> source = sourceAndContent.v2();
-        Map<String, Object> ctx = new HashMap<String, Object>(2);
-        ctx.put("_source", source);
-
-        try {
-            ExecutableScript script = scriptService.executable(request.scriptLang, request.script, request.scriptParams);
-            script.setNextVar("ctx", ctx);
-            script.run();
-            // we need to unwrap the ctx...
-            ctx = (Map<String, Object>) script.unwrap(ctx);
-        } catch (Exception e) {
-            throw new ElasticSearchIllegalArgumentException("failed to execute script", e);
-        }
-
-        String operation = (String) ctx.get("op");
-        source = (Map<String, Object>) ctx.get("_source");
-
-        // apply script to update the source
-        String routing = getResult.fields().containsKey(RoutingFieldMapper.NAME) ? getResult.field(RoutingFieldMapper.NAME).value().toString() : null;
-        String parent = getResult.fields().containsKey(ParentFieldMapper.NAME) ? getResult.field(ParentFieldMapper.NAME).value().toString() : null;
-        // TODO ttl/timestamp
-
-        // TODO percolate?
-
-        // TODO: external version type, does it make sense here? does not seem like it...
-
-        if (operation == null || "index".equals(operation)) {
-            IndexRequest indexRequest = Requests.indexRequest(request.index()).type(request.type()).id(request.id()).routing(routing).parent(parent)
-                    .source(source, sourceAndContent.v1())
-                    .version(getResult.version()).replicationType(request.replicationType()).consistencyLevel(request.consistencyLevel());
+            if (request.upsertRequest() == null) {
+                listener.onFailure(new DocumentMissingException(new ShardId(request.index(), request.shardId()), request.type(), request.id()));
+                return;
+            }
+            IndexRequest indexRequest = request.upsertRequest();
+            indexRequest.index(request.index()).type(request.type()).id(request.id())
+                    // it has to be a "create!"
+                    .create(true)
+                    .routing(request.routing())
+                    .percolate(request.percolate())
+                    .refresh(request.refresh())
+                    .replicationType(request.replicationType()).consistencyLevel(request.consistencyLevel());
             indexRequest.operationThreaded(false);
+            // we fetch it from the index request so we don't generate the bytes twice, its already done in the index request
+            final BytesReference updateSourceBytes = indexRequest.source();
             indexAction.execute(indexRequest, new ActionListener<IndexResponse>() {
                 @Override
                 public void onResponse(IndexResponse response) {
                     UpdateResponse update = new UpdateResponse(response.index(), response.type(), response.id(), response.version());
+                    update.matches(response.matches());
+                    // TODO: we can parse the index _source and extractGetResult if applicable
+                    update.getResult(null);
                     listener.onResponse(update);
                 }
 
@@ -204,7 +194,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                 public void onFailure(Throwable e) {
                     e = ExceptionsHelper.unwrapCause(e);
                     if (e instanceof VersionConflictEngineException) {
-                        if ((retryCount + 1) < request.retryOnConflict()) {
+                        if (retryCount < request.retryOnConflict()) {
                             threadPool.executor(executor()).execute(new Runnable() {
                                 @Override
                                 public void run() {
@@ -214,6 +204,115 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                             return;
                         }
                     }
+                    listener.onFailure(e);
+                }
+            });
+            return;
+        }
+
+        if (getResult.internalSourceRef() == null) {
+            // no source, we can't do nothing, through a failure...
+            listener.onFailure(new DocumentSourceMissingException(new ShardId(request.index(), request.shardId()), request.type(), request.id()));
+            return;
+        }
+
+        Tuple<XContentType, Map<String, Object>> sourceAndContent = XContentHelper.convertToMap(getResult.internalSourceRef(), true);
+        String operation = null;
+        String timestamp = null;
+        Long ttl = null;
+        Object fetchedTTL = null;
+        final Map<String, Object> updatedSourceAsMap;
+        final XContentType updateSourceContentType = sourceAndContent.v1();
+        String routing = getResult.fields().containsKey(RoutingFieldMapper.NAME) ? getResult.field(RoutingFieldMapper.NAME).value().toString() : null;
+        String parent = getResult.fields().containsKey(ParentFieldMapper.NAME) ? getResult.field(ParentFieldMapper.NAME).value().toString() : null;
+
+        if (request.script() == null && request.doc() != null) {
+            IndexRequest indexRequest = request.doc();
+            updatedSourceAsMap = sourceAndContent.v2();
+            if (indexRequest.ttl() > 0) {
+                ttl = indexRequest.ttl();
+            }
+            timestamp = indexRequest.timestamp();
+            if (indexRequest.routing() != null) {
+                routing = indexRequest.routing();
+            }
+            if (indexRequest.parent() != null) {
+                parent = indexRequest.parent();
+            }
+            XContentHelper.update(updatedSourceAsMap, indexRequest.sourceAsMap());
+        } else {
+            Map<String, Object> ctx = new HashMap<String, Object>(2);
+            ctx.put("_source", sourceAndContent.v2());
+
+            try {
+                ExecutableScript script = scriptService.executable(request.scriptLang, request.script, request.scriptParams);
+                script.setNextVar("ctx", ctx);
+                script.run();
+                // we need to unwrap the ctx...
+                ctx = (Map<String, Object>) script.unwrap(ctx);
+            } catch (Exception e) {
+                throw new ElasticSearchIllegalArgumentException("failed to execute script", e);
+            }
+
+            operation = (String) ctx.get("op");
+            timestamp = (String) ctx.get("_timestamp");
+            fetchedTTL = ctx.get("_ttl");
+            if (fetchedTTL != null) {
+                if (fetchedTTL instanceof Number) {
+                    ttl = ((Number) fetchedTTL).longValue();
+                } else {
+                    ttl = TimeValue.parseTimeValue((String) fetchedTTL, null).millis();
+                }
+            }
+
+            updatedSourceAsMap = (Map<String, Object>) ctx.get("_source");
+        }
+
+        // apply script to update the source
+        // No TTL has been given in the update script so we keep previous TTL value if there is one
+        if (ttl == null) {
+            ttl = getResult.fields().containsKey(TTLFieldMapper.NAME) ? (Long) getResult.field(TTLFieldMapper.NAME).value() : null;
+            if (ttl != null) {
+                ttl = ttl - (System.currentTimeMillis() - getDate); // It is an approximation of exact TTL value, could be improved
+            }
+        }
+
+        // TODO: external version type, does it make sense here? does not seem like it...
+
+        if (operation == null || "index".equals(operation)) {
+            final IndexRequest indexRequest = Requests.indexRequest(request.index()).type(request.type()).id(request.id()).routing(routing).parent(parent)
+                    .source(updatedSourceAsMap, updateSourceContentType)
+                    .version(getResult.version()).replicationType(request.replicationType()).consistencyLevel(request.consistencyLevel())
+                    .timestamp(timestamp).ttl(ttl)
+                    .percolate(request.percolate())
+                    .refresh(request.refresh());
+            indexRequest.operationThreaded(false);
+            // we fetch it from the index request so we don't generate the bytes twice, its already done in the index request
+            final BytesReference updateSourceBytes = indexRequest.source();
+            indexAction.execute(indexRequest, new ActionListener<IndexResponse>() {
+                @Override
+                public void onResponse(IndexResponse response) {
+                    UpdateResponse update = new UpdateResponse(response.index(), response.type(), response.id(), response.version());
+                    update.matches(response.matches());
+                    update.getResult(extractGetResult(request, response.version(), updatedSourceAsMap, updateSourceContentType, updateSourceBytes));
+                    listener.onResponse(update);
+                }
+
+                @Override
+                public void onFailure(Throwable e) {
+                    e = ExceptionsHelper.unwrapCause(e);
+                    if (e instanceof VersionConflictEngineException) {
+                        if (retryCount < request.retryOnConflict()) {
+                            threadPool.executor(executor()).execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    shardOperation(request, listener, retryCount + 1);
+                                }
+                            });
+                            return;
+                        }
+                    }
+                    listener.onFailure(e);
                 }
             });
         } else if ("delete".equals(operation)) {
@@ -224,6 +323,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                 @Override
                 public void onResponse(DeleteResponse response) {
                     UpdateResponse update = new UpdateResponse(response.index(), response.type(), response.id(), response.version());
+                    update.getResult(extractGetResult(request, response.version(), updatedSourceAsMap, updateSourceContentType, null));
                     listener.onResponse(update);
                 }
 
@@ -231,7 +331,7 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                 public void onFailure(Throwable e) {
                     e = ExceptionsHelper.unwrapCause(e);
                     if (e instanceof VersionConflictEngineException) {
-                        if ((retryCount + 1) < request.retryOnConflict()) {
+                        if (retryCount < request.retryOnConflict()) {
                             threadPool.executor(executor()).execute(new Runnable() {
                                 @Override
                                 public void run() {
@@ -245,10 +345,47 @@ public class TransportUpdateAction extends TransportInstanceSingleOperationActio
                 }
             });
         } else if ("none".equals(operation)) {
-            listener.onResponse(new UpdateResponse(getResult.index(), getResult.type(), getResult.id(), getResult.version()));
+            UpdateResponse update = new UpdateResponse(getResult.index(), getResult.type(), getResult.id(), getResult.version());
+            update.getResult(extractGetResult(request, getResult.version(), updatedSourceAsMap, updateSourceContentType, null));
+            listener.onResponse(update);
         } else {
             logger.warn("Used update operation [{}] for script [{}], doing nothing...", operation, request.script);
             listener.onResponse(new UpdateResponse(getResult.index(), getResult.type(), getResult.id(), getResult.version()));
         }
+    }
+
+    @Nullable
+    protected GetResult extractGetResult(final UpdateRequest request, long version, final Map<String, Object> source, XContentType sourceContentType, @Nullable final BytesReference sourceAsBytes) {
+        if (request.fields() == null || request.fields().length == 0) {
+            return null;
+        }
+        boolean sourceRequested = false;
+        Map<String, GetField> fields = null;
+        if (request.fields() != null && request.fields().length > 0) {
+            SourceLookup sourceLookup = new SourceLookup();
+            sourceLookup.setNextSource(source);
+            for (String field : request.fields()) {
+                if (field.equals("_source")) {
+                    sourceRequested = true;
+                    continue;
+                }
+                Object value = sourceLookup.extractValue(field);
+                if (value != null) {
+                    if (fields == null) {
+                        fields = newHashMapWithExpectedSize(2);
+                    }
+                    GetField getField = fields.get(field);
+                    if (getField == null) {
+                        getField = new GetField(field, new ArrayList<Object>(2));
+                        fields.put(field, getField);
+                    }
+                    getField.values().add(value);
+                }
+            }
+        }
+
+        // TODO when using delete/none, we can still return the source as bytes by generating it (using the sourceContentType)
+
+        return new GetResult(request.index(), request.type(), request.id(), version, true, sourceRequested ? sourceAsBytes : null, fields);
     }
 }

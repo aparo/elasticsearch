@@ -81,12 +81,19 @@ public class SimpleSearchTests extends AbstractNodesTests {
         client.admin().indices().prepareDelete().execute().actionGet();
         client.admin().indices().prepareCreate("test").setSettings(ImmutableSettings.settingsBuilder().put("number_of_shards", 1)).execute().actionGet();
 
-        client.prepareIndex("test", "type", "1").setSource("field", "value").setRefresh(true).execute().actionGet();
+        client.prepareIndex("test", "type", "XXX1").setSource("field", "value").setRefresh(true).execute().actionGet();
         // id is not indexed, but lets see that we automatically convert to
-        SearchResponse searchResponse = client.prepareSearch().setQuery(QueryBuilders.termQuery("_id", "1")).execute().actionGet();
+        SearchResponse searchResponse = client.prepareSearch().setQuery(QueryBuilders.termQuery("_id", "XXX1")).execute().actionGet();
         assertThat(searchResponse.hits().totalHits(), equalTo(1l));
 
-        searchResponse = client.prepareSearch().setQuery(QueryBuilders.queryString("_id:1")).execute().actionGet();
+        searchResponse = client.prepareSearch().setQuery(QueryBuilders.queryString("_id:XXX1")).execute().actionGet();
+        assertThat(searchResponse.hits().totalHits(), equalTo(1l));
+
+        // id is not index, but we can automatically support prefix as well
+        searchResponse = client.prepareSearch().setQuery(QueryBuilders.prefixQuery("_id", "XXX")).execute().actionGet();
+        assertThat(searchResponse.hits().totalHits(), equalTo(1l));
+
+        searchResponse = client.prepareSearch().setQuery(QueryBuilders.queryString("_id:XXX*")).execute().actionGet();
         assertThat(searchResponse.hits().totalHits(), equalTo(1l));
     }
 
@@ -118,5 +125,20 @@ public class SimpleSearchTests extends AbstractNodesTests {
         assertThat(searchResponse.hits().totalHits(), equalTo(1l));
         searchResponse = client.prepareSearch("test").setQuery(QueryBuilders.rangeQuery("field").gte("2010-01-05").lt("2010-01-06")).execute().actionGet();
         assertThat(searchResponse.hits().totalHits(), equalTo(1l));
+    }
+
+    @Test
+    public void simpleDateMathTests() throws Exception {
+        client.admin().indices().prepareDelete().execute().actionGet();
+        client.admin().indices().prepareCreate("test").setSettings(ImmutableSettings.settingsBuilder()).execute().actionGet();
+        client.prepareIndex("test", "type1", "1").setSource("field", "2010-01-05T02:00").execute().actionGet();
+        client.prepareIndex("test", "type1", "2").setSource("field", "2010-01-06T02:00").execute().actionGet();
+        client.admin().indices().prepareRefresh().execute().actionGet();
+
+        SearchResponse searchResponse = client.prepareSearch("test").setQuery(QueryBuilders.rangeQuery("field").gte("2010-01-03||+2d").lte("2010-01-04||+2d")).execute().actionGet();
+        assertThat(searchResponse.hits().totalHits(), equalTo(2l));
+
+        searchResponse = client.prepareSearch("test").setQuery(QueryBuilders.queryString("field:[2010-01-03||+2d TO 2010-01-04||+2d]")).execute().actionGet();
+        assertThat(searchResponse.hits().totalHits(), equalTo(2l));
     }
 }

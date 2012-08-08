@@ -28,10 +28,7 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldDataType;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
-import org.elasticsearch.index.search.geo.GeoDistance;
-import org.elasticsearch.index.search.geo.GeoDistanceFilter;
-import org.elasticsearch.index.search.geo.GeoHashUtils;
-import org.elasticsearch.index.search.geo.GeoUtils;
+import org.elasticsearch.index.search.geo.*;
 
 import java.io.IOException;
 
@@ -44,8 +41,6 @@ import static org.elasticsearch.index.query.support.QueryParsers.wrapSmartNameFi
  *     "name.lon" : 1.2,
  * }
  * </pre>
- *
- *
  */
 public class GeoDistanceFilterParser implements FilterParser {
 
@@ -108,6 +103,8 @@ public class GeoDistanceFilterParser implements FilterParser {
                             double[] values = GeoHashUtils.decode(parser.text());
                             lat = values[0];
                             lon = values[1];
+                        } else {
+                            throw new QueryParsingException(parseContext.index(), "[geo_distance] filter does not support [" + currentFieldName + "]");
                         }
                     }
                 }
@@ -168,11 +165,11 @@ public class GeoDistanceFilterParser implements FilterParser {
         }
         distance = geoDistance.normalize(distance, DistanceUnit.MILES);
 
-        if (normalizeLat) {
-            lat = GeoUtils.normalizeLat(lat);
-        }
-        if (normalizeLon) {
-            lon = GeoUtils.normalizeLon(lon);
+        if (normalizeLat || normalizeLon) {
+            Point point = new Point(lat, lon);
+            GeoUtils.normalizePoint(point, normalizeLat, normalizeLon);
+            lat = point.lat;
+            lon = point.lon;
         }
 
         MapperService.SmartNameFieldMappers smartMappers = parseContext.smartFieldMappers(fieldName);

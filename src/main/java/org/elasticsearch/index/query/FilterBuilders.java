@@ -23,8 +23,6 @@ import org.elasticsearch.common.Nullable;
 
 /**
  * A static factory for simple "import static" usage.
- *
- *
  */
 public abstract class FilterBuilders {
 
@@ -183,6 +181,16 @@ public abstract class FilterBuilders {
      * @param values The terms
      */
     public static TermsFilterBuilder termsFilter(String name, Object... values) {
+        return new TermsFilterBuilder(name, values);
+    }
+
+    /**
+     * A filer for a field based on several terms matching on any of them.
+     *
+     * @param name   The field name
+     * @param values The terms
+     */
+    public static TermsFilterBuilder termsFilter(String name, Iterable values) {
         return new TermsFilterBuilder(name, values);
     }
 
@@ -373,6 +381,18 @@ public abstract class FilterBuilders {
 
     public static NotFilterBuilder notFilter(FilterBuilder filter) {
         return new NotFilterBuilder(filter);
+    }
+
+    public static IndicesFilterBuilder indicesFilter(FilterBuilder filter, String... indices) {
+        return new IndicesFilterBuilder(filter, indices);
+    }
+
+    public static WrapperFilterBuilder wrapperFilter(String filter) {
+        return new WrapperFilterBuilder(filter);
+    }
+
+    public static WrapperFilterBuilder wrapperFilter(byte[] data, int offset, int length) {
+        return new WrapperFilterBuilder(data, offset, length);
     }
 
     private FilterBuilders() {

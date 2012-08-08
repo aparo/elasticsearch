@@ -74,7 +74,8 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
         @Override
         public DoubleFieldMapper build(BuilderContext context) {
             DoubleFieldMapper fieldMapper = new DoubleFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue);
+                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
+                    ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -104,9 +105,9 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     protected DoubleFieldMapper(Names names, int precisionStep, String fuzzyFactor,
                                 Field.Index index, Field.Store store,
                                 float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                                Double nullValue) {
+                                Double nullValue, boolean ignoreMalformed) {
         super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                new NamedAnalyzer("_double/" + precisionStep, new NumericDoubleAnalyzer(precisionStep)),
+                ignoreMalformed, new NamedAnalyzer("_double/" + precisionStep, new NumericDoubleAnalyzer(precisionStep)),
                 new NamedAnalyzer("_double/max", new NumericDoubleAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -164,7 +165,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeQuery.newDoubleRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Double.parseDouble(lowerTerm),
                 upperTerm == null ? null : Double.parseDouble(upperTerm),
@@ -179,7 +180,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFilter.newDoubleRange(names.indexName(), precisionStep,
                 lowerTerm == null ? null : Double.parseDouble(lowerTerm),
                 upperTerm == null ? null : Double.parseDouble(upperTerm),
@@ -191,11 +192,22 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper) {
+    public Filter rangeFilter(FieldDataCache fieldDataCache, String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return NumericRangeFieldDataFilter.newDoubleRange(fieldDataCache, names.indexName(),
                 lowerTerm == null ? null : Double.parseDouble(lowerTerm),
                 upperTerm == null ? null : Double.parseDouble(upperTerm),
                 includeLower, includeUpper);
+    }
+
+    @Override
+    public Filter nullValueFilter() {
+        if (nullValue == null) {
+            return null;
+        }
+        return NumericRangeFilter.newDoubleRange(names.indexName(), precisionStep,
+                nullValue,
+                nullValue,
+                true, true);
     }
 
     @Override
@@ -204,7 +216,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
         double value;
         float boost = this.boost;
         if (context.externalValueSet()) {

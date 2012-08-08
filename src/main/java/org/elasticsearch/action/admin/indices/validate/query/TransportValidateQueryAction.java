@@ -22,20 +22,26 @@ package org.elasticsearch.action.admin.indices.validate.query;
 import jsr166y.ThreadLocalRandom;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ShardOperationFailedException;
-import org.elasticsearch.action.TransportActions;
 import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastOperationAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.query.IndexQueryParserService;
+import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.index.query.QueryParsingException;
+import org.elasticsearch.index.service.IndexService;
+import org.elasticsearch.index.shard.service.IndexShard;
 import org.elasticsearch.indices.IndicesService;
+import org.elasticsearch.script.ScriptService;
+import org.elasticsearch.search.internal.InternalSearchRequest;
+import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -53,10 +59,13 @@ public class TransportValidateQueryAction extends TransportBroadcastOperationAct
 
     private final IndicesService indicesService;
 
+    private final ScriptService scriptService;
+
     @Inject
-    public TransportValidateQueryAction(Settings settings, ThreadPool threadPool, ClusterService clusterService, TransportService transportService, IndicesService indicesService) {
+    public TransportValidateQueryAction(Settings settings, ThreadPool threadPool, ClusterService clusterService, TransportService transportService, IndicesService indicesService, ScriptService scriptService) {
         super(settings, threadPool, clusterService, transportService);
         this.indicesService = indicesService;
+        this.scriptService = scriptService;
     }
 
     @Override
@@ -66,7 +75,7 @@ public class TransportValidateQueryAction extends TransportBroadcastOperationAct
 
     @Override
     protected String transportAction() {
-        return TransportActions.Admin.Indices.VALIDATE_QUERY;
+        return ValidateQueryAction.NAME;
     }
 
     @Override
@@ -91,17 +100,20 @@ public class TransportValidateQueryAction extends TransportBroadcastOperationAct
     }
 
     @Override
-    protected GroupShardsIterator shards(ValidateQueryRequest request, String[] concreteIndices, ClusterState clusterState) {
+    protected GroupShardsIterator shards(ClusterState clusterState, ValidateQueryRequest request, String[] concreteIndices) {
         // Hard-code routing to limit request to a single shard, but still, randomize it...
         Map<String, Set<String>> routingMap = clusterState.metaData().resolveSearchRouting(Integer.toString(ThreadLocalRandom.current().nextInt(1000)), request.indices());
         return clusterService.operationRouting().searchShards(clusterState, request.indices(), concreteIndices, null, routingMap, "_local");
     }
 
     @Override
-    protected void checkBlock(ValidateQueryRequest request, String[] concreteIndices, ClusterState state) {
-        for (String index : concreteIndices) {
-            state.blocks().indexBlocked(ClusterBlockLevel.READ, index);
-        }
+    protected ClusterBlockException checkGlobalBlock(ClusterState state, ValidateQueryRequest request) {
+        return state.blocks().globalBlockedException(ClusterBlockLevel.READ);
+    }
+
+    @Override
+    protected ClusterBlockException checkRequestBlock(ClusterState state, ValidateQueryRequest countRequest, String[] concreteIndices) {
+        return state.blocks().indicesBlockedException(ClusterBlockLevel.READ, concreteIndices);
     }
 
     @Override
@@ -110,6 +122,7 @@ public class TransportValidateQueryAction extends TransportBroadcastOperationAct
         int failedShards = 0;
         boolean valid = true;
         List<ShardOperationFailedException> shardFailures = null;
+        List<QueryExplanation> queryExplanations = null;
         for (int i = 0; i < shardsResponses.length(); i++) {
             Object shardResponse = shardsResponses.get(i);
             if (shardResponse == null) {
@@ -121,29 +134,58 @@ public class TransportValidateQueryAction extends TransportBroadcastOperationAct
                 }
                 shardFailures.add(new DefaultShardOperationFailedException((BroadcastShardOperationFailedException) shardResponse));
             } else {
-                valid = valid && ((ShardValidateQueryResponse) shardResponse).valid();
+                ShardValidateQueryResponse validateQueryResponse = (ShardValidateQueryResponse) shardResponse;
+                valid = valid && validateQueryResponse.valid();
+                if (request.explain()) {
+                    if (queryExplanations == null) {
+                        queryExplanations = newArrayList();
+                    }
+                    queryExplanations.add(new QueryExplanation(
+                            validateQueryResponse.index(),
+                            validateQueryResponse.valid(),
+                            validateQueryResponse.explanation(),
+                            validateQueryResponse.error()
+                    ));
+                }
                 successfulShards++;
             }
         }
-        return new ValidateQueryResponse(valid, shardsResponses.length(), successfulShards, failedShards, shardFailures);
+        return new ValidateQueryResponse(valid, queryExplanations, shardsResponses.length(), successfulShards, failedShards, shardFailures);
     }
 
     @Override
     protected ShardValidateQueryResponse shardOperation(ShardValidateQueryRequest request) throws ElasticSearchException {
         IndexQueryParserService queryParserService = indicesService.indexServiceSafe(request.index()).queryParserService();
+        IndexService indexService = indicesService.indexServiceSafe(request.index());
+        IndexShard indexShard = indexService.shardSafe(request.shardId());
+
         boolean valid;
-        if (request.querySourceLength() == 0) {
+        String explanation = null;
+        String error = null;
+        if (request.querySource().length() == 0) {
             valid = true;
         } else {
+            SearchContext.setCurrent(new SearchContext(0,
+                    new InternalSearchRequest().types(request.types()),
+                    null, indexShard.searcher(), indexService, indexShard,
+                    scriptService));
             try {
-                queryParserService.parse(request.querySource(), request.querySourceOffset(), request.querySourceLength());
+                ParsedQuery parsedQuery = queryParserService.parse(request.querySource());
                 valid = true;
+                if (request.explain()) {
+                    explanation = parsedQuery.query().toString();
+                }
             } catch (QueryParsingException e) {
                 valid = false;
+                error = e.getDetailedMessage();
             } catch (AssertionError e) {
                 valid = false;
+                error = e.getMessage();
+            } finally {
+                SearchContext.current().release();
+                SearchContext.removeCurrent();
             }
         }
-        return new ShardValidateQueryResponse(request.index(), request.shardId(), valid);
+        return new ShardValidateQueryResponse(request.index(), request.shardId(), valid, explanation, error);
     }
 }

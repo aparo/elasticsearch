@@ -19,9 +19,12 @@
 
 package org.elasticsearch.transport.netty;
 
+import org.elasticsearch.ElasticSearchIllegalStateException;
+import org.elasticsearch.common.component.Lifecycle;
+import org.elasticsearch.common.compress.Compressor;
+import org.elasticsearch.common.compress.CompressorFactory;
 import org.elasticsearch.common.io.ThrowableObjectInputStream;
 import org.elasticsearch.common.io.stream.CachedStreamInput;
-import org.elasticsearch.common.io.stream.HandlesStreamInput;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.logging.ESLogger;
@@ -29,12 +32,9 @@ import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.*;
 import org.elasticsearch.transport.support.TransportStreams;
 import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.*;
 
 import java.io.IOException;
-import java.io.StreamCorruptedException;
-import java.net.SocketAddress;
 
 /**
  * A handler (must be the last one!) that does size based frame decoding and forwards the actual message
@@ -50,9 +50,6 @@ public class MessageChannelHandler extends SimpleChannelUpstreamHandler {
 
     private final NettyTransport transport;
 
-    // from FrameDecoder
-    private ChannelBuffer cumulation;
-
     public MessageChannelHandler(NettyTransport transport, ESLogger logger) {
         this.threadPool = transport.threadPool();
         this.transportServiceAdapter = transport.transportServiceAdapter();
@@ -66,135 +63,52 @@ public class MessageChannelHandler extends SimpleChannelUpstreamHandler {
         super.writeComplete(ctx, e);
     }
 
-    // similar logic to FrameDecoder, we don't use FrameDecoder because we can use the data len header value
-    // to guess the size of the cumulation buffer to allocate
-    // Also strange, is that the FrameDecoder always allocated a cumulation, even if the input bufer is enough
-    // so we don't allocate a cumulation buffer unless we really need to here (need to post this to the mailing list)
     @Override
     public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-
         Object m = e.getMessage();
         if (!(m instanceof ChannelBuffer)) {
             ctx.sendUpstream(e);
             return;
         }
+        ChannelBuffer buffer = (ChannelBuffer) m;
+        int size = buffer.getInt(buffer.readerIndex() - 4);
 
-        ChannelBuffer input = (ChannelBuffer) m;
-        if (!input.readable()) {
-            return;
-        }
-
-        ChannelBuffer cumulation = this.cumulation;
-        if (cumulation != null && cumulation.readable()) {
-            cumulation.discardReadBytes();
-            cumulation.writeBytes(input);
-            callDecode(ctx, e.getChannel(), cumulation, e.getRemoteAddress());
-        } else {
-            int actualSize = callDecode(ctx, e.getChannel(), input, e.getRemoteAddress());
-            if (input.readable()) {
-                if (actualSize > 0) {
-                    cumulation = ChannelBuffers.dynamicBuffer(actualSize, ctx.getChannel().getConfig().getBufferFactory());
-                } else {
-                    cumulation = ChannelBuffers.dynamicBuffer(ctx.getChannel().getConfig().getBufferFactory());
-                }
-                cumulation.writeBytes(input);
-                this.cumulation = cumulation;
-            }
-        }
-    }
-
-    @Override
-    public void channelDisconnected(
-            ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-        cleanup(ctx, e);
-    }
-
-    @Override
-    public void channelClosed(
-            ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-        cleanup(ctx, e);
-    }
-
-    private int callDecode(ChannelHandlerContext context, Channel channel, ChannelBuffer cumulation, SocketAddress remoteAddress) throws Exception {
-        while (cumulation.readable()) {
-            // Changes from Frame Decoder, to combine SizeHeader and this decoder into one...
-            if (cumulation.readableBytes() < 4) {
-                break; // we need more data
-            }
-
-            int dataLen = cumulation.getInt(cumulation.readerIndex());
-            if (dataLen <= 0) {
-                throw new StreamCorruptedException("invalid data length: " + dataLen);
-            }
-
-            int actualSize = dataLen + 4;
-            if (cumulation.readableBytes() < actualSize) {
-                return actualSize;
-            }
-
-            cumulation.skipBytes(4);
-
-            process(context, channel, cumulation, dataLen);
-        }
-
-        // TODO: we can potentially create a cumulation buffer cache, pop/push style
-        if (!cumulation.readable()) {
-            this.cumulation = null;
-        }
-
-        return 0;
-    }
-
-
-    private void cleanup(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-        try {
-            ChannelBuffer cumulation = this.cumulation;
-            if (cumulation == null) {
-                return;
-            } else {
-                this.cumulation = null;
-            }
-
-            if (cumulation.readable()) {
-                // Make sure all frames are read before notifying a closed channel.
-                callDecode(ctx, ctx.getChannel(), cumulation, null);
-            }
-
-            // Call decodeLast() finally.  Please note that decodeLast() is
-            // called even if there's nothing more to read from the buffer to
-            // notify a user that the connection was closed explicitly.
-
-            // Change from FrameDecoder: we don't need it...
-//            Object partialFrame = decodeLast(ctx, ctx.getChannel(), cumulation);
-//            if (partialFrame != null) {
-//                unfoldAndFireMessageReceived(ctx, null, partialFrame);
-//            }
-        } finally {
-            ctx.sendUpstream(e);
-        }
-    }
-
-    private void process(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer, int size) throws Exception {
         transportServiceAdapter.received(size + 4);
 
         int markedReaderIndex = buffer.readerIndex();
         int expectedIndexReader = markedReaderIndex + size;
 
-        StreamInput streamIn = new ChannelBufferStreamInput(buffer, size);
+        // netty always copies a buffer, either in NioWorker in its read handler, where it copies to a fresh
+        // buffer, or in the cumlation buffer, which is cleaned each time
+        StreamInput streamIn = ChannelBufferStreamInputFactory.create(buffer, size);
 
         long requestId = buffer.readLong();
         byte status = buffer.readByte();
         boolean isRequest = TransportStreams.statusIsRequest(status);
 
-        HandlesStreamInput wrappedStream;
-        if (TransportStreams.statusIsCompress(status)) {
-            wrappedStream = CachedStreamInput.cachedHandlesLzf(streamIn);
+        // we have additional bytes to read, outside of the header
+        boolean hasBytesToRead = (size - (TransportStreams.HEADER_SIZE - 4)) != 0;
+
+        StreamInput wrappedStream;
+        if (TransportStreams.statusIsCompress(status) && hasBytesToRead && buffer.readable()) {
+            Compressor compressor = CompressorFactory.compressor(buffer);
+            if (compressor == null) {
+                int maxToRead = Math.min(buffer.readableBytes(), 10);
+                int offset = buffer.readerIndex();
+                StringBuilder sb = new StringBuilder("stream marked as compressed, but no compressor found, first [").append(maxToRead).append("] content bytes out of [").append(buffer.readableBytes()).append("] readable bytes with message size [").append(size).append("] ").append("] are [");
+                for (int i = 0; i < maxToRead; i++) {
+                    sb.append(buffer.getByte(offset + i)).append(",");
+                }
+                sb.append("]");
+                throw new ElasticSearchIllegalStateException(sb.toString());
+            }
+            wrappedStream = CachedStreamInput.cachedHandlesCompressed(compressor, streamIn);
         } else {
             wrappedStream = CachedStreamInput.cachedHandles(streamIn);
         }
 
         if (isRequest) {
-            String action = handleRequest(channel, wrappedStream, requestId);
+            String action = handleRequest(ctx.getChannel(), wrappedStream, requestId);
             if (buffer.readerIndex() != expectedIndexReader) {
                 if (buffer.readerIndex() < expectedIndexReader) {
                     logger.warn("Message not fully read (request) for [{}] and action [{}], resetting", requestId, action);
@@ -225,7 +139,7 @@ public class MessageChannelHandler extends SimpleChannelUpstreamHandler {
                 buffer.readerIndex(expectedIndexReader);
             }
         }
-        wrappedStream.cleanHandles();
+        wrappedStream.close();
     }
 
     private void handleResponse(StreamInput buffer, final TransportResponseHandler handler) {
@@ -251,7 +165,7 @@ public class MessageChannelHandler extends SimpleChannelUpstreamHandler {
     private void handlerResponseError(StreamInput buffer, final TransportResponseHandler handler) {
         Throwable error;
         try {
-            ThrowableObjectInputStream ois = new ThrowableObjectInputStream(buffer);
+            ThrowableObjectInputStream ois = new ThrowableObjectInputStream(buffer, transport.settings().getClassLoader());
             error = (Throwable) ois.readObject();
         } catch (Exception e) {
             error = new TransportSerializationException("Failed to deserialize exception response from stream", e);
@@ -353,11 +267,14 @@ public class MessageChannelHandler extends SimpleChannelUpstreamHandler {
             try {
                 handler.messageReceived(streamable, transportChannel);
             } catch (Throwable e) {
-                try {
-                    transportChannel.sendResponse(e);
-                } catch (IOException e1) {
-                    logger.warn("Failed to send error message back to client for action [" + action + "]", e1);
-                    logger.warn("Actual Exception", e);
+                if (transport.lifecycleState() == Lifecycle.State.STARTED) {
+                    // we can only send a response transport is started....
+                    try {
+                        transportChannel.sendResponse(e);
+                    } catch (IOException e1) {
+                        logger.warn("Failed to send error message back to client for action [" + action + "]", e1);
+                        logger.warn("Actual Exception", e);
+                    }
                 }
             }
         }

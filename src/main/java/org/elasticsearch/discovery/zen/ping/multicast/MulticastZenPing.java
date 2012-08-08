@@ -21,28 +21,29 @@ package org.elasticsearch.discovery.zen.ping.multicast;
 
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
+import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.ClusterName;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
+import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.component.AbstractLifecycleComponent;
 import org.elasticsearch.common.io.stream.*;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.discovery.zen.DiscoveryNodesProvider;
 import org.elasticsearch.discovery.zen.ping.ZenPing;
-import org.elasticsearch.discovery.zen.ping.ZenPingException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.*;
 
 import java.io.IOException;
 import java.net.*;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -183,7 +184,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                 multicastSocket.close();
                 multicastSocket = null;
             }
-            logger.warn("disabled, failed to setup multicast discovery on {}: {}", multicastInterface, e.getMessage());
+            logger.warn("disabled, failed to setup multicast discovery on port [{}], [{}]: {}", port, multicastInterface, e.getMessage());
             if (logger.isDebugEnabled()) {
                 logger.debug("disabled, failed to setup multicast discovery on {}", e, multicastInterface);
             }
@@ -229,7 +230,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
     @Override
     public void ping(final PingListener listener, final TimeValue timeout) {
         if (!pingEnabled) {
-            threadPool.cached().execute(new Runnable() {
+            threadPool.generic().execute(new Runnable() {
                 @Override
                 public void run() {
                     listener.onPing(new PingResponse[0]);
@@ -238,21 +239,21 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
             return;
         }
         final int id = pingIdGenerator.incrementAndGet();
-        receivedResponses.put(id, new ConcurrentHashMap<DiscoveryNode, PingResponse>());
-        sendPingRequest(id, true);
+        receivedResponses.put(id, ConcurrentCollections.<DiscoveryNode, PingResponse>newConcurrentMap());
+        sendPingRequest(id);
         // try and send another ping request halfway through (just in case someone woke up during it...)
         // this can be a good trade-off to nailing the initial lookup or un-delivered messages
-        threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.CACHED, new Runnable() {
+        threadPool.schedule(TimeValue.timeValueMillis(timeout.millis() / 2), ThreadPool.Names.GENERIC, new Runnable() {
             @Override
             public void run() {
                 try {
-                    sendPingRequest(id, false);
+                    sendPingRequest(id);
                 } catch (Exception e) {
                     logger.warn("[{}] failed to send second ping request", e, id);
                 }
             }
         });
-        threadPool.schedule(timeout, ThreadPool.Names.CACHED, new Runnable() {
+        threadPool.schedule(timeout, ThreadPool.Names.GENERIC, new Runnable() {
             @Override
             public void run() {
                 ConcurrentMap<DiscoveryNode, PingResponse> responses = receivedResponses.remove(id);
@@ -261,41 +262,36 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
         });
     }
 
-    private void sendPingRequest(int id, boolean remove) {
+    private void sendPingRequest(int id) {
         if (multicastSocket == null) {
             return;
         }
         synchronized (sendMutex) {
             CachedStreamOutput.Entry cachedEntry = CachedStreamOutput.popEntry();
             try {
-                HandlesStreamOutput out = cachedEntry.cachedHandlesBytes();
+                StreamOutput out = cachedEntry.handles();
                 out.writeBytes(INTERNAL_HEADER);
                 Version.writeVersion(Version.CURRENT, out);
                 out.writeInt(id);
                 clusterName.writeTo(out);
                 nodesProvider.nodes().localNode().writeTo(out);
-                datagramPacketSend.setData(cachedEntry.bytes().copiedByteArray());
-            } catch (IOException e) {
-                if (remove) {
-                    receivedResponses.remove(id);
-                }
-                throw new ZenPingException("Failed to serialize ping request", e);
-            } finally {
-                CachedStreamOutput.pushEntry(cachedEntry);
-            }
-            try {
+                out.close();
+                datagramPacketSend.setData(cachedEntry.bytes().bytes().copyBytesArray().toBytes());
                 multicastSocket.send(datagramPacketSend);
                 if (logger.isTraceEnabled()) {
                     logger.trace("[{}] sending ping request", id);
                 }
-            } catch (IOException e) {
-                if (remove) {
-                    receivedResponses.remove(id);
-                }
+            } catch (Exception e) {
                 if (lifecycle.stoppedOrClosed()) {
                     return;
                 }
-                throw new ZenPingException("Failed to send ping request over multicast on " + multicastSocket, e);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("failed to send multicast ping request", e);
+                } else {
+                    logger.warn("failed to send multicast ping request: {}", ExceptionsHelper.detailedMessage(e));
+                }
+            } finally {
+                CachedStreamOutput.pushEntry(cachedEntry);
             }
         }
     }
@@ -396,7 +392,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
                                 }
                             }
                             if (internal) {
-                                StreamInput input = CachedStreamInput.cachedHandles(new BytesStreamInput(datagramPacketReceive.getData(), datagramPacketReceive.getOffset() + INTERNAL_HEADER.length, datagramPacketReceive.getLength()));
+                                StreamInput input = CachedStreamInput.cachedHandles(new BytesStreamInput(datagramPacketReceive.getData(), datagramPacketReceive.getOffset() + INTERNAL_HEADER.length, datagramPacketReceive.getLength(), true));
                                 Version version = Version.readVersion(input);
                                 id = input.readInt();
                                 clusterName = ClusterName.readClusterName(input);
@@ -484,7 +480,8 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
 
                 builder.endObject().endObject();
                 synchronized (sendMutex) {
-                    datagramPacketSend.setData(builder.underlyingBytes(), 0, builder.underlyingBytesLength());
+                    BytesReference bytes = builder.bytes();
+                    datagramPacketSend.setData(bytes.array(), bytes.arrayOffset(), bytes.length());
                     multicastSocket.send(datagramPacketSend);
                     if (logger.isTraceEnabled()) {
                         logger.trace("sending external ping response {}", builder.string());
@@ -528,7 +525,7 @@ public class MulticastZenPing extends AbstractLifecycleComponent<ZenPing> implem
 
             if (!transportService.nodeConnected(requestingNode)) {
                 // do the connect and send on a thread pool
-                threadPool.cached().execute(new Runnable() {
+                threadPool.generic().execute(new Runnable() {
                     @Override
                     public void run() {
                         // connect to the node if possible

@@ -23,9 +23,10 @@ import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.NoShardAvailableActionException;
-import org.elasticsearch.action.support.BaseAction;
+import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
+import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.ShardRouting;
@@ -42,7 +43,7 @@ import java.io.IOException;
 /**
  *
  */
-public abstract class TransportSingleCustomOperationAction<Request extends SingleCustomOperationRequest, Response extends ActionResponse> extends BaseAction<Request, Response> {
+public abstract class TransportSingleCustomOperationAction<Request extends SingleCustomOperationRequest, Response extends ActionResponse> extends TransportAction<Request, Response> {
 
     protected final ClusterService clusterService;
 
@@ -85,9 +86,9 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
 
     protected abstract Response newResponse();
 
-    protected void checkBlock(Request request, ClusterState state) {
+    protected abstract ClusterBlockException checkGlobalBlock(ClusterState state, Request request);
 
-    }
+    protected abstract ClusterBlockException checkRequestBlock(ClusterState state, Request request);
 
     private class AsyncSingleAction {
 
@@ -105,8 +106,14 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
 
             ClusterState clusterState = clusterService.state();
             nodes = clusterState.nodes();
-
-            checkBlock(request, clusterState);
+            ClusterBlockException blockException = checkGlobalBlock(clusterState, request);
+            if (blockException != null) {
+                throw blockException;
+            }
+            blockException = checkRequestBlock(clusterState, request);
+            if (blockException != null) {
+                throw blockException;
+            }
             this.shardsIt = shards(clusterState, request);
         }
 
@@ -136,7 +143,6 @@ public abstract class TransportSingleCustomOperationAction<Request extends Singl
                                 Response response = shardOperation(request, -1);
                                 listener.onResponse(response);
                             } catch (Exception e) {
-                                shardsIt.reset();
                                 onFailure(null, e);
                             }
                         }

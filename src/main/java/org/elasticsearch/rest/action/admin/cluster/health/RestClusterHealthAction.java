@@ -51,8 +51,10 @@ public class RestClusterHealthAction extends BaseRestHandler {
     @Override
     public void handleRequest(final RestRequest request, final RestChannel channel) {
         ClusterHealthRequest clusterHealthRequest = clusterHealthRequest(RestActions.splitIndices(request.param("index")));
+        clusterHealthRequest.listenerThreaded(false);
         int level = 0;
         try {
+            clusterHealthRequest.masterNodeTimeout(request.paramAsTime("master_timeout", clusterHealthRequest.masterNodeTimeout()));
             clusterHealthRequest.timeout(request.paramAsTime("timeout", clusterHealthRequest.timeout()));
             String waitForStatus = request.param("wait_for_status");
             if (waitForStatus != null) {
@@ -63,7 +65,7 @@ public class RestClusterHealthAction extends BaseRestHandler {
             clusterHealthRequest.waitForNodes(request.param("wait_for_nodes", clusterHealthRequest.waitForNodes()));
             String sLevel = request.param("level");
             if (sLevel != null) {
-                if ("cluster".equals("sLevel")) {
+                if ("cluster".equals(sLevel)) {
                     level = 0;
                 } else if ("indices".equals(sLevel)) {
                     level = 1;
@@ -85,6 +87,12 @@ public class RestClusterHealthAction extends BaseRestHandler {
             @Override
             public void onResponse(ClusterHealthResponse response) {
                 try {
+                    RestStatus status = RestStatus.OK;
+                    // not sure..., we handle the health API, so we are not unavailable
+                    // in any case, "/" should be used for
+                    //if (response.status() == ClusterHealthStatus.RED) {
+                    //    status = RestStatus.SERVICE_UNAVAILABLE;
+                    //}
                     XContentBuilder builder = RestXContentBuilder.restContentBuilder(request);
                     builder.startObject();
 
@@ -172,7 +180,7 @@ public class RestClusterHealthAction extends BaseRestHandler {
 
                     builder.endObject();
 
-                    channel.sendResponse(new XContentRestResponse(request, RestStatus.OK, builder));
+                    channel.sendResponse(new XContentRestResponse(request, status, builder));
                 } catch (Exception e) {
                     onFailure(e);
                 }
