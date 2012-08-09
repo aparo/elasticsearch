@@ -22,9 +22,10 @@ package org.elasticsearch.common.lucene.uid;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
-import org.apache.lucene.document.AbstractField;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.*;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.lucene.Lucene;
 
@@ -34,7 +35,7 @@ import java.io.Reader;
 /**
  *
  */
-public class UidField extends AbstractField {
+public class UidField extends Field {
 
     public static class DocIdAndVersion {
         public final int docId;
@@ -52,37 +53,30 @@ public class UidField extends AbstractField {
     // so we iterate till we find the one with the payload
     public static DocIdAndVersion loadDocIdAndVersion(IndexReader reader, Term term) {
         int docId = Lucene.NO_DOC;
-        TermPositions uid = null;
+        DocsAndPositionsEnum uid = null;
         try {
-            uid = reader.termPositions(term);
-            if (!uid.next()) {
+            uid = MultiFields.getTermPositionsEnum(reader, MultiFields.getLiveDocs(reader), term.field(), term.bytes());
+            if (uid==null) {
                 return null; // no doc
             }
             // Note, only master docs uid have version payload, so we can use that info to not
             // take them into account
-            do {
-                docId = uid.doc();
+            int doc;
+            while((doc = uid.nextDoc()) != DocsAndPositionsEnum.NO_MORE_DOCS) {
+                docId = uid.docID();
                 uid.nextPosition();
-                if (!uid.isPayloadAvailable()) {
+                if (!uid.hasPayload()) {
                     continue;
                 }
-                if (uid.getPayloadLength() < 8) {
+                BytesRef payload = uid.getPayload();
+                if (payload.length < 8) {
                     continue;
                 }
-                byte[] payload = uid.getPayload(new byte[8], 0);
-                return new DocIdAndVersion(docId, Numbers.bytesToLong(payload), reader);
-            } while (uid.next());
+                return new DocIdAndVersion(docId, Numbers.bytesToLong(payload.bytes), reader);
+             }
             return new DocIdAndVersion(docId, -2, reader);
         } catch (Exception e) {
             return new DocIdAndVersion(docId, -2, reader);
-        } finally {
-            if (uid != null) {
-                try {
-                    uid.close();
-                } catch (IOException e) {
-                    // nothing to do here...
-                }
-            }
         }
     }
 
@@ -91,36 +85,30 @@ public class UidField extends AbstractField {
      * no version is available (for backward comp.)
      */
     public static long loadVersion(IndexReader reader, Term term) {
-        TermPositions uid = null;
+        DocsAndPositionsEnum uid = null;
         try {
-            uid = reader.termPositions(term);
-            if (!uid.next()) {
+            uid = MultiFields.getTermPositionsEnum(reader, MultiFields.getLiveDocs(reader), term.field(), term.bytes());
+            if (uid==null) {
                 return -1;
             }
             // Note, only master docs uid have version payload, so we can use that info to not
             // take them into account
-            do {
+
+            int doc;
+            while((doc = uid.nextDoc()) != DocsAndPositionsEnum.NO_MORE_DOCS) {
                 uid.nextPosition();
-                if (!uid.isPayloadAvailable()) {
+                if (!uid.hasPayload()) {
                     continue;
                 }
-                if (uid.getPayloadLength() < 8) {
+                BytesRef payload = uid.getPayload();
+                if (payload.length < 8) {
                     continue;
                 }
-                byte[] payload = uid.getPayload(new byte[8], 0);
-                return Numbers.bytesToLong(payload);
-            } while (uid.next());
+                return Numbers.bytesToLong(payload.bytes);
+            }
             return -2;
         } catch (Exception e) {
             return -2;
-        } finally {
-            if (uid != null) {
-                try {
-                    uid.close();
-                } catch (IOException e) {
-                    // nothing to do here...
-                }
-            }
         }
     }
 
@@ -128,24 +116,17 @@ public class UidField extends AbstractField {
 
     private long version;
 
-    private final UidPayloadTokenStream tokenStream;
-
     public UidField(String name, String uid, long version) {
-        super(name, Field.Store.YES, Field.Index.ANALYZED, Field.TermVector.NO);
+        super(name, new FieldType());
         this.uid = uid;
         this.version = version;
-        this.indexOptions = FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
-        this.tokenStream = new UidPayloadTokenStream(this);
-    }
-
-    @Override
-    public void setIndexOptions(FieldInfo.IndexOptions indexOptions) {
-        // never allow to set this, since we want payload!
-    }
-
-    @Override
-    public void setOmitTermFreqAndPositions(boolean omitTermFreqAndPositions) {
-        // never allow to set this, since we want payload!
+        FieldType ft = (FieldType)this.fieldType();
+        ft.setIndexed(true);
+        ft.setStored(true);
+        ft.setTokenized(true);
+        ft.setOmitNorms(true);
+        ft.setIndexOptions(FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+        this.setTokenStream(new UidPayloadTokenStream(this));
     }
 
     public String uid() {
@@ -204,7 +185,7 @@ public class UidField extends AbstractField {
             }
             termAtt.setLength(0);
             termAtt.append(field.uid);
-            payloadAttribute.setPayload(new Payload(Numbers.longToBytes(field.version())));
+            payloadAttribute.setPayload(new BytesRef(Numbers.longToBytes(field.version())));
             added = true;
             return true;
         }

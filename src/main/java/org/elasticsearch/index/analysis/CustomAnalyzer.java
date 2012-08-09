@@ -71,7 +71,7 @@ public final class CustomAnalyzer extends Analyzer {
     }
 
     @Override
-    public int getOffsetGap(Field field) {
+    public int getOffsetGap(String field) {
         if (offsetGap < 0) {
             return super.getOffsetGap(field);
         }

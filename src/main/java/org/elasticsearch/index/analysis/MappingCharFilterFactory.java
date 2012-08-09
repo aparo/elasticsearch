@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.analysis;
 
-import org.apache.lucene.analysis.CharStream;
+import org.apache.lucene.analysis.CharFilter;
 import org.apache.lucene.analysis.charfilter.MappingCharFilter;
 import org.apache.lucene.analysis.charfilter.NormalizeCharMap;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
@@ -30,6 +30,7 @@ import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.settings.IndexSettings;
 
+import java.io.Reader;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -53,8 +54,8 @@ public class MappingCharFilterFactory extends AbstractCharFilterFactory {
     }
 
     @Override
-    public CharStream create(CharStream tokenStream) {
-        return new MappingCharFilter(normMap, tokenStream);
+    public CharFilter create(Reader reader) {
+        return new MappingCharFilter(normMap, reader);
     }
 
     // source => target

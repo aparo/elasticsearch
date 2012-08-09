@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common;
 
+import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
 
@@ -140,6 +141,17 @@ public class Unicode {
         }
     }
 
+    public static final class UTF8Result {
+        public byte[] result = new byte[10];
+        public int length;
+
+        public void setLength(int newLength) {
+            if (result.length < newLength) {
+                result = ArrayUtil.grow(result, newLength);
+            }
+            length = newLength;
+        }
+    }
 
     /**
      * Convert UTF8 bytes into UTF16 characters.  If offset

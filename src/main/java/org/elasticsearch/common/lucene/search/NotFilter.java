@@ -45,7 +45,7 @@ public class NotFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         DocIdSet set = filter.getDocIdSet(reader);
         if (set == null) {
             return new AllDocSet(reader.maxDoc());

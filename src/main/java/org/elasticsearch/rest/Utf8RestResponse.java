@@ -19,7 +19,7 @@
 
 package org.elasticsearch.rest;
 
-import org.apache.lucene.util.UnicodeUtil;
+import org.elasticsearch.common.Unicode;
 
 /**
  * An http response that is built on top of {@link org.apache.lucene.util.Unicode.UTF8Result}.

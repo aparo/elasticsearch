@@ -46,7 +46,7 @@ public class OrFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         if (filters.size() == 1) {
             return filters.get(0).getDocIdSet(reader);
         }

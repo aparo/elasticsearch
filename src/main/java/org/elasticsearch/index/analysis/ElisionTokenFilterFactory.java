@@ -20,7 +20,7 @@
 package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.analysis.fr.ElisionFilter;
+import org.apache.lucene.analysis.util.ElisionFilter;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
 import org.elasticsearch.common.settings.Settings;
@@ -46,9 +46,9 @@ public class ElisionTokenFilterFactory extends AbstractTokenFilterFactory {
     @Override
     public TokenStream create(TokenStream tokenStream) {
         if (articles == null) {
-            return new ElisionFilter(version, tokenStream);
+            return new ElisionFilter(tokenStream);
         } else {
-            return new ElisionFilter(version, tokenStream, articles);
+            return new ElisionFilter(tokenStream, articles);
         }
     }
 }

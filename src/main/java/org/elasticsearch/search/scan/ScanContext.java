@@ -130,7 +130,7 @@ public class ScanContext {
         }
 
         @Override
-        public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+        public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
             ReaderState readerState = readerStates.get(reader);
             if (readerState != null && readerState.done) {
                 scanCollector.incCounter(readerState.count);

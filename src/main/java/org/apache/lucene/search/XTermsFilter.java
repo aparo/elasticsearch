@@ -66,7 +66,7 @@ public class XTermsFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         FixedBitSet result = null;
         TermDocs td = reader.termDocs();
         try {

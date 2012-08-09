@@ -39,7 +39,7 @@ public class LimitFilter extends NoCacheFilter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         if (counter > limit) {
             return null;
         }

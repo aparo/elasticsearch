@@ -153,8 +153,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
                     }
                     source = extractSource(doc, docMapper);
 
-                    for (Object oField : doc.getFields()) {
-                        Field field = (Field) oField;
+                    for (IndexableField field : doc.getFields()) {
                         String name = field.name();
                         Object value = null;
                         FieldMappers fieldMappers = docMapper.mappers().indexName(field.name());

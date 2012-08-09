@@ -39,7 +39,7 @@ public class NotDeletedFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         DocIdSet docIdSet = filter.getDocIdSet(reader);
         if (docIdSet == null) {
             return null;

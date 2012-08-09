@@ -86,7 +86,7 @@ public interface CacheKeyFilter {
         }
 
         @Override
-        public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+        public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
             return filter.getDocIdSet(reader);
         }
 

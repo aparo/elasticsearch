@@ -19,13 +19,12 @@
 
 package org.elasticsearch.index.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermDocs;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.common.Unicode;
 import org.elasticsearch.common.bloom.BloomFilter;
 import org.elasticsearch.index.cache.bloom.BloomCache;
@@ -65,7 +64,7 @@ public class UidFilter extends Filter {
     // - If we have a single id, we can create a SingleIdDocIdSet to save on mem
     // - We can use sorted int array DocIdSet to reserve memory compared to OpenBitSet in some cases
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         BloomFilter filter = bloomCache.filter(reader, UidFieldMapper.NAME, true);
         FixedBitSet set = null;
         TermDocs td = null;
@@ -120,4 +119,5 @@ public class UidFilter extends Filter {
         }
         return builder.toString();
     }
+
 }

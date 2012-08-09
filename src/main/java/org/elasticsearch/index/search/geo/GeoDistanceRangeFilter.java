@@ -119,7 +119,7 @@ public class GeoDistanceRangeFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         DocSet boundingBoxDocSet = null;
         if (boundingBoxFilter != null) {
             DocIdSet docIdSet = boundingBoxFilter.getDocIdSet(reader);

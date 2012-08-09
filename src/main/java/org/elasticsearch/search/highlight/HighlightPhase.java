@@ -26,7 +26,6 @@ import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.highlight.*;
@@ -36,7 +35,6 @@ import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.FastStringReader;
-import org.elasticsearch.common.lucene.document.SingleFieldSelector;
 import org.elasticsearch.common.lucene.search.function.FiltersFunctionScoreQuery;
 import org.elasticsearch.common.lucene.search.function.FunctionScoreQuery;
 import org.elasticsearch.common.lucene.search.vectorhighlight.SimpleBoundaryScanner2;
@@ -149,13 +147,13 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
                         } else if (query instanceof FiltersFunctionScoreQuery) {
                             query = ((FiltersFunctionScoreQuery) query).getSubQuery();
                             extracted = true;
-                        } else if (query instanceof ConstantScoreQuery) {
+                        }/* else if (query instanceof ConstantScoreQuery) {
                             ConstantScoreQuery q = (ConstantScoreQuery) query;
                             if (q.getQuery() != null) {
                                 query = q.getQuery();
                                 extracted = true;
                             }
-                        } else if (query instanceof FilteredQuery) {
+                        }*/ else if (query instanceof FilteredQuery) {
                             query = ((FilteredQuery) query).getQuery();
                             extracted = true;
                         }
@@ -187,9 +185,9 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
                 List<Object> textsToHighlight;
                 if (mapper.stored()) {
                     try {
-                        Document doc = hitContext.reader().document(hitContext.docId(), new SingleFieldSelector(mapper.names().indexName()));
+                        Document doc = hitContext.reader().document(hitContext.docId(), new HashSet<String>(Arrays.asList(mapper.names().indexName())));
                         textsToHighlight = new ArrayList<Object>(doc.getFields().size());
-                        for (Field docField : doc.getFields()) {
+                        for (IndexableField docField : doc.getFields()) {
                             if (docField.stringValue() != null) {
                                 textsToHighlight.add(docField.stringValue());
                             }
@@ -211,7 +209,7 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
                     for (Object textToHighlight : textsToHighlight) {
                         String text = textToHighlight.toString();
                         Analyzer analyzer = context.mapperService().documentMapper(hitContext.hit().type()).mappers().indexAnalyzer();
-                        TokenStream tokenStream = analyzer.reusableTokenStream(mapper.names().indexName(), new FastStringReader(text));
+                        TokenStream tokenStream = analyzer.tokenStream(mapper.names().indexName(), new FastStringReader(text));
                         TextFragment[] bestTextFragments = entry.highlighter.getBestTextFragments(tokenStream, text, false, numberOfFragments);
                         for (TextFragment bestTextFragment : bestTextFragments) {
                             if (bestTextFragment != null && bestTextFragment.getScore() > 0) {

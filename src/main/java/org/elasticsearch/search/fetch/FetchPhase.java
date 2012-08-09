@@ -22,23 +22,19 @@ package org.elasticsearch.search.fetch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DocumentStoredFieldVisitor;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.IndexReader;
-import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.lucene.document.ResetFieldSelector;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.FieldMappers;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
-import org.elasticsearch.index.mapper.selector.AllButSourceFieldSelector;
-import org.elasticsearch.index.mapper.selector.FieldMappersFieldSelector;
-import org.elasticsearch.index.mapper.selector.UidAndSourceFieldSelector;
-import org.elasticsearch.index.mapper.selector.UidFieldSelector;
 import org.elasticsearch.indices.TypeMissingException;
 import org.elasticsearch.search.SearchHitField;
 import org.elasticsearch.search.SearchParseElement;
@@ -55,10 +51,7 @@ import org.elasticsearch.search.internal.InternalSearchHits;
 import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  *
@@ -88,28 +81,33 @@ public class FetchPhase implements SearchPhase {
     }
 
     public void execute(SearchContext context) {
-        ResetFieldSelector fieldSelector;
         List<String> extractFieldNames = null;
+        Set<String> fieldSelector = new HashSet<String>();
         boolean sourceRequested = false;
         if (!context.hasFieldNames()) {
             if (context.hasPartialFields()) {
                 // partial fields need the source, so fetch it, but don't return it
-                fieldSelector = new UidAndSourceFieldSelector();
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(SourceFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
                 sourceRequested = false;
             } else if (context.hasScriptFields()) {
                 // we ask for script fields, and no field names, don't load the source
-                fieldSelector = UidFieldSelector.INSTANCE;
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
                 sourceRequested = false;
             } else {
-                fieldSelector = new UidAndSourceFieldSelector();
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(SourceFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
                 sourceRequested = true;
             }
+
         } else if (context.fieldNames().isEmpty()) {
-            fieldSelector = UidFieldSelector.INSTANCE;
+            fieldSelector.add(UidFieldMapper.NAME);
             sourceRequested = false;
         } else {
             boolean loadAllStored = false;
-            FieldMappersFieldSelector fieldSelectorMapper = null;
             for (String fieldName : context.fieldNames()) {
                 if (fieldName.equals("*")) {
                     loadAllStored = true;
@@ -121,10 +119,7 @@ public class FetchPhase implements SearchPhase {
                 }
                 FieldMappers x = context.smartNameFieldMappers(fieldName);
                 if (x != null && x.mapper().stored()) {
-                    if (fieldSelectorMapper == null) {
-                        fieldSelectorMapper = new FieldMappersFieldSelector();
-                    }
-                    fieldSelectorMapper.add(x);
+                    fieldSelector.add(fieldName);
                 } else {
                     if (extractFieldNames == null) {
                         extractFieldNames = Lists.newArrayList();
@@ -135,21 +130,24 @@ public class FetchPhase implements SearchPhase {
 
             if (loadAllStored) {
                 if (sourceRequested || extractFieldNames != null) {
-                    fieldSelector = null; // load everything, including _source
+                    fieldSelector = null; // load everything, including _source     //PARO TO CHECK
                 } else {
-                    fieldSelector = AllButSourceFieldSelector.INSTANCE;
+                    fieldSelector.clear();
                 }
-            } else if (fieldSelectorMapper != null) {
+            } else if (fieldSelector.size() > 0) {
                 // we are asking specific stored fields, just add the UID and be done
-                fieldSelectorMapper.add(UidFieldMapper.NAME);
-                if (extractFieldNames != null || sourceRequested) {
-                    fieldSelectorMapper.add(SourceFieldMapper.NAME);
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
+                if (extractFieldNames != null) {
+                    fieldSelector.add(SourceFieldMapper.NAME);
                 }
-                fieldSelector = fieldSelectorMapper;
             } else if (extractFieldNames != null || sourceRequested) {
-                fieldSelector = new UidAndSourceFieldSelector();
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(SourceFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
             } else {
-                fieldSelector = UidFieldSelector.INSTANCE;
+                fieldSelector.add(UidFieldMapper.NAME);
+                fieldSelector.add(RoutingFieldMapper.NAME);
             }
         }
 
@@ -157,7 +155,8 @@ public class FetchPhase implements SearchPhase {
         for (int index = 0; index < context.docIdsToLoadSize(); index++) {
             int docId = context.docIdsToLoad()[context.docIdsToLoadFrom() + index];
             Document doc = loadDocument(context, fieldSelector, docId);
-            Uid uid = extractUid(context, doc, fieldSelector);
+            Uid uid = extractUid(context, doc);
+            String routing = extractRouting(context, doc);
 
             DocumentMapper documentMapper = context.mapperService().documentMapper(uid.type());
 
@@ -169,11 +168,11 @@ public class FetchPhase implements SearchPhase {
 
             // get the version
 
-            InternalSearchHit searchHit = new InternalSearchHit(docId, uid.id(), uid.type(), sourceRequested ? source : null, null);
+            InternalSearchHit searchHit = new InternalSearchHit(docId, uid.id(), uid.type(), routing, sourceRequested ? source : null, null);
             hits[index] = searchHit;
 
             for (Object oField : doc.getFields()) {
-                Field field = (Field) oField;
+                IndexableField field = (IndexableField) oField;
                 String name = field.name();
 
                 // ignore UID, we handled it above
@@ -183,6 +182,11 @@ public class FetchPhase implements SearchPhase {
 
                 // ignore source, we handled it above
                 if (name.equals(SourceFieldMapper.NAME)) {
+                    continue;
+                }
+
+                // ignore routing, we handled it above
+                if (name.equals(RoutingFieldMapper.NAME)) {
                     continue;
                 }
 
@@ -196,12 +200,10 @@ public class FetchPhase implements SearchPhase {
                     }
                 }
                 if (value == null) {
-                    if (field.isBinary()) {
-                        value = new BytesArray(field.getBinaryValue(), field.getBinaryOffset(), field.getBinaryLength());
-                    } else {
-                        value = field.stringValue();
-                    }
+                    value = new BytesArray(field.binaryValue().bytes);
                 }
+                if (value == null)
+                    value = field.stringValue();
 
                 if (searchHit.fieldsOrNull() == null) {
                     searchHit.fields(new HashMap<String, SearchHitField>(2));
@@ -215,18 +217,32 @@ public class FetchPhase implements SearchPhase {
                 hitField.values().add(value);
             }
 
-            int readerIndex = context.searcher().readerIndex(docId);
-            IndexReader subReader = context.searcher().subReaders()[readerIndex];
-            int subDoc = docId - context.searcher().docStarts()[readerIndex];
+            //int readerIndex = context.searcher().readerIndex(docId);
+            //IndexReader subReader = context.searcher().subReaders()[readerIndex];
+            //int subDoc = docId - context.searcher().docStarts()[readerIndex];
+            AtomicReaderContext readerContextIndex = context.searcher().contextIndex(docId);
+            //IndexReader subReader = readerContextIndex.reader;
+            int subDoc = docId - readerContextIndex.docBase;
+            //TODO: PARO: check subdoc
+
 
             // go over and extract fields that are not mapped / stored
-            context.lookup().setNextReader(subReader);
+            context.lookup().setNextReader(readerContextIndex);
             context.lookup().setNextDocId(subDoc);
             if (source != null) {
                 context.lookup().source().setNextSource(new BytesArray(source));
             }
             if (extractFieldNames != null) {
                 for (String extractFieldName : extractFieldNames) {
+                    if (extractFieldName.equals("_parent")) {
+                        SearchHitField hitField = searchHit.fields().get(extractFieldName);
+                        if (hitField == null) {
+                            hitField = new InternalSearchHitField(extractFieldName, new ArrayList<Object>(2));
+                            searchHit.fields().put(extractFieldName, hitField);
+                        }
+                        hitField.values().add(routing);
+                    }
+
                     Object value = context.lookup().source().extractValue(extractFieldName);
                     if (value != null) {
                         if (searchHit.fieldsOrNull() == null) {
@@ -246,10 +262,11 @@ public class FetchPhase implements SearchPhase {
             for (FetchSubPhase fetchSubPhase : fetchSubPhases) {
                 FetchSubPhase.HitContext hitContext = new FetchSubPhase.HitContext();
                 if (fetchSubPhase.hitExecutionNeeded(context)) {
-                    hitContext.reset(searchHit, subReader, subDoc, context.searcher().getIndexReader(), docId, doc);
+                    hitContext.reset(searchHit, readerContextIndex.reader(), subDoc, context.searcher().getIndexReader(), docId, doc);
                     fetchSubPhase.hitExecute(context, hitContext);
                 }
             }
+
         }
 
         for (FetchSubPhase fetchSubPhase : fetchSubPhases) {
@@ -262,30 +279,43 @@ public class FetchPhase implements SearchPhase {
     }
 
     private byte[] extractSource(Document doc, DocumentMapper documentMapper) {
-        Field sourceField = doc.getFieldable(SourceFieldMapper.NAME);
+        IndexableField sourceField = doc.getField(SourceFieldMapper.NAME);
         if (sourceField != null) {
             return documentMapper.sourceMapper().nativeValue(sourceField);
         }
         return null;
     }
 
-    private Uid extractUid(SearchContext context, Document doc, @Nullable ResetFieldSelector fieldSelector) {
+    private String extractRouting(SearchContext context, Document doc) {
+        String routing = doc.get(RoutingFieldMapper.NAME);
+        if (routing != null) {
+            return routing;
+        }
+        return doc.get(ParentFieldMapper.NAME);
+    }
+
+    private Uid extractUid(SearchContext context, Document doc) {
+        // TODO we might want to use FieldData here to speed things up, so we don't have to load it at all...
         String sUid = doc.get(UidFieldMapper.NAME);
         if (sUid != null) {
             return Uid.createUid(sUid);
         }
         // no type, nothing to do (should not really happen)
         List<String> fieldNames = new ArrayList<String>();
-        for (Field field : doc.getFields()) {
+        for (IndexableField field : doc.getFields()) {
             fieldNames.add(field.name());
         }
-        throw new FetchPhaseExecutionException(context, "Failed to load uid from the index, missing internal _uid field, current fields in the doc [" + fieldNames + "], selector [" + fieldSelector + "]");
+        throw new FetchPhaseExecutionException(context, "Failed to load uid from the index, missing internal _uid field, current fields in the doc [" + fieldNames + "]");
     }
 
-    private Document loadDocument(SearchContext context, @Nullable ResetFieldSelector fieldSelector, int docId) {
+    private Document loadDocument(SearchContext context, Set<String> fields, int docId) {
         try {
-            if (fieldSelector != null) fieldSelector.reset();
-            return context.searcher().doc(docId, fieldSelector);
+            DocumentStoredFieldVisitor visitor = new DocumentStoredFieldVisitor();
+            if (fields != null && fields.size() > 0) {
+                visitor = new DocumentStoredFieldVisitor(fields);
+            }
+            context.searcher().getIndexReader().document(docId, visitor);
+            return visitor.getDocument();
         } catch (IOException e) {
             throw new FetchPhaseExecutionException(context, "Failed to fetch doc id [" + docId + "]", e);
         }

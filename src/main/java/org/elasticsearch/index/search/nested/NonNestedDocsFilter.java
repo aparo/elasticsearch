@@ -42,7 +42,7 @@ public class NonNestedDocsFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         DocIdSet docSet = filter.getDocIdSet(reader);
         if (docSet == null || docSet == DocIdSet.EMPTY_DOCIDSET) {
             // will almost never happen, and we need an OpenBitSet for the parent filter in

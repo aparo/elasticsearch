@@ -58,7 +58,7 @@ public class IndexedGeoBoundingBoxFilter {
         }
 
         @Override
-        public FixedBitSet getDocIdSet(IndexReader reader) throws IOException {
+        public FixedBitSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
             FixedBitSet main;
             DocIdSet set = lonFilter1.getDocIdSet(reader);
             if (set == null || set == DocIdSet.EMPTY_DOCIDSET) {
@@ -124,7 +124,7 @@ public class IndexedGeoBoundingBoxFilter {
         }
 
         @Override
-        public FixedBitSet getDocIdSet(IndexReader reader) throws IOException {
+        public FixedBitSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
             FixedBitSet main;
             DocIdSet set = lonFilter.getDocIdSet(reader);
             if (set == null || set == DocIdSet.EMPTY_DOCIDSET) {

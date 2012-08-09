@@ -67,7 +67,7 @@ public class XBooleanFilter extends Filter {
      * of the filters that have been added.
      */
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         FixedBitSet res = null;
 
         if (mustFilters == null && notFilters == null && shouldFilters != null && shouldFilters.size() == 1) {

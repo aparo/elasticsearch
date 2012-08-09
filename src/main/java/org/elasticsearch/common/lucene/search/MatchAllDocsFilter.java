@@ -34,7 +34,7 @@ import java.io.IOException;
 public class MatchAllDocsFilter extends Filter {
 
     @Override
-    public DocIdSet getDocIdSet(IndexReader reader) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         return new AllDocSet(reader.maxDoc());
     }
 
