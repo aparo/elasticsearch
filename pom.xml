@@ -30,7 +30,7 @@
     </parent>
 
     <properties>
-        <lucene.version>3.6.1</lucene.version>
+        <lucene.version>4.0.0-BETA</lucene.version>
     </properties>
 
     <repositories>
@@ -38,6 +38,11 @@
             <id>elasticsearch</id>
             <name>elasticsearch repo</name>
             <url>http://elasticsearch.googlecode.com/svn/maven</url>
+        </repository>
+        <repository>
+            <id>rmuir</id>
+            <name>rmuir repo</name>
+            <url>http://people.apache.org/~rmuir/staging_area/lucene-solr-4.0bRC0-rev1370099/lucene/maven</url>
         </repository>
     </repositories>
 
@@ -51,7 +56,7 @@
         </dependency>
         <dependency>
             <groupId>org.apache.lucene</groupId>
-            <artifactId>lucene-analyzers</artifactId>
+            <artifactId>lucene-analyzers-common</artifactId>
             <version>${lucene.version}</version>
             <scope>compile</scope>
         </dependency>
