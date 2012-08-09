@@ -117,7 +117,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    public Byte value(Fieldable field) {
+    public Byte value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -215,7 +215,7 @@ public class ByteFieldMapper extends NumberFieldMapper<Byte> {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         byte value;
         float boost = this.boost;
         if (context.externalValueSet()) {

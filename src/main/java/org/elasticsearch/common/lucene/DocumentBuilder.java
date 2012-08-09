@@ -35,11 +35,11 @@ public class DocumentBuilder {
         return new DocumentBuilder();
     }
 
-    public static Fieldable uidField(String value) {
+    public static Field uidField(String value) {
         return uidField(value, 0);
     }
 
-    public static Fieldable uidField(String value, long version) {
+    public static Field uidField(String value, long version) {
         return new UidField("_uid", value, version);
     }
 
@@ -74,7 +74,7 @@ public class DocumentBuilder {
         return this;
     }
 
-    public DocumentBuilder add(Fieldable field) {
+    public DocumentBuilder add(Field field) {
         document.add(field);
         return this;
     }

@@ -44,7 +44,7 @@ public class PathMatchDynamicTempalteTests {
         byte[] json = copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/dynamictemplate/pathmatch/test-data.json");
         Document doc = docMapper.parse(new BytesArray(json)).rootDoc();
 
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f.name(), equalTo("name"));
         assertThat(f.stringValue(), equalTo("top_level"));
         assertThat(f.isStored(), equalTo(false));

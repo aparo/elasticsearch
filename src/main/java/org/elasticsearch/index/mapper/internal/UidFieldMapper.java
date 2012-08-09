@@ -140,7 +140,7 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Field parseCreateField(ParseContext context) throws IOException {
         context.uid(Uid.createUid(context.stringBuilder(), context.type(), context.id()));
         // so, caching uid stream and field is fine
         // since we don't do any mapping parsing without immediate indexing
@@ -151,7 +151,7 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     @Override
-    public Uid value(Fieldable field) {
+    public Uid value(Field field) {
         return Uid.createUid(field.stringValue());
     }
 
@@ -161,7 +161,7 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return field.stringValue();
     }
 

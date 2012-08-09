@@ -154,7 +154,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
                     source = extractSource(doc, docMapper);
 
                     for (Object oField : doc.getFields()) {
-                        Fieldable field = (Fieldable) oField;
+                        Field field = (Field) oField;
                         String name = field.name();
                         Object value = null;
                         FieldMappers fieldMappers = docMapper.mappers().indexName(field.name());
@@ -360,7 +360,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
 
     private static byte[] extractSource(Document doc, DocumentMapper documentMapper) {
         byte[] source = null;
-        Fieldable sourceField = doc.getFieldable(documentMapper.sourceMapper().names().indexName());
+        Field sourceField = doc.getFieldable(documentMapper.sourceMapper().names().indexName());
         if (sourceField != null) {
             source = documentMapper.sourceMapper().nativeValue(sourceField);
             doc.removeField(documentMapper.sourceMapper().names().indexName());

@@ -878,7 +878,7 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         }
 
         @Override
-        public int getOffsetGap(Fieldable field) {
+        public int getOffsetGap(Field field) {
             String fieldName = field.name();
             int dotIndex = fieldName.indexOf('.');
             if (dotIndex != -1) {
@@ -976,7 +976,7 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         }
 
         @Override
-        public int getOffsetGap(Fieldable field) {
+        public int getOffsetGap(Field field) {
             String fieldName = field.name();
             int dotIndex = fieldName.indexOf('.');
             if (dotIndex != -1) {

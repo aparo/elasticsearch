@@ -189,7 +189,7 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
                     try {
                         Document doc = hitContext.reader().document(hitContext.docId(), new SingleFieldSelector(mapper.names().indexName()));
                         textsToHighlight = new ArrayList<Object>(doc.getFields().size());
-                        for (Fieldable docField : doc.getFields()) {
+                        for (Field docField : doc.getFields()) {
                             if (docField.stringValue() != null) {
                                 textsToHighlight.add(docField.stringValue());
                             }

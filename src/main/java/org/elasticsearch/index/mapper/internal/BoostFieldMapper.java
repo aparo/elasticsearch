@@ -128,7 +128,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    public Float value(Fieldable field) {
+    public Float value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -229,7 +229,7 @@ public class BoostFieldMapper extends NumberFieldMapper<Float> implements Intern
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         final float value = parseFloatValue(context);
         if (Float.isNaN(value)) {
             return null;

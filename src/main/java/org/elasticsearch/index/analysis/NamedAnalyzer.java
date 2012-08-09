@@ -85,7 +85,7 @@ public class NamedAnalyzer extends Analyzer {
     }
 
     @Override
-    public int getOffsetGap(Fieldable field) {
+    public int getOffsetGap(String field) {
         return analyzer.getOffsetGap(field);
     }
 

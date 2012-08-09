@@ -173,7 +173,7 @@ public class FetchPhase implements SearchPhase {
             hits[index] = searchHit;
 
             for (Object oField : doc.getFields()) {
-                Fieldable field = (Fieldable) oField;
+                Field field = (Field) oField;
                 String name = field.name();
 
                 // ignore UID, we handled it above
@@ -262,7 +262,7 @@ public class FetchPhase implements SearchPhase {
     }
 
     private byte[] extractSource(Document doc, DocumentMapper documentMapper) {
-        Fieldable sourceField = doc.getFieldable(SourceFieldMapper.NAME);
+        Field sourceField = doc.getFieldable(SourceFieldMapper.NAME);
         if (sourceField != null) {
             return documentMapper.sourceMapper().nativeValue(sourceField);
         }
@@ -276,7 +276,7 @@ public class FetchPhase implements SearchPhase {
         }
         // no type, nothing to do (should not really happen)
         List<String> fieldNames = new ArrayList<String>();
-        for (Fieldable field : doc.getFields()) {
+        for (Field field : doc.getFields()) {
             fieldNames.add(field.name());
         }
         throw new FetchPhaseExecutionException(context, "Failed to load uid from the index, missing internal _uid field, current fields in the doc [" + fieldNames + "], selector [" + fieldSelector + "]");

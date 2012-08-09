@@ -120,12 +120,12 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
     }
 
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return value(field);
     }
 
     @Override
-    public byte[] value(Fieldable field) {
+    public byte[] value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return value;
@@ -148,7 +148,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return null;
     }
 

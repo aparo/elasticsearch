@@ -118,7 +118,7 @@ public class LongFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    public Long value(Fieldable field) {
+    public Long value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -216,7 +216,7 @@ public class LongFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         long value;
         float boost = this.boost;
         if (context.externalValueSet()) {

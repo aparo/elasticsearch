@@ -114,13 +114,13 @@ public class DocumentMapper implements ToXContent {
          * Called before a field is added to the document. Return <tt>true</tt> to include
          * it in the document.
          */
-        boolean beforeFieldAdded(FieldMapper fieldMapper, Fieldable fieldable, ParseContext parseContent);
+        boolean beforeFieldAdded(FieldMapper fieldMapper, Field fieldable, ParseContext parseContent);
     }
 
     public static class ParseListenerAdapter implements ParseListener {
 
         @Override
-        public boolean beforeFieldAdded(FieldMapper fieldMapper, Fieldable fieldable, Object parseContext) {
+        public boolean beforeFieldAdded(FieldMapper fieldMapper, Field fieldable, Object parseContext) {
             return true;
         }
     }

@@ -173,7 +173,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Field parseCreateField(ParseContext context) throws IOException {
         if (!enabled) {
             return null;
         }
@@ -200,7 +200,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override
-    public Void value(Fieldable field) {
+    public Void value(Field field) {
         return null;
     }
 
@@ -210,12 +210,12 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return null;
     }
 
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return null;
     }
 

@@ -54,7 +54,7 @@ public class JavaMultiFieldMergeTests {
 
         BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/multifield/merge/test-data.json"));
         Document doc = docMapper.parse(json).rootDoc();
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f, notNullValue());
         f = doc.getFieldable("name.indexed");
         assertThat(f, nullValue());

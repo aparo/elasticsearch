@@ -133,7 +133,7 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         if (!enabled) {
             return null;
         }

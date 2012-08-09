@@ -84,7 +84,7 @@ public class FieldLookup {
         }
         valueLoaded = true;
         value = null;
-        Fieldable field = doc.getFieldable(mapper.names().indexName());
+        Field field = doc.getFieldable(mapper.names().indexName());
         if (field == null) {
             return null;
         }
@@ -98,8 +98,8 @@ public class FieldLookup {
         }
         valuesLoaded = true;
         values.clear();
-        Fieldable[] fields = doc.getFieldables(mapper.names().indexName());
-        for (Fieldable field : fields) {
+        Field[] fields = doc.getFieldables(mapper.names().indexName());
+        for (Field field : fields) {
             values.add(mapper.value(field));
         }
         return values;

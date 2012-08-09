@@ -155,19 +155,19 @@ public interface FieldMapper<T> {
     /**
      * Returns the value that will be used as a result for search. Can be only of specific types... .
      */
-    Object valueForSearch(Fieldable field);
+    Object valueForSearch(Field field);
 
     /**
      * Returns the actual value of the field.
      */
-    T value(Fieldable field);
+    T value(Field field);
 
     T valueFromString(String value);
 
     /**
      * Returns the actual value of the field as string.
      */
-    String valueAsString(Fieldable field);
+    String valueAsString(Field field);
 
     /**
      * Returns the indexed value.

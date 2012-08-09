@@ -311,7 +311,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     @Override
     public void parse(ParseContext context) throws IOException {
         try {
-            Fieldable field = parseCreateField(context);
+            Field field = parseCreateField(context);
             if (field == null) {
                 return;
             }
@@ -328,7 +328,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         }
     }
 
-    protected abstract Fieldable parseCreateField(ParseContext context) throws IOException;
+    protected abstract Field parseCreateField(ParseContext context) throws IOException;
 
     /**
      * Derived classes can override it to specify that boost value is set by derived classes.
@@ -348,7 +348,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     }
 
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return valueAsString(field);
     }
 

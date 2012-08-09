@@ -120,7 +120,7 @@ public class DefaultSourceMappingTests {
                 .startObject("path2").field("field2", "value2").endObject()
                 .endObject().bytes());
 
-        Fieldable sourceField = doc.rootDoc().getFieldable("_source");
+        Field sourceField = doc.rootDoc().getFieldable("_source");
         Map<String, Object> sourceAsMap = XContentFactory.xContent(XContentType.JSON).createParser(sourceField.getBinaryValue(), sourceField.getBinaryOffset(), sourceField.getBinaryLength()).mapAndClose();
         assertThat(sourceAsMap.containsKey("path1"), equalTo(true));
         assertThat(sourceAsMap.containsKey("path2"), equalTo(false));

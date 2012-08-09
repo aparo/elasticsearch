@@ -147,12 +147,12 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
      * Override the default behavior to return a timestamp
      */
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return value(field);
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         Long value = value(field);
         if (value == null) {
             return null;
@@ -184,7 +184,7 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         if (enabled) {
             long timestamp = context.sourceToParse().timestamp();
             if (!indexed() && !stored()) {

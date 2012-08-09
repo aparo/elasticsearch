@@ -88,7 +88,7 @@ public class SimpleLuceneTests {
         IndexSearcher searcher = new IndexSearcher(reader);
         TopDocs topDocs = searcher.search(new TermQuery(new Term("_id", "1")), 1);
         Document doc = searcher.doc(topDocs.scoreDocs[0].doc);
-        Fieldable f = doc.getFieldable("test");
+        Field f = doc.getFieldable("test");
         assertThat(f.stringValue(), equalTo("2"));
 
         topDocs = searcher.search(new TermQuery(new Term("test", NumericUtils.intToPrefixCoded(2))), 1);

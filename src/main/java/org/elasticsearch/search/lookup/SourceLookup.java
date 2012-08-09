@@ -62,7 +62,7 @@ public class SourceLookup implements Map {
         }
         try {
             Document doc = reader.document(docId, SourceFieldSelector.INSTANCE);
-            Fieldable sourceField = doc.getFieldable(SourceFieldMapper.NAME);
+            Field sourceField = doc.getFieldable(SourceFieldMapper.NAME);
             if (sourceField == null) {
                 source = ImmutableMap.of();
             } else {

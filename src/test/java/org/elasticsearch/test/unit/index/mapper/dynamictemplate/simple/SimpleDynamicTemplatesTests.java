@@ -44,7 +44,7 @@ public class SimpleDynamicTemplatesTests {
         byte[] json = copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/dynamictemplate/simple/test-data.json");
         Document doc = docMapper.parse(new BytesArray(json)).rootDoc();
 
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f.name(), equalTo("name"));
         assertThat(f.stringValue(), equalTo("some name"));
         assertThat(f.isIndexed(), equalTo(true));
@@ -100,7 +100,7 @@ public class SimpleDynamicTemplatesTests {
         byte[] json = copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/dynamictemplate/simple/test-data.json");
         Document doc = docMapper.parse(new BytesArray(json)).rootDoc();
 
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f.name(), equalTo("name"));
         assertThat(f.stringValue(), equalTo("some name"));
         assertThat(f.isIndexed(), equalTo(true));

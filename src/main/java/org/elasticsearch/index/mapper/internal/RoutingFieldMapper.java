@@ -129,12 +129,12 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
     }
 
     public String value(Document document) {
-        Fieldable field = document.getFieldable(names.indexName());
+        Field field = document.getFieldable(names.indexName());
         return field == null ? null : value(field);
     }
 
     @Override
-    public String value(Fieldable field) {
+    public String value(Field field) {
         return field.stringValue();
     }
 
@@ -144,7 +144,7 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return value(field);
     }
 
@@ -159,7 +159,7 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
         if (path != null && routing != null) {
             // we have a path, check if we can validate we have the same routing value as the one in the doc...
             String value = null;
-            Fieldable field = context.doc().getFieldable(path);
+            Field field = context.doc().getFieldable(path);
             if (field != null) {
                 value = field.stringValue();
                 if (value == null) {

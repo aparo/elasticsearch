@@ -125,7 +125,7 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
 
     // Overrides valueForSearch to display live value of remaining ttl
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         long now;
         SearchContext searchContext = SearchContext.current();
         if (searchContext != null) {
@@ -177,7 +177,7 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException, AlreadyExpiredException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException, AlreadyExpiredException {
         if (enabled) {
             long ttl = context.sourceToParse().ttl();
             if (ttl <= 0 && defaultTTL > 0) { // no ttl provided so we use the default value

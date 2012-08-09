@@ -66,7 +66,7 @@ public final class FieldNameAnalyzer extends Analyzer {
     }
 
     @Override
-    public int getOffsetGap(Fieldable field) {
+    public int getOffsetGap(Field field) {
         return getAnalyzer(field.name()).getOffsetGap(field);
     }
 

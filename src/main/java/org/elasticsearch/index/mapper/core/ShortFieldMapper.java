@@ -118,7 +118,7 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    public Short value(Fieldable field) {
+    public Short value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -216,7 +216,7 @@ public class ShortFieldMapper extends NumberFieldMapper<Short> {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         short value;
         float boost = this.boost;
         if (context.externalValueSet()) {

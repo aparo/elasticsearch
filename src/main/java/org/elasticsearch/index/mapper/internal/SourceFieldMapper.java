@@ -338,16 +338,16 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
     }
 
     public byte[] value(Document document) {
-        Fieldable field = document.getFieldable(names.indexName());
+        Field field = document.getFieldable(names.indexName());
         return field == null ? null : value(field);
     }
 
-    public byte[] nativeValue(Fieldable field) {
+    public byte[] nativeValue(Field field) {
         return field.getBinaryValue();
     }
 
     @Override
-    public byte[] value(Fieldable field) {
+    public byte[] value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return value;
@@ -365,7 +365,7 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         throw new UnsupportedOperationException();
     }
 

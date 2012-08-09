@@ -48,7 +48,7 @@ public class MultiFieldTests {
         BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/multifield/test-data.json"));
         Document doc = docMapper.parse(json).rootDoc();
 
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f.name(), equalTo("name"));
         assertThat(f.stringValue(), equalTo("some name"));
         assertThat(f.isStored(), equalTo(true));
@@ -95,7 +95,7 @@ public class MultiFieldTests {
         BytesReference json = new BytesArray(copyToBytesFromClasspath("/org/elasticsearch/test/unit/index/mapper/multifield/test-data.json"));
         Document doc = docMapper.parse(json).rootDoc();
 
-        Fieldable f = doc.getFieldable("name");
+        Field f = doc.getFieldable("name");
         assertThat(f.name(), equalTo("name"));
         assertThat(f.stringValue(), equalTo("some name"));
         assertThat(f.isStored(), equalTo(true));

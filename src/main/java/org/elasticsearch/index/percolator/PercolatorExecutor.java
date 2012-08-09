@@ -292,7 +292,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         final CustomMemoryIndex memoryIndex = new CustomMemoryIndex();
 
         // TODO: This means percolation does not support nested docs...
-        for (Fieldable field : request.doc().rootDoc().getFields()) {
+        for (Field field : request.doc().rootDoc().getFields()) {
             if (!field.isIndexed()) {
                 continue;
             }

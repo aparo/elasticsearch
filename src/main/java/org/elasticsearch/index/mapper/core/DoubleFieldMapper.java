@@ -119,7 +119,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    public Double value(Fieldable field) {
+    public Double value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -216,7 +216,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         double value;
         float boost = this.boost;
         if (context.externalValueSet()) {

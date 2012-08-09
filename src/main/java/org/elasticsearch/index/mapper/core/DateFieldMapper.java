@@ -172,7 +172,7 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    public Long value(Fieldable field) {
+    public Long value(Field field) {
         byte[] value = field.getBinaryValue();
         if (value == null) {
             return null;
@@ -186,15 +186,15 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     }
 
     /**
-     * Dates should return as a string, delegates to {@link #valueAsString(org.apache.lucene.document.Fieldable)}.
+     * Dates should return as a string, delegates to {@link #valueAsString(org.apache.lucene.document.Field)}.
      */
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return valueAsString(field);
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         Long value = value(field);
         if (value == null) {
             return null;
@@ -295,7 +295,7 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    protected Fieldable innerParseCreateField(ParseContext context) throws IOException {
+    protected Field innerParseCreateField(ParseContext context) throws IOException {
         String dateAsString = null;
         Long value = null;
         float boost = this.boost;

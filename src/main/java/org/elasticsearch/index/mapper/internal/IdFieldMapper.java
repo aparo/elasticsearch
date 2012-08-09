@@ -129,12 +129,12 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements Intern
     }
 
     public String value(Document document) {
-        Fieldable field = document.getFieldable(names.indexName());
+        Field field = document.getFieldable(names.indexName());
         return field == null ? null : value(field);
     }
 
     @Override
-    public String value(Fieldable field) {
+    public String value(Field field) {
         return field.stringValue();
     }
 
@@ -144,7 +144,7 @@ public class IdFieldMapper extends AbstractFieldMapper<String> implements Intern
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return value(field);
     }
 

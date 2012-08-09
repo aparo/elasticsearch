@@ -20,14 +20,14 @@
 package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.analysis.NumericTokenStream;
-import org.apache.lucene.document.AbstractField;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.analysis.NamedAnalyzer;
 import org.elasticsearch.index.cache.field.data.FieldDataCache;
@@ -165,7 +165,7 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
     }
 
     @Override
-    protected Fieldable parseCreateField(ParseContext context) throws IOException {
+    protected Field parseCreateField(ParseContext context) throws IOException {
         RuntimeException e;
         try {
             return innerParseCreateField(context);
@@ -182,7 +182,7 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
         }
     }
 
-    protected abstract Fieldable innerParseCreateField(ParseContext context) throws IOException;
+    protected abstract Field innerParseCreateField(ParseContext context) throws IOException;
 
     /**
      * Use the field query created here when matching on numbers.
@@ -231,12 +231,12 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
      * Override the default behavior (to return the string, and return the actual Number instance).
      */
     @Override
-    public Object valueForSearch(Fieldable field) {
+    public Object valueForSearch(Field field) {
         return value(field);
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         Number num = value(field);
         return num == null ? null : num.toString();
     }
@@ -270,28 +270,19 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
     }
 
     // used to we can use a numeric field in a document that is then parsed twice!
-    public abstract static class CustomNumericField extends AbstractField {
+    public abstract static class CustomNumericField extends Field {
 
         protected final NumberFieldMapper mapper;
 
         public CustomNumericField(NumberFieldMapper mapper, byte[] value) {
+            super(mapper.names().indexName(),
+                    Lucene.getDefaultFieldType(mapper.stored(), mapper.indexed(), mapper.tokenized(),
+                            false, false, false, mapper.omitNorms(), FieldInfo.IndexOptions.DOCS_ONLY));
             this.mapper = mapper;
-            this.name = mapper.names().indexName();
-            fieldsData = value;
-
-            isIndexed = mapper.indexed();
-            isTokenized = mapper.indexed();
-            indexOptions = FieldInfo.IndexOptions.DOCS_ONLY;
-            omitNorms = mapper.omitNorms();
-
-            if (value != null) {
-                isStored = true;
-                isBinary = true;
-                binaryLength = value.length;
-                binaryOffset = 0;
-            }
-
-            setStoreTermVector(Field.TermVector.NO);
+            if (value != null)
+                fieldsData = new BytesRef(value);
+            else
+                fieldsData = null;
         }
 
         @Override

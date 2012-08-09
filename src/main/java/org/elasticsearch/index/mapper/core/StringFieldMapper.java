@@ -197,7 +197,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     }
 
     @Override
-    public String value(Fieldable field) {
+    public String value(Field field) {
         return field.stringValue();
     }
 
@@ -207,7 +207,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     }
 
     @Override
-    public String valueAsString(Fieldable field) {
+    public String valueAsString(Field field) {
         return value(field);
     }
 

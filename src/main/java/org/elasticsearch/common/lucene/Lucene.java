@@ -21,6 +21,7 @@ package org.elasticsearch.common.lucene;
 
 import org.apache.lucene.analysis.core.KeywordAnalyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.util.Version;
@@ -386,6 +387,29 @@ public class Lucene {
         public boolean acceptsDocsOutOfOrder() {
             return true;
         }
+    }
+
+    public static FieldType getDefaultFieldType(boolean stored, boolean indexed, boolean tokenized,
+                                                boolean termVector, boolean termVectorOffset, boolean termVectorPositions,
+                                                boolean omitNorms, FieldInfo.IndexOptions indexOptions) {
+        FieldType result = new FieldType();
+        result.setStored(stored);
+        result.setIndexed(indexed);
+        result.setTokenized(tokenized);
+        result.setStoreTermVectors(termVector);
+        result.setStoreTermVectorOffsets(termVectorOffset);
+        result.setStoreTermVectorPositions(termVectorPositions);
+        result.setOmitNorms(omitNorms);
+        result.setIndexOptions(indexOptions);
+        return result;
+    }
+
+    public static FieldType getDefaultFieldType(){
+        return getDefaultFieldType(false, false, false, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+    }
+
+    public static FieldType getDefaultFieldType(boolean store, boolean index) {
+        return getDefaultFieldType(store, index, index, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
     }
 
     private Lucene() {
