@@ -46,7 +46,7 @@ public class StringFieldDataType implements FieldDataType<StringFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.STRING;
+                return SortField.Type.STRING;
             }
         };
     }

@@ -97,8 +97,8 @@ public class QueryFacetCollector extends AbstractFacetCollector implements Optim
             if (Queries.isMatchAllQuery(fQuery.getQuery())) {
                 return fQuery.getFilter();
             }
-        } else if (query instanceof DeletionAwareConstantScoreQuery) {
-            return ((DeletionAwareConstantScoreQuery) query).getFilter();
+        } else if (query instanceof ConstantScoreQuery) {
+            return ((ConstantScoreQuery) query).getFilter();
         } else if (query instanceof ConstantScoreQuery) {
             ConstantScoreQuery constantScoreQuery = (ConstantScoreQuery) query;
             if (constantScoreQuery.getFilter() != null) {

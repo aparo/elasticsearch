@@ -173,7 +173,7 @@ public class SearchPhaseController extends AbstractComponent {
                         if (fDoc.fields[i] != null) {
                             allValuesAreNull = false;
                             if (fDoc.fields[i] instanceof String) {
-                                fieldDocs.fields[i] = new SortField(fieldDocs.fields[i].getField(), SortField.STRING, fieldDocs.fields[i].getReverse());
+                                fieldDocs.fields[i] = new SortField(fieldDocs.fields[i].getField(), SortField.Type.STRING, fieldDocs.fields[i].getReverse());
                             }
                             resolvedField = true;
                             break;
@@ -185,7 +185,7 @@ public class SearchPhaseController extends AbstractComponent {
                 }
                 if (!resolvedField && allValuesAreNull && fieldDocs.fields[i].getField() != null) {
                     // we did not manage to resolve a field (and its not score or doc, which have no field), and all the fields are null (which can only happen for STRING), make it a STRING
-                    fieldDocs.fields[i] = new SortField(fieldDocs.fields[i].getField(), SortField.STRING, fieldDocs.fields[i].getReverse());
+                    fieldDocs.fields[i] = new SortField(fieldDocs.fields[i].getField(), SortField.Type.STRING, fieldDocs.fields[i].getReverse());
                 }
             }
             queue = new ShardFieldDocSortedHitQueue(fieldDocs.fields, queueSize);
@@ -270,7 +270,7 @@ public class SearchPhaseController extends AbstractComponent {
             sorted = true;
             TopFieldDocs fieldDocs = (TopFieldDocs) querySearchResult.queryResult().topDocs();
             for (int i = 0; i < fieldDocs.fields.length; i++) {
-                if (fieldDocs.fields[i].getType() == SortField.SCORE) {
+                if (fieldDocs.fields[i].getType() == SortField.Type.SCORE) {
                     sortScoreIndex = i;
                 }
             }

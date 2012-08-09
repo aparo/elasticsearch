@@ -21,7 +21,7 @@ package org.elasticsearch.index.percolator;
 
 import com.google.common.collect.Maps;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.*;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -123,7 +123,7 @@ public class PercolatorService extends AbstractIndexComponent {
         try {
             // create a query to fetch all queries that are registered under the index name (which is the type
             // in the percolator).
-            Query query = new DeletionAwareConstantScoreQuery(indexQueriesFilter(indexName));
+            Query query = new ConstantScoreQuery(indexQueriesFilter(indexName));
             QueriesLoaderCollector queries = new QueriesLoaderCollector();
             searcher.searcher().search(query, queries);
             percolator.addQueries(queries.queries());

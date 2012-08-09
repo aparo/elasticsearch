@@ -33,20 +33,20 @@ public class XContentRestResponse extends AbstractRestResponse {
     private static final byte[] END_JSONP;
 
     static {
-        UnicodeUtil.UTF8Result U_END_JSONP = new UnicodeUtil.UTF8Result();
+        Unicode.UTF8Result U_END_JSONP = new Unicode.UTF8Result();
         UnicodeUtil.UTF16toUTF8(");", 0, ");".length(), U_END_JSONP);
         END_JSONP = new byte[U_END_JSONP.length];
         System.arraycopy(U_END_JSONP.result, 0, END_JSONP, 0, U_END_JSONP.length);
     }
 
-    private static ThreadLocal<ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>> prefixCache = new ThreadLocal<ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>>() {
+    private static ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>> prefixCache = new ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>>() {
         @Override
-        protected ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result> initialValue() {
-            return new ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>(new UnicodeUtil.UTF8Result());
+        protected ThreadLocals.CleanableValue<Unicode.UTF8Result> initialValue() {
+            return new ThreadLocals.CleanableValue<Unicode.UTF8Result>(new Unicode.UTF8Result());
         }
     };
 
-    private final UnicodeUtil.UTF8Result prefixUtf8Result;
+    private final Unicode.UTF8Result prefixUtf8Result;
 
     private final RestStatus status;
 
@@ -119,12 +119,12 @@ public class XContentRestResponse extends AbstractRestResponse {
         return 0;
     }
 
-    private static UnicodeUtil.UTF8Result startJsonp(RestRequest request) {
+    private static Unicode.UTF8Result startJsonp(RestRequest request) {
         String callback = request.param("callback");
         if (callback == null) {
             return null;
         }
-        UnicodeUtil.UTF8Result result = prefixCache.get().get();
+        Unicode.UTF8Result result = prefixCache.get().get();
         UnicodeUtil.UTF16toUTF8(callback, 0, callback.length(), result);
         result.result[result.length] = '(';
         result.length++;

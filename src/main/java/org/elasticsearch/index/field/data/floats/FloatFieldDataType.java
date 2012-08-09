@@ -43,7 +43,7 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.FLOAT;
+                    return SortField.Type.FLOAT;
                 }
             };
         }
@@ -56,7 +56,7 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.FLOAT;
+                    return SortField.Type.FLOAT;
                 }
             };
         }
@@ -69,7 +69,7 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.FLOAT;
+                    return SortField.Type.FLOAT;
                 }
             };
         }
@@ -81,7 +81,7 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.FLOAT;
+                return SortField.Type.FLOAT;
             }
         };
     }

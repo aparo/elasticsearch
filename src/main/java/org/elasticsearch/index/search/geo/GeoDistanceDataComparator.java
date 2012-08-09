@@ -78,7 +78,7 @@ public class GeoDistanceDataComparator extends FieldComparator {
 
         @Override
         public int reducedType() {
-            return SortField.DOUBLE;
+            return SortField.Type.DOUBLE;
         }
     }
 

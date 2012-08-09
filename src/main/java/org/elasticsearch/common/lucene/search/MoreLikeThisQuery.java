@@ -22,7 +22,7 @@ package org.elasticsearch.common.lucene.search;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similar.MoreLikeThis;
+import org.apache.lucene.queries.mlt.MoreLikeThis;
 import org.elasticsearch.common.io.FastStringReader;
 
 import java.io.IOException;

@@ -117,7 +117,7 @@ public class NestedQueryParser implements QueryParser {
             }
 
             if (filter != null) {
-                query = new DeletionAwareConstantScoreQuery(filter);
+                query = new ConstantScoreQuery(filter);
             }
 
             MapperService.SmartNameObjectMapper mapper = parseContext.smartObjectMapper(path);

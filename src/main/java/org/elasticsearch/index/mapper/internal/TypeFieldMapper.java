@@ -21,9 +21,9 @@ package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.PrefixFilter;
 import org.apache.lucene.search.Query;
@@ -142,7 +142,7 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
 
     @Override
     public Query fieldQuery(String value, @Nullable QueryParseContext context) {
-        return new DeletionAwareConstantScoreQuery(context.cacheFilter(fieldFilter(value, context), null));
+        return new ConstantScoreQuery(context.cacheFilter(fieldFilter(value, context), null));
     }
 
     @Override

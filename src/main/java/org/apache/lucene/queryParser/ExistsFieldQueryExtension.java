@@ -19,7 +19,7 @@
 
 package org.apache.lucene.queryParser;
 
-import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermRangeFilter;
@@ -54,6 +54,6 @@ public class ExistsFieldQueryExtension implements FieldQueryExtension {
 
         filter = wrapSmartNameFilter(filter, smartNameFieldMappers, parseContext);
 
-        return new DeletionAwareConstantScoreQuery(filter);
+        return new ConstantScoreQuery(filter);
     }
 }

@@ -340,7 +340,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             // no version, get the version from the index, we know that we refresh on flush
             Searcher searcher = searcher();
             try {
-                UnicodeUtil.UTF8Result utf8 = Unicode.fromStringAsUtf8(get.uid().text());
+                Unicode.UTF8Result utf8 = Unicode.fromStringAsUtf8(get.uid().text());
                 for (IndexReader reader : searcher.searcher().subReaders()) {
                     BloomFilter filter = bloomCache.filter(reader, UidFieldMapper.NAME, asyncLoadBloomFilter);
                     // we know that its not there...
@@ -1270,7 +1270,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
     }
 
     private long loadCurrentVersionFromIndex(Term uid) {
-        UnicodeUtil.UTF8Result utf8 = Unicode.fromStringAsUtf8(uid.text());
+        Unicode.UTF8Result utf8 = Unicode.fromStringAsUtf8(uid.text());
         Searcher searcher = searcher();
         try {
             for (IndexReader reader : searcher.searcher().subReaders()) {

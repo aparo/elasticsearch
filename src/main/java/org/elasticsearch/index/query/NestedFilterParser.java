@@ -112,7 +112,7 @@ public class NestedFilterParser implements FilterParser {
             }
 
             if (filter != null) {
-                query = new DeletionAwareConstantScoreQuery(filter);
+                query = new ConstantScoreQuery(filter);
             }
 
             query.setBoost(boost);

@@ -183,7 +183,7 @@ public class SimpleBloomCache extends AbstractIndexComponent implements BloomCac
             TermDocs termDocs = null;
             TermEnum termEnum = null;
             try {
-                UnicodeUtil.UTF8Result utf8Result = new UnicodeUtil.UTF8Result();
+                Unicode.UTF8Result utf8Result = new Unicode.UTF8Result();
                 BloomFilter filter = BloomFilterFactory.getFilter(reader.numDocs(), 15);
                 termDocs = reader.termDocs();
                 termEnum = reader.terms(new Term(field));

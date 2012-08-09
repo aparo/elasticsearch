@@ -45,7 +45,7 @@ public class GeoPointFieldDataType implements FieldDataType<GeoPointFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.STRING;
+                return SortField.Type.STRING;
             }
         };
     }

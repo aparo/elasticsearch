@@ -84,7 +84,7 @@ public class QueryPhase implements SearchPhase {
         Filter searchFilter = context.mapperService().searchFilter(context.types());
         if (searchFilter != null) {
             if (Queries.isMatchAllQuery(context.query())) {
-                Query q = new DeletionAwareConstantScoreQuery(context.filterCache().cache(searchFilter));
+                Query q = new ConstantScoreQuery(context.filterCache().cache(searchFilter));
                 q.setBoost(context.query().getBoost());
                 context.parsedQuery(new ParsedQuery(q, context.parsedQuery()));
             } else {

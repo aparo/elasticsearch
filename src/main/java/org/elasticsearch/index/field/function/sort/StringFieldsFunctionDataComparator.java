@@ -52,7 +52,7 @@ public class StringFieldsFunctionDataComparator extends FieldComparator {
 
         @Override
         public int reducedType() {
-            return SortField.STRING;
+            return SortField.Type.STRING;
         }
     }
 

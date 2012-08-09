@@ -43,7 +43,7 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.LONG;
+                    return SortField.Type.LONG;
                 }
             };
         }
@@ -56,7 +56,7 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.LONG;
+                    return SortField.Type.LONG;
                 }
             };
         }
@@ -69,7 +69,7 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.LONG;
+                    return SortField.Type.LONG;
                 }
             };
         }
@@ -81,7 +81,7 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.LONG;
+                return SortField.Type.LONG;
             }
         };
     }

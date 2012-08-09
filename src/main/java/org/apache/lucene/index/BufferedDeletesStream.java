@@ -348,7 +348,7 @@ class BufferedDeletesStream implements XIndexWriter.XBufferedDeletesStream {
         assert checkDeleteTerm(null);
 
         BloomFilter filter = bloomCache == null ? BloomFilter.NONE : bloomCache.filter(reader, UidFieldMapper.NAME, true);
-        UnicodeUtil.UTF8Result utf8 = new UnicodeUtil.UTF8Result();
+        Unicode.UTF8Result utf8 = new Unicode.UTF8Result();
 
         TermDocs docs = reader.termDocs();
 

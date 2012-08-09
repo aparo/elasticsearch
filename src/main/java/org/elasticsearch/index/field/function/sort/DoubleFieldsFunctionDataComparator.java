@@ -53,7 +53,7 @@ public class DoubleFieldsFunctionDataComparator extends FieldComparator {
 
         @Override
         public int reducedType() {
-            return SortField.DOUBLE;
+            return SortField.Type.DOUBLE;
         }
     }
 

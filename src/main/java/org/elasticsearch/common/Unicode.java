@@ -29,10 +29,10 @@ import java.util.Arrays;
  */
 public class Unicode {
 
-    private static ThreadLocal<ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>> cachedUtf8Result = new ThreadLocal<ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>>() {
+    private static ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>> cachedUtf8Result = new ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>>() {
         @Override
-        protected ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result> initialValue() {
-            return new ThreadLocals.CleanableValue<UnicodeUtil.UTF8Result>(new UnicodeUtil.UTF8Result());
+        protected ThreadLocals.CleanableValue<Unicode.UTF8Result> initialValue() {
+            return new ThreadLocals.CleanableValue<Unicode.UTF8Result>(new Unicode.UTF8Result());
         }
     };
 
@@ -47,20 +47,20 @@ public class Unicode {
         if (source == null) {
             return null;
         }
-        UnicodeUtil.UTF8Result result = unsafeFromStringAsUtf8(source);
+        Unicode.UTF8Result result = unsafeFromStringAsUtf8(source);
         return Arrays.copyOfRange(result.result, 0, result.length);
     }
 
-    public static UnicodeUtil.UTF8Result fromStringAsUtf8(String source) {
+    public static Unicode.UTF8Result fromStringAsUtf8(String source) {
         if (source == null) {
             return null;
         }
-        UnicodeUtil.UTF8Result result = new UnicodeUtil.UTF8Result();
+        Unicode.UTF8Result result = new Unicode.UTF8Result();
         UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
         return result;
     }
 
-    public static void fromStringAsUtf8(String source, UnicodeUtil.UTF8Result result) {
+    public static void fromStringAsUtf8(String source, Unicode.UTF8Result result) {
         if (source == null) {
             result.length = 0;
             return;
@@ -68,11 +68,11 @@ public class Unicode {
         UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
     }
 
-    public static UnicodeUtil.UTF8Result unsafeFromStringAsUtf8(String source) {
+    public static Unicode.UTF8Result unsafeFromStringAsUtf8(String source) {
         if (source == null) {
             return null;
         }
-        UnicodeUtil.UTF8Result result = cachedUtf8Result.get().get();
+        Unicode.UTF8Result result = cachedUtf8Result.get().get();
         UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
         return result;
     }

@@ -20,7 +20,7 @@
 package org.elasticsearch.search.lookup;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.index.mapper.FieldMapper;
 
 import java.util.ArrayList;

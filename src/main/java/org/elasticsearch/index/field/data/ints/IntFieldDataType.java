@@ -43,7 +43,7 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.INT;
+                    return SortField.Type.INT;
                 }
             };
         }
@@ -56,7 +56,7 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.INT;
+                    return SortField.Type.INT;
                 }
             };
         }
@@ -69,7 +69,7 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.INT;
+                    return SortField.Type.INT;
                 }
             };
         }
@@ -81,7 +81,7 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.INT;
+                return SortField.Type.INT;
             }
         };
     }

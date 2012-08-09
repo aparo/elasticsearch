@@ -117,7 +117,7 @@ public class ShardFieldDocSortedHitQueue extends PriorityQueue<ShardFieldDoc> {
         int c = 0;
         for (int i = 0; i < n && c == 0; ++i) {
             final int type = fields[i].getType();
-            if (type == SortField.STRING) {
+            if (type == SortField.Type.STRING) {
                 final String s1 = (String) docA.fields[i];
                 final String s2 = (String) docB.fields[i];
                 // null values need to be sorted first, because of how FieldCache.getStringIndex()

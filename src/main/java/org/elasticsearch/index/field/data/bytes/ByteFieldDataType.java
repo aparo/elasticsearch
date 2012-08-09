@@ -43,7 +43,7 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.BYTE;
+                    return SortField.Type.BYTE;
                 }
             };
         }
@@ -56,7 +56,7 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.BYTE;
+                    return SortField.Type.BYTE;
                 }
             };
         }
@@ -69,7 +69,7 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.BYTE;
+                    return SortField.Type.BYTE;
                 }
             };
         }
@@ -81,7 +81,7 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.BYTE;
+                return SortField.Type.BYTE;
             }
         };
     }

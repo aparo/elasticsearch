@@ -32,7 +32,7 @@ import java.util.regex.Pattern;
 public class Queries {
 
     // We don't use MatchAllDocsQuery, its slower than the one below ... (much slower)
-    public final static Query MATCH_ALL_QUERY = new DeletionAwareConstantScoreQuery(new MatchAllDocsFilter());
+    public final static Query MATCH_ALL_QUERY = new ConstantScoreQuery(new MatchAllDocsFilter());
     public final static Query NO_MATCH_QUERY = MatchNoDocsQuery.INSTANCE;
 
     /**
@@ -113,8 +113,8 @@ public class Queries {
         if (query instanceof MatchAllDocsQuery) {
             return true;
         }
-        if (query instanceof DeletionAwareConstantScoreQuery) {
-            DeletionAwareConstantScoreQuery scoreQuery = (DeletionAwareConstantScoreQuery) query;
+        if (query instanceof ConstantScoreQuery) {
+            ConstantScoreQuery scoreQuery = (ConstantScoreQuery) query;
             if (scoreQuery.getFilter() instanceof MatchAllDocsFilter) {
                 return true;
             }

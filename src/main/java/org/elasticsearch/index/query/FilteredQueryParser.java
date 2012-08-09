@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Query;
@@ -109,7 +109,7 @@ public class FilteredQueryParser implements QueryParser {
 
         // if its a match_all query, use constant_score
         if (Queries.isMatchAllQuery(query)) {
-            Query q = new DeletionAwareConstantScoreQuery(filter);
+            Query q = new ConstantScoreQuery(filter);
             q.setBoost(boost);
             return q;
         }

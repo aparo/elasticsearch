@@ -22,7 +22,7 @@ package org.elasticsearch.test.unit.common.lucene.search;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
@@ -51,7 +51,7 @@ public class MatchAllDocsFilterTests {
         IndexReader reader = IndexReader.open(indexWriter, true);
         IndexSearcher searcher = new IndexSearcher(reader);
 
-        DeletionAwareConstantScoreQuery query = new DeletionAwareConstantScoreQuery(Queries.MATCH_ALL_FILTER);
+        ConstantScoreQuery query = new ConstantScoreQuery(Queries.MATCH_ALL_FILTER);
         long count = Lucene.count(searcher, query, -1);
         assertThat(count, equalTo(2l));
 

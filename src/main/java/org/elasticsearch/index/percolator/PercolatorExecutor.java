@@ -20,7 +20,7 @@
 package org.elasticsearch.index.percolator;
 
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.memory.CustomMemoryIndex;
 import org.apache.lucene.search.Collector;

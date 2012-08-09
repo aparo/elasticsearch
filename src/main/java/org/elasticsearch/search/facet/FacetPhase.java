@@ -117,7 +117,7 @@ public class FacetPhase implements SearchPhase {
             // now, go and execute the filters->collector ones
             for (Map.Entry<Filter, List<Collector>> entry : filtersByCollector.entrySet()) {
                 Filter filter = entry.getKey();
-                Query query = new DeletionAwareConstantScoreQuery(filter);
+                Query query = new ConstantScoreQuery(filter);
                 Filter searchFilter = context.mapperService().searchFilter(context.types());
                 if (searchFilter != null) {
                     query = new FilteredQuery(query, context.filterCache().cache(searchFilter));

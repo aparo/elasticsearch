@@ -21,7 +21,7 @@ package org.elasticsearch.search.lookup;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.IndexReader;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.bytes.BytesReference;

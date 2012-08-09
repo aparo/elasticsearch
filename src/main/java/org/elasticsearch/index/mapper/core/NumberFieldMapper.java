@@ -22,7 +22,7 @@ package org.elasticsearch.index.mapper.core;
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.AbstractField;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;

@@ -21,7 +21,7 @@ package org.elasticsearch.common.lucene;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.Fieldable;
+import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.common.lucene.uid.UidField;
 
 /**

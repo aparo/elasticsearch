@@ -22,7 +22,7 @@ package org.elasticsearch.rest;
 import org.apache.lucene.util.UnicodeUtil;
 
 /**
- * An http response that is built on top of {@link org.apache.lucene.util.UnicodeUtil.UTF8Result}.
+ * An http response that is built on top of {@link org.apache.lucene.util.Unicode.UTF8Result}.
  * <p/>
  * <p>Note, this class assumes that the utf8 result is not thread safe.
  *
@@ -30,10 +30,10 @@ import org.apache.lucene.util.UnicodeUtil;
  */
 public class Utf8RestResponse extends AbstractRestResponse implements RestResponse {
 
-    public static final UnicodeUtil.UTF8Result EMPTY;
+    public static final Unicode.UTF8Result EMPTY;
 
     static {
-        UnicodeUtil.UTF8Result temp = new UnicodeUtil.UTF8Result();
+        Unicode.UTF8Result temp = new Unicode.UTF8Result();
         temp.result = new byte[0];
         temp.length = 0;
         EMPTY = temp;
@@ -41,22 +41,22 @@ public class Utf8RestResponse extends AbstractRestResponse implements RestRespon
 
     private final RestStatus status;
 
-    private final UnicodeUtil.UTF8Result utf8Result;
+    private final Unicode.UTF8Result utf8Result;
 
-    private final UnicodeUtil.UTF8Result prefixUtf8Result;
+    private final Unicode.UTF8Result prefixUtf8Result;
 
-    private final UnicodeUtil.UTF8Result suffixUtf8Result;
+    private final Unicode.UTF8Result suffixUtf8Result;
 
     public Utf8RestResponse(RestStatus status) {
         this(status, EMPTY);
     }
 
-    public Utf8RestResponse(RestStatus status, UnicodeUtil.UTF8Result utf8Result) {
+    public Utf8RestResponse(RestStatus status, Unicode.UTF8Result utf8Result) {
         this(status, utf8Result, null, null);
     }
 
-    public Utf8RestResponse(RestStatus status, UnicodeUtil.UTF8Result utf8Result,
-                            UnicodeUtil.UTF8Result prefixUtf8Result, UnicodeUtil.UTF8Result suffixUtf8Result) {
+    public Utf8RestResponse(RestStatus status, Unicode.UTF8Result utf8Result,
+                            Unicode.UTF8Result prefixUtf8Result, Unicode.UTF8Result suffixUtf8Result) {
         this.status = status;
         this.utf8Result = utf8Result;
         this.prefixUtf8Result = prefixUtf8Result;

@@ -20,7 +20,7 @@
 package org.elasticsearch.index.query;
 
 import org.apache.lucene.search.ConstantScoreQuery;
-import org.apache.lucene.search.DeletionAwareConstantScoreQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.Strings;
@@ -99,7 +99,7 @@ public class ConstantScoreQueryParser implements QueryParser {
                 filter = parseContext.cacheFilter(filter, cacheKey);
             }
 
-            Query query1 = new DeletionAwareConstantScoreQuery(filter);
+            Query query1 = new ConstantScoreQuery(filter);
             query1.setBoost(boost);
             return query1;
         }

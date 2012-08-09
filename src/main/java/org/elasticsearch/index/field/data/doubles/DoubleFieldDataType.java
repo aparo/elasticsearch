@@ -43,7 +43,7 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.DOUBLE;
+                    return SortField.Type.DOUBLE;
                 }
             };
         }
@@ -56,7 +56,7 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.DOUBLE;
+                    return SortField.Type.DOUBLE;
                 }
             };
         }
@@ -69,7 +69,7 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
 
                 @Override
                 public int reducedType() {
-                    return SortField.DOUBLE;
+                    return SortField.Type.DOUBLE;
                 }
             };
         }
@@ -81,7 +81,7 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
 
             @Override
             public int reducedType() {
-                return SortField.DOUBLE;
+                return SortField.Type.DOUBLE;
             }
         };
     }

@@ -20,7 +20,7 @@
 package org.elasticsearch.common.lucene.search;
 
 import org.apache.lucene.search.Scorer;
-import org.apache.lucene.search.Similarity;
+import org.apache.lucene.search.similarities.Similarity;
 
 import java.io.IOException;
 

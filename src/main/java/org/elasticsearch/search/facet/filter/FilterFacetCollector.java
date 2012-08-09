@@ -49,7 +49,7 @@ public class FilterFacetCollector extends AbstractFacetCollector implements Opti
 
     @Override
     public void optimizedGlobalExecution(SearchContext searchContext) throws IOException {
-        Query query = new DeletionAwareConstantScoreQuery(filter);
+        Query query = new ConstantScoreQuery(filter);
         if (super.filter != null) {
             query = new FilteredQuery(query, super.filter);
         }
