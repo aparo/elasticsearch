@@ -51,7 +51,7 @@ public final class FieldNameAnalyzer extends Analyzer {
     }
 
     @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) {
+    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
         return getAnalyzer(fieldName).tokenStream(fieldName, reader);
     }
 

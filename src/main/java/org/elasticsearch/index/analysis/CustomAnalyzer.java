@@ -79,7 +79,7 @@ public final class CustomAnalyzer extends Analyzer {
     }
 
     @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) {
+    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
         return buildHolder(reader).tokenStream;
     }
 

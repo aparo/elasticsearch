@@ -31,7 +31,7 @@ import java.io.Reader;
 public abstract class NumericAnalyzer<T extends NumericTokenizer> extends Analyzer {
 
     @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) {
+    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
         try {
             return createNumericTokenizer(reader, new char[32]);
         } catch (IOException e) {

@@ -70,7 +70,7 @@ public class NamedAnalyzer extends Analyzer {
     }
 
     @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) {
+    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
         return analyzer.tokenStream(fieldName, reader);
     }
 
