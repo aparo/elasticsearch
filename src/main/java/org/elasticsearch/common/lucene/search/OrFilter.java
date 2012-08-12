@@ -20,9 +20,10 @@
 package org.elasticsearch.common.lucene.search;
 
 import com.google.common.collect.Lists;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.common.lucene.docset.DocSet;
 import org.elasticsearch.common.lucene.docset.OrDocIdSet;
 import org.elasticsearch.common.lucene.docset.OrDocSet;
@@ -48,12 +49,12 @@ public class OrFilter extends Filter {
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         if (filters.size() == 1) {
-            return filters.get(0).getDocIdSet(reader);
+            return filters.get(0).getDocIdSet(atomicReaderContext, bits);
         }
         List sets = Lists.newArrayListWithExpectedSize(filters.size());
         boolean allAreDocSet = true;
         for (Filter filter : filters) {
-            DocIdSet set = filter.getDocIdSet(reader);
+            DocIdSet set = filter.getDocIdSet(atomicReaderContext, bits);
             if (set == null) { // none matching for this filter, continue
                 continue;
             }

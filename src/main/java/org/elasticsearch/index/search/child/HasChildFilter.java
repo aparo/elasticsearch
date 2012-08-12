@@ -19,11 +19,12 @@
 
 package org.elasticsearch.index.search.child;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.elasticsearch.search.internal.ScopePhase;
 import org.elasticsearch.search.internal.SearchContext;
@@ -89,7 +90,7 @@ public class HasChildFilter extends Filter implements ScopePhase.CollectorPhase 
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         // ok to return null
-        return parentDocs.get(reader.getCoreCacheKey());
+        return parentDocs.get(atomicReaderContext.reader().getCoreCacheKey());
     }
 
     @Override

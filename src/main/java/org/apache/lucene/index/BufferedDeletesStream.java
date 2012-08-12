@@ -402,7 +402,7 @@ class BufferedDeletesStream implements XIndexWriter.XBufferedDeletesStream {
         for (QueryAndLimit ent : queriesIter) {
             Query query = ent.query;
             int limit = ent.limit;
-            final DocIdSet docs = new QueryWrapperFilter(query).getDocIdSet(reader);
+            final DocIdSet docs = new QueryWrapperFilter(query).getDocIdSet(atomicReaderContext, bits);
             if (docs != null) {
                 final DocIdSetIterator it = docs.iterator();
                 if (it != null) {

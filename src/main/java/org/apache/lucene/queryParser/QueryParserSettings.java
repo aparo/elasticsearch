@@ -21,6 +21,7 @@ package org.apache.lucene.queryParser;
 
 import gnu.trove.map.hash.TObjectFloatHashMap;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.FuzzyQuery;
 import org.apache.lucene.search.MultiTermQuery;
 

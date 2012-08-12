@@ -20,8 +20,9 @@
 package org.elasticsearch.index.percolator;
 
 import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.memory.CustomMemoryIndex;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.IndexSearcher;
@@ -292,7 +293,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         final CustomMemoryIndex memoryIndex = new CustomMemoryIndex();
 
         // TODO: This means percolation does not support nested docs...
-        for (Field field : request.doc().rootDoc().getFields()) {
+        for (IndexableField field : request.doc().rootDoc().getFields()) {
             if (!field.isIndexed()) {
                 continue;
             }
@@ -421,9 +422,9 @@ public class PercolatorExecutor extends AbstractIndexComponent {
         }
 
         @Override
-        public void setNextReader(IndexReader reader, int docBase) throws IOException {
+        public void setNextReader(AtomicReaderContext context) throws IOException {
             // we use the UID because id might not be indexed
-            fieldData = percolatorIndex.cache().fieldData().cache(FieldDataType.DefaultTypes.STRING, reader, UidFieldMapper.NAME);
+            fieldData = percolatorIndex.cache().fieldData().cache(FieldDataType.DefaultTypes.STRING, context.reader(), UidFieldMapper.NAME);
         }
 
         @Override

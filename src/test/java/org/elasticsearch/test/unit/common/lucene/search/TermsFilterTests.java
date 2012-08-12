@@ -62,15 +62,15 @@ public class TermsFilterTests {
         w.close();
 
         TermFilter tf = new TermFilter(new Term(fieldName, "19"));
-        FixedBitSet bits = (FixedBitSet) tf.getDocIdSet(reader);
+        FixedBitSet bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits, nullValue());
 
         tf = new TermFilter(new Term(fieldName, "20"));
-        bits = (FixedBitSet) tf.getDocIdSet(reader);
+        bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits.cardinality(), equalTo(1));
 
         tf = new TermFilter(new Term("all", "xxx"));
-        bits = (FixedBitSet) tf.getDocIdSet(reader);
+        bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits.cardinality(), equalTo(100));
 
         reader.close();
@@ -96,19 +96,19 @@ public class TermsFilterTests {
         w.close();
 
         XTermsFilter tf = new XTermsFilter(new Term[]{new Term(fieldName, "19")});
-        FixedBitSet bits = (FixedBitSet) tf.getDocIdSet(reader);
+        FixedBitSet bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits, nullValue());
 
         tf = new XTermsFilter(new Term[]{new Term(fieldName, "19"), new Term(fieldName, "20")});
-        bits = (FixedBitSet) tf.getDocIdSet(reader);
+        bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits.cardinality(), equalTo(1));
 
         tf = new XTermsFilter(new Term[]{new Term(fieldName, "19"), new Term(fieldName, "20"), new Term(fieldName, "10")});
-        bits = (FixedBitSet) tf.getDocIdSet(reader);
+        bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits.cardinality(), equalTo(2));
 
         tf = new XTermsFilter(new Term[]{new Term(fieldName, "19"), new Term(fieldName, "20"), new Term(fieldName, "10"), new Term(fieldName, "00")});
-        bits = (FixedBitSet) tf.getDocIdSet(reader);
+        bits = (FixedBitSet) tf.getDocIdSet(atomicReaderContext, bits);
         assertThat(bits.cardinality(), equalTo(2));
 
         reader.close();

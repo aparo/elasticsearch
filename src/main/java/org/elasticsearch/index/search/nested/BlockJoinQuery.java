@@ -168,7 +168,7 @@ public class BlockJoinQuery extends Query {
                 return null;
             }
 
-            DocIdSet parents = parentsFilter.getDocIdSet(reader);
+            DocIdSet parents = parentsFilter.getDocIdSet(atomicReaderContext, bits);
             // TODO NESTED: We have random access in ES, not sure I understand what can be gain?
             // TODO: once we do random-access filters we can
             // generalize this:

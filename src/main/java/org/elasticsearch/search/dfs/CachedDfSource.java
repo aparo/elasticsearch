@@ -20,9 +20,9 @@
 package org.elasticsearch.search.dfs;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.FieldSelector;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.Similarity;
 
 import java.io.IOException;
 

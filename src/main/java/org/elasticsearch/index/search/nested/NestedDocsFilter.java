@@ -19,11 +19,12 @@
 
 package org.elasticsearch.index.search.nested;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.PrefixFilter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 
 import java.io.IOException;
@@ -42,7 +43,7 @@ public class NestedDocsFilter extends Filter {
 
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        return filter.getDocIdSet(reader);
+        return filter.getDocIdSet(atomicReaderContext, bits);
     }
 
     @Override

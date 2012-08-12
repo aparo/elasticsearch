@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.lucene.docset;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Scorer;
@@ -58,9 +59,9 @@ public class DocIdSetCollector extends Collector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
-        base = docBase;
-        collector.setNextReader(reader, docBase);
+    public void setNextReader(AtomicReaderContext context) throws IOException {
+        base = context.docBase;
+        collector.setNextReader(context);
     }
 
     @Override

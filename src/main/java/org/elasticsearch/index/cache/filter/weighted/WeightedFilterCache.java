@@ -23,10 +23,12 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.cache.Weigher;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.SegmentReader;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.docset.DocSet;
@@ -159,20 +161,20 @@ public class WeightedFilterCache extends AbstractIndexComponent implements Filte
             if (filter instanceof CacheKeyFilter) {
                 filterKey = ((CacheKeyFilter) filter).cacheKey();
             }
-            FilterCacheKey cacheKey = new FilterCacheKey(cache.index().name(), reader.getCoreCacheKey(), filterKey);
+            FilterCacheKey cacheKey = new FilterCacheKey(cache.index().name(), atomicReaderContext.reader().getCoreCacheKey(), filterKey);
             Cache<FilterCacheKey, DocSet> innerCache = cache.indicesFilterCache.cache();
 
             DocSet cacheValue = innerCache.getIfPresent(cacheKey);
             if (cacheValue == null) {
-                if (!cache.seenReaders.containsKey(reader.getCoreCacheKey())) {
-                    Boolean previous = cache.seenReaders.putIfAbsent(reader.getCoreCacheKey(), Boolean.TRUE);
-                    if (previous == null && (reader instanceof SegmentReader)) {
-                        ((SegmentReader) reader).addCoreClosedListener(cache);
+                if (!cache.seenReaders.containsKey(atomicReaderContext.reader().getCoreCacheKey())) {
+                    Boolean previous = cache.seenReaders.putIfAbsent(atomicReaderContext.reader().getCoreCacheKey(), Boolean.TRUE);
+                    if (previous == null && (atomicReaderContext.reader() instanceof SegmentReader)) {
+                        ((SegmentReader) atomicReaderContext.reader()).addCoreClosedListener(cache);
                         cache.seenReadersCount.inc();
                     }
                 }
 
-                cacheValue = DocSets.cacheable(reader, filter.getDocIdSet(reader));
+                cacheValue = DocSets.cacheable(atomicReaderContext.reader(), filter.getDocIdSet(atomicReaderContext, bits));
                 // we might put the same one concurrently, that's fine, it will be replaced and the removal
                 // will be called
                 cache.totalMetric.inc(cacheValue.sizeInBytes());

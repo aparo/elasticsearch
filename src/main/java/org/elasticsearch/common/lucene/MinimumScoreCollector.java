@@ -19,7 +19,7 @@
 
 package org.elasticsearch.common.lucene;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.ScoreCachingWrappingScorer;
 import org.apache.lucene.search.Scorer;
@@ -59,8 +59,8 @@ public class MinimumScoreCollector extends Collector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
-        collector.setNextReader(reader, docBase);
+    public void setNextReader(AtomicReaderContext context) throws IOException {
+        collector.setNextReader(context);
     }
 
     @Override

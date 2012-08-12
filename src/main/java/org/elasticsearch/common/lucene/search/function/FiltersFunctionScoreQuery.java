@@ -149,7 +149,7 @@ public class FiltersFunctionScoreQuery extends Query {
             for (int i = 0; i < filterFunctions.length; i++) {
                 FilterFunction filterFunction = filterFunctions[i];
                 filterFunction.function.setNextReader(reader);
-                docSets[i] = DocSets.convert(reader, filterFunction.filter.getDocIdSet(reader));
+                docSets[i] = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
             }
             return new CustomBoostFactorScorer(getSimilarity(searcher), this, subQueryScorer, scoreMode, filterFunctions, maxBoost, docSets);
         }
@@ -163,7 +163,7 @@ public class FiltersFunctionScoreQuery extends Query {
 
             if (scoreMode == ScoreMode.First) {
                 for (FilterFunction filterFunction : filterFunctions) {
-                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(reader));
+                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
                     if (docSet.get(doc)) {
                         filterFunction.function.setNextReader(reader);
                         Explanation functionExplanation = filterFunction.function.explainFactor(doc);
@@ -183,7 +183,7 @@ public class FiltersFunctionScoreQuery extends Query {
                 float min = Float.POSITIVE_INFINITY;
                 ArrayList<Explanation> filtersExplanations = new ArrayList<Explanation>();
                 for (FilterFunction filterFunction : filterFunctions) {
-                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(reader));
+                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
                     if (docSet.get(doc)) {
                         filterFunction.function.setNextReader(reader);
                         Explanation functionExplanation = filterFunction.function.explainFactor(doc);

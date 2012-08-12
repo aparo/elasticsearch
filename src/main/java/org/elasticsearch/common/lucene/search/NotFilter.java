@@ -19,9 +19,10 @@
 
 package org.elasticsearch.common.lucene.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.common.lucene.docset.AllDocSet;
 import org.elasticsearch.common.lucene.docset.DocSet;
 import org.elasticsearch.common.lucene.docset.NotDocIdSet;
@@ -46,14 +47,14 @@ public class NotFilter extends Filter {
 
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        DocIdSet set = filter.getDocIdSet(reader);
+        DocIdSet set = filter.getDocIdSet(atomicReaderContext, bits);
         if (set == null) {
-            return new AllDocSet(reader.maxDoc());
+            return new AllDocSet(atomicReaderContext.reader().maxDoc());
         }
         if (set instanceof DocSet) {
-            return new NotDocSet((DocSet) set, reader.maxDoc());
+            return new NotDocSet((DocSet) set, atomicReaderContext.reader().maxDoc());
         }
-        return new NotDocIdSet(set, reader.maxDoc());
+        return new NotDocIdSet(set, atomicReaderContext.reader().maxDoc());
     }
 
     @Override

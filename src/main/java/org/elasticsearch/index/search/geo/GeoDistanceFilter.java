@@ -20,9 +20,10 @@
 package org.elasticsearch.index.search.geo;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.lucene.docset.AndDocSet;
 import org.elasticsearch.common.lucene.docset.DocSet;
@@ -106,14 +107,14 @@ public class GeoDistanceFilter extends Filter {
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         DocSet boundingBoxDocSet = null;
         if (boundingBoxFilter != null) {
-            DocIdSet docIdSet = boundingBoxFilter.getDocIdSet(reader);
+            DocIdSet docIdSet = boundingBoxFilter.getDocIdSet(atomicReaderContext, bits);
             if (docIdSet == null) {
                 return null;
             }
-            boundingBoxDocSet = DocSets.convert(reader, docIdSet);
+            boundingBoxDocSet = DocSets.convert(atomicReaderContext.reader(), docIdSet);
         }
-        final GeoPointFieldData fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, reader, fieldName);
-        GeoDistanceDocSet distDocSet = new GeoDistanceDocSet(reader.maxDoc(), fieldData, fixedSourceDistance, distanceBoundingCheck, distance);
+        final GeoPointFieldData fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, atomicReaderContext.reader(), fieldName);
+        GeoDistanceDocSet distDocSet = new GeoDistanceDocSet(atomicReaderContext.reader().maxDoc(), fieldData, fixedSourceDistance, distanceBoundingCheck, distance);
         if (boundingBoxDocSet == null) {
             return distDocSet;
         } else {

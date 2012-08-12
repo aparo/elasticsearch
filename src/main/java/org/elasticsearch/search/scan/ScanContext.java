@@ -1,8 +1,10 @@
 package org.elasticsearch.search.scan;
 
 import com.google.common.collect.Maps;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.common.lucene.docset.AllDocSet;
 import org.elasticsearch.search.internal.SearchContext;
 
@@ -89,7 +91,7 @@ public class ScanContext {
         }
 
         @Override
-        public void setNextReader(IndexReader reader, int docBase) throws IOException {
+        public void setNextReader(AtomicReaderContext context) throws IOException {
             // if we have a reader state, and we haven't registered one already, register it
             // we need to check in readersState since even when the filter return null, setNextReader is still
             // called for that reader (before)
@@ -98,8 +100,9 @@ public class ScanContext {
                 readerState.done = true;
                 readerStates.put(currentReader, readerState);
             }
-            this.currentReader = reader;
-            this.docBase = docBase;
+            //PARO TODO replace with atomic
+            this.currentReader = context.reader();
+            this.docBase = context.docBase;
             this.readerState = new ReaderState();
         }
 
@@ -131,12 +134,12 @@ public class ScanContext {
 
         @Override
         public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-            ReaderState readerState = readerStates.get(reader);
+            ReaderState readerState = readerStates.get(atomicReaderContext);
             if (readerState != null && readerState.done) {
                 scanCollector.incCounter(readerState.count);
                 return null;
             }
-            return new AllDocSet(reader.maxDoc());
+            return new AllDocSet(atomicReaderContext.reader().maxDoc());
         }
     }
 

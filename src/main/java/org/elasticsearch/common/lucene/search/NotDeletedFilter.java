@@ -19,11 +19,13 @@
 
 package org.elasticsearch.common.lucene.search;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.FilteredDocIdSetIterator;
+import org.apache.lucene.util.Bits;
 
 import java.io.IOException;
 
@@ -40,14 +42,14 @@ public class NotDeletedFilter extends Filter {
 
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        DocIdSet docIdSet = filter.getDocIdSet(reader);
+        DocIdSet docIdSet = filter.getDocIdSet(atomicReaderContext, bits);
         if (docIdSet == null) {
             return null;
         }
-        if (!reader.hasDeletions()) {
+        if (!atomicReaderContext.reader().hasDeletions()) {
             return docIdSet;
         }
-        return new NotDeletedDocIdSet(docIdSet, reader);
+        return new NotDeletedDocIdSet(docIdSet, atomicReaderContext.reader());
     }
 
     public Filter filter() {
@@ -90,7 +92,7 @@ public class NotDeletedFilter extends Filter {
         }
 
         @Override
-        protected boolean match(int doc) throws IOException {
+        protected boolean match(int doc) {
             return !reader.isDeleted(doc);
         }
     }

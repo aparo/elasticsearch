@@ -20,7 +20,7 @@
 package org.elasticsearch.indices.ttl;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
@@ -55,6 +55,8 @@ import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.node.settings.NodeSettingsService;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 
@@ -220,7 +222,7 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
     }
 
     private class ExpiredDocsCollector extends Collector {
-        private IndexReader indexReader;
+        private AtomicReaderContext readerContext;
         private List<DocToPurge> docsToPurge = new ArrayList<DocToPurge>();
 
         public ExpiredDocsCollector() {
@@ -235,17 +237,17 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
 
         public void collect(int doc) {
             try {
-                Document document = indexReader.document(doc, new UidAndRoutingFieldSelector());
-                String uid = document.getFieldable(UidFieldMapper.NAME).stringValue();
-                long version = UidField.loadVersion(indexReader, UidFieldMapper.TERM_FACTORY.createTerm(uid));
+                Document document = readerContext.reader().document(doc, new HashSet<String>(Arrays.asList(new String[]{UidFieldMapper.NAME, RoutingFieldMapper.NAME})));
+                String uid = document.getField(UidFieldMapper.NAME).stringValue();
+                long version = UidField.loadVersion(readerContext, UidFieldMapper.createTerm(uid));
                 docsToPurge.add(new DocToPurge(Uid.typeFromUid(uid), Uid.idFromUid(uid), version, document.get(RoutingFieldMapper.NAME)));
             } catch (Exception e) {
                 logger.trace("failed to collect doc", e);
             }
         }
 
-        public void setNextReader(IndexReader reader, int docBase) {
-            this.indexReader = reader;
+        public void setNextReader(AtomicReaderContext context) {
+            this.readerContext = context;
         }
 
         public List<DocToPurge> getDocsToPurge() {

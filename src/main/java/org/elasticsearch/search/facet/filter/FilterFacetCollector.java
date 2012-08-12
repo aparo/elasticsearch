@@ -64,7 +64,7 @@ public class FilterFacetCollector extends AbstractFacetCollector implements Opti
 
     @Override
     protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        docSet = DocSets.convert(reader, filter.getDocIdSet(reader));
+        docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
     }
 
     @Override

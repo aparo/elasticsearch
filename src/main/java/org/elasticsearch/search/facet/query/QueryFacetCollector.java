@@ -58,7 +58,7 @@ public class QueryFacetCollector extends AbstractFacetCollector implements Optim
 
     @Override
     protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        docSet = DocSets.convert(reader, filter.getDocIdSet(reader));
+        docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
     }
 
     @Override

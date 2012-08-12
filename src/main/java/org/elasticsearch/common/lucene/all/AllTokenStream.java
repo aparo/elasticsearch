@@ -23,7 +23,6 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenFilter;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
-import org.apache.lucene.index.Payload;
 
 import java.io.IOException;
 
@@ -35,7 +34,7 @@ import static org.apache.lucene.analysis.payloads.PayloadHelper.encodeFloat;
 public final class AllTokenStream extends TokenFilter {
 
     public static TokenStream allTokenStream(String allFieldName, AllEntries allEntries, Analyzer analyzer) throws IOException {
-        return new AllTokenStream(analyzer.reusableTokenStream(allFieldName, allEntries), allEntries);
+        return new AllTokenStream(analyzer.tokenStream(allFieldName, allEntries), allEntries);
     }
 
     private final AllEntries allEntries;

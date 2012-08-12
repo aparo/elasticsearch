@@ -68,9 +68,9 @@ public abstract class AbstractFacetCollector extends FacetCollector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
+    public void setNextReader(AtomicReaderContext context) throws IOException {
         if (filter != null) {
-            docSet = DocSets.convert(reader, filter.getDocIdSet(reader));
+            docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
         }
         doSetNextReader(reader, docBase);
     }

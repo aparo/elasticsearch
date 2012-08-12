@@ -21,8 +21,8 @@ package org.elasticsearch.index.percolator;
 
 import com.google.common.collect.Maps;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.*;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.inject.Inject;
@@ -156,7 +156,7 @@ public class PercolatorService extends AbstractIndexComponent {
 
     class QueriesLoaderCollector extends Collector {
 
-        private IndexReader reader;
+        private AtomicReaderContext reader;
 
         private Map<String, Query> queries = Maps.newHashMap();
 
@@ -171,10 +171,10 @@ public class PercolatorService extends AbstractIndexComponent {
         @Override
         public void collect(int doc) throws IOException {
             // the _source is the query
-            Document document = reader.document(doc, new UidAndSourceFieldSelector());
+            Document document = reader.reader().document(doc, new UidAndSourceFieldSelector());
             String id = Uid.createUid(document.get(UidFieldMapper.NAME)).id();
             try {
-                Field sourceField = document.getFieldable(SourceFieldMapper.NAME);
+                IndexableField sourceField = document.getField(SourceFieldMapper.NAME);
                 queries.put(id, percolator.parseQuery(id, new BytesArray(sourceField.getBinaryValue(), sourceField.getBinaryOffset(), sourceField.getBinaryLength())));
             } catch (Exception e) {
                 logger.warn("failed to add query [{}]", e, id);
@@ -182,8 +182,8 @@ public class PercolatorService extends AbstractIndexComponent {
         }
 
         @Override
-        public void setNextReader(IndexReader reader, int docBase) throws IOException {
-            this.reader = reader;
+        public void setNextReader(AtomicReaderContext context) throws IOException {
+            this.reader = context;
         }
 
         @Override

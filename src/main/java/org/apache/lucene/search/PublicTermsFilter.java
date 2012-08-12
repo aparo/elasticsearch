@@ -19,9 +19,10 @@
 
 package org.apache.lucene.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.index.TermDocs;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.elasticsearch.common.lucene.Lucene;
 
@@ -75,7 +76,7 @@ public class PublicTermsFilter extends Filter {
     @Override
     public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         FixedBitSet result = null;
-        TermDocs td = reader.termDocs();
+        TermDocs td = atomicReaderContext.reader().termDocs();
         try {
             // batch read, in Lucene 4.0 its no longer needed
             int[] docs = new int[Lucene.BATCH_ENUM_DOCS];

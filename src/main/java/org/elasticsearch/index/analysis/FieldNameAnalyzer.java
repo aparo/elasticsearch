@@ -21,10 +21,7 @@ package org.elasticsearch.index.analysis;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.IndexableField;
 
-import java.io.IOException;
 import java.io.Reader;
 import java.util.Map;
 
@@ -52,12 +49,7 @@ public final class FieldNameAnalyzer extends Analyzer {
 
     @Override
     protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        return getAnalyzer(fieldName).tokenStream(fieldName, reader);
-    }
-
-    @Override
-    public final TokenStream reusableTokenStream(String fieldName, Reader reader) throws IOException {
-        return getAnalyzer(fieldName).reusableTokenStream(fieldName, reader);
+        return getAnalyzer(fieldName).getTokenStreamComponents(fieldName, reader);
     }
 
     @Override
@@ -66,8 +58,8 @@ public final class FieldNameAnalyzer extends Analyzer {
     }
 
     @Override
-    public int getOffsetGap(Field field) {
-        return getAnalyzer(field.name()).getOffsetGap(field);
+    public int getOffsetGap(String field) {
+        return getAnalyzer(field).getOffsetGap(field);
     }
 
     private Analyzer getAnalyzer(String name) {

@@ -450,7 +450,7 @@ public class CustomMemoryIndex implements Serializable {
                 }
 
                 @Override
-                public void setNextReader(IndexReader reader, int docBase) {
+                public void setNextReader(AtomicReaderContext context) {
                 }
             });
             float score = scores[0];

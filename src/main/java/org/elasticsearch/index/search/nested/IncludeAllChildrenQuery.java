@@ -91,7 +91,7 @@ public class IncludeAllChildrenQuery extends Query {
                 return null;
             }
 
-            DocIdSet parents = parentsFilter.getDocIdSet(reader);
+            DocIdSet parents = parentsFilter.getDocIdSet(atomicReaderContext, bits);
             if (parents == null) {
                 // No matches
                 return null;

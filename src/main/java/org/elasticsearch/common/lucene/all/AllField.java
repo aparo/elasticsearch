@@ -21,7 +21,6 @@ package org.elasticsearch.common.lucene.all;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.document.AbstractField;
 import org.apache.lucene.document.Field;
 import org.elasticsearch.ElasticSearchException;
 
@@ -31,7 +30,7 @@ import java.io.Reader;
 /**
  *
  */
-public class AllField extends AbstractField {
+public class AllField extends Field {
 
     private final AllEntries allEntries;
 

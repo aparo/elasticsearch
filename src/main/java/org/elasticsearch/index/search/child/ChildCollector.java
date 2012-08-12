@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.search.child;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Scorer;
@@ -95,8 +96,8 @@ public class ChildCollector extends Collector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
-        typeCache = context.idCache().reader(reader).type(parentType);
+    public void setNextReader(AtomicReaderContext context) throws IOException {
+        typeCache = this.context.idCache().reader(context.reader()).type(parentType);
     }
 
     @Override

@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.search.nested;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Scorer;
@@ -71,11 +72,11 @@ public class NestedChildrenCollector extends FacetCollector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
-        collector.setNextReader(reader, docBase);
+    public void setNextReader(AtomicReaderContext context) throws IOException {
+        collector.setNextReader(context);
         currentReader = reader;
-        childDocs = DocSets.convert(reader, childFilter.getDocIdSet(reader));
-        parentDocs = ((FixedBitDocSet) parentFilter.getDocIdSet(reader)).set();
+        childDocs = DocSets.convert(reader, childFilter.getDocIdSet(atomicReaderContext, bits));
+        parentDocs = ((FixedBitDocSet) parentFilter.getDocIdSet(atomicReaderContext, bits)).set();
     }
 
     @Override

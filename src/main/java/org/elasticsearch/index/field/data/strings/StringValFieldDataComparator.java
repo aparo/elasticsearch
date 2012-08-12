@@ -85,7 +85,7 @@ public class StringValFieldDataComparator extends FieldComparator {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
+    public void setNextReader(AtomicReaderContext context) throws IOException {
         currentFieldData = fieldDataCache.cache(FieldDataType.DefaultTypes.STRING, reader, fieldName);
     }
 

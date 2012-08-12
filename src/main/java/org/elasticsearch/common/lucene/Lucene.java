@@ -348,7 +348,7 @@ public class Lucene {
         }
 
         @Override
-        public void setNextReader(IndexReader reader, int docBase) throws IOException {
+        public void setNextReader(AtomicReaderContext context) throws IOException {
         }
 
         @Override
@@ -380,7 +380,7 @@ public class Lucene {
         }
 
         @Override
-        public void setNextReader(IndexReader reader, int docBase) throws IOException {
+        public void setNextReader(AtomicReaderContext context) throws IOException {
         }
 
         @Override

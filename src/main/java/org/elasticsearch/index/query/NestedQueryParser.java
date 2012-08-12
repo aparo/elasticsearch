@@ -19,8 +19,9 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -185,7 +186,7 @@ public class NestedQueryParser implements QueryParser {
 
         @Override
         public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-            return filter.getDocIdSet(reader);
+            return filter.getDocIdSet(atomicReaderContext, bits);
         }
     }
 }

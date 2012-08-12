@@ -68,7 +68,7 @@ public class DoubleFieldsFunctionDataComparator extends FieldComparator {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
+    public void setNextReader(AtomicReaderContext context) throws IOException {
         script.setNextReader(reader);
     }
 

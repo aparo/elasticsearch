@@ -57,9 +57,9 @@ public class FilteredCollector extends Collector {
     }
 
     @Override
-    public void setNextReader(IndexReader reader, int docBase) throws IOException {
+    public void setNextReader(AtomicReaderContext context) throws IOException {
         collector.setNextReader(reader, docBase);
-        docSet = DocSets.convert(reader, filter.getDocIdSet(reader));
+        docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
     }
 
     @Override
