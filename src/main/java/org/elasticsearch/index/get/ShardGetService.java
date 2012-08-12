@@ -20,11 +20,13 @@
 package org.elasticsearch.index.get;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DocumentStoredFieldVisitor;
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.lucene.document.ResetFieldSelector;
 import org.elasticsearch.common.lucene.uid.UidField;
 import org.elasticsearch.common.metrics.CounterMetric;
 import org.elasticsearch.common.metrics.MeanMetric;
@@ -33,7 +35,6 @@ import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.mapper.*;
 import org.elasticsearch.index.mapper.internal.*;
-import org.elasticsearch.index.mapper.selector.FieldMappersFieldSelector;
 import org.elasticsearch.index.settings.IndexSettings;
 import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.shard.ShardId;
@@ -46,7 +47,9 @@ import org.elasticsearch.search.lookup.SourceLookup;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Maps.newHashMapWithExpectedSize;
@@ -107,7 +110,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
         Engine.GetResult get = null;
         if (type == null || type.equals("_all")) {
             for (String typeX : mapperService.types()) {
-                get = indexShard.get(new Engine.Get(realtime, UidFieldMapper.TERM_FACTORY.createTerm(Uid.createUid(typeX, id))).loadSource(loadSource));
+                get = indexShard.get(new Engine.Get(realtime, UidFieldMapper.createTerm(Uid.createUid(typeX, id))).loadSource(loadSource));
                 if (get.exists()) {
                     type = typeX;
                     break;
@@ -123,7 +126,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
                 return new GetResult(shardId.index().name(), type, id, -1, false, null, null);
             }
         } else {
-            get = indexShard.get(new Engine.Get(realtime, UidFieldMapper.TERM_FACTORY.createTerm(Uid.createUid(type, id))).loadSource(loadSource));
+            get = indexShard.get(new Engine.Get(realtime, UidFieldMapper.createTerm(Uid.createUid(type, id))).loadSource(loadSource));
             if (!get.exists()) {
                 get.release();
                 return new GetResult(shardId.index().name(), type, id, -1, false, null, null);
@@ -141,13 +144,30 @@ public class ShardGetService extends AbstractIndexShardComponent {
             if (get.docIdAndVersion() != null) {
                 Map<String, GetField> fields = null;
                 byte[] source = null;
+
+                boolean sourceRequested = false;
+                if (gFields == null) {
+                    sourceRequested = true;
+                } else if (gFields.length == 0) {
+                    // no fields, and no source
+                    sourceRequested = false;
+                } else {
+                    for (String field : gFields) {
+                        if (field.equals("_source")) {
+                            sourceRequested = true;
+                            continue;
+                        }
+                    }
+                }
+
+
                 UidField.DocIdAndVersion docIdAndVersion = get.docIdAndVersion();
-                ResetFieldSelector fieldSelector = buildFieldSelectors(docMapper, gFields);
+                DocumentStoredFieldVisitor fieldSelector = new DocumentStoredFieldVisitor(buildFieldSelectors(docMapper, gFields));
+
                 if (fieldSelector != null) {
-                    fieldSelector.reset();
                     Document doc;
                     try {
-                        doc = docIdAndVersion.reader.document(docIdAndVersion.docId, fieldSelector);
+                        doc = docIdAndVersion.reader.document(docIdAndVersion.docId);
                     } catch (IOException e) {
                         throw new ElasticSearchException("Failed to get type [" + type + "] and id [" + id + "]", e);
                     }
@@ -165,11 +185,13 @@ public class ShardGetService extends AbstractIndexShardComponent {
                             }
                         }
                         if (value == null) {
-                            if (field.isBinary()) {
-                                value = new BytesArray(field.getBinaryValue(), field.getBinaryOffset(), field.getBinaryLength());
-                            } else {
-                                value = field.stringValue();
+                            value = field.binaryValue();
+                            if(value!=null){
+                                value = new BytesArray(field.binaryValue().bytes);
                             }
+                        }
+                        if (value == null) {
+                            value = field.stringValue();
                         }
 
                         if (fields == null) {
@@ -195,7 +217,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
                                 searchLookup = new SearchLookup(mapperService, indexCache.fieldData(), new String[]{type});
                             }
                             SearchScript searchScript = scriptService.search(searchLookup, "mvel", field, null);
-                            searchScript.setNextReader(docIdAndVersion.reader);
+                            searchScript.setNextReader(new AtomicReaderContext((AtomicReader)docIdAndVersion.reader));
                             searchScript.setNextDocId(docIdAndVersion.docId);
 
                             try {
@@ -211,7 +233,7 @@ public class ShardGetService extends AbstractIndexShardComponent {
                             if (x == null || !x.mapper().stored()) {
                                 if (searchLookup == null) {
                                     searchLookup = new SearchLookup(mapperService, indexCache.fieldData(), new String[]{type});
-                                    searchLookup.setNextReader(docIdAndVersion.reader);
+                                    searchLookup.setNextReader(new AtomicReaderContext((AtomicReader)docIdAndVersion.reader));
                                     searchLookup.setNextDocId(docIdAndVersion.docId);
                                 }
                                 value = searchLookup.source().extractValue(field);
@@ -333,9 +355,11 @@ public class ShardGetService extends AbstractIndexShardComponent {
         }
     }
 
-    private static ResetFieldSelector buildFieldSelectors(DocumentMapper docMapper, String... fields) {
+    private static Set<String> buildFieldSelectors(DocumentMapper docMapper, String... fields) {
+        Set<String> selectedFields = new HashSet<String>();
         if (fields == null) {
-            return docMapper.sourceMapper().fieldSelector();
+            selectedFields.add(SourceFieldMapper.NAME);
+            return selectedFields;
         }
 
         // don't load anything
@@ -343,23 +367,21 @@ public class ShardGetService extends AbstractIndexShardComponent {
             return null;
         }
 
-        FieldMappersFieldSelector fieldSelector = null;
         for (String fieldName : fields) {
             FieldMappers x = docMapper.mappers().smartName(fieldName);
             if (x != null && x.mapper().stored()) {
-                if (fieldSelector == null) {
-                    fieldSelector = new FieldMappersFieldSelector();
+                for (FieldMapper fieldMapper : x) {
+                    selectedFields.add(fieldMapper.names().indexName());
                 }
-                fieldSelector.add(x);
             }
         }
 
-        return fieldSelector;
+        return selectedFields;
     }
 
     private static byte[] extractSource(Document doc, DocumentMapper documentMapper) {
         byte[] source = null;
-        Field sourceField = doc.getFieldable(documentMapper.sourceMapper().names().indexName());
+        IndexableField sourceField = doc.getField(documentMapper.sourceMapper().names().indexName());
         if (sourceField != null) {
             source = documentMapper.sourceMapper().nativeValue(sourceField);
             doc.removeField(documentMapper.sourceMapper().names().indexName());

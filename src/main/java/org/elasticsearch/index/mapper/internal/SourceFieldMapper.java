@@ -342,7 +342,7 @@ public class SourceFieldMapper extends AbstractFieldMapper<byte[]> implements In
         return field == null ? null : value(field);
     }
 
-    public byte[] nativeValue(Field field) {
+    public byte[] nativeValue(IndexableField field) {
         return field.getBinaryValue();
     }
 
