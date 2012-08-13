@@ -20,7 +20,7 @@
 package org.elasticsearch.search.facet;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.lucene.docset.DocSet;
@@ -70,12 +70,12 @@ public abstract class AbstractFacetCollector extends FacetCollector {
     @Override
     public void setNextReader(AtomicReaderContext context) throws IOException {
         if (filter != null) {
-            docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
+            docSet = DocSets.convert(context.reader(), filter.getDocIdSet(context, context.reader().getLiveDocs()));
         }
-        doSetNextReader(reader, docBase);
+        doSetNextReader(context);
     }
 
-    protected abstract void doSetNextReader(IndexReader reader, int docBase) throws IOException;
+    protected abstract void doSetNextReader(AtomicReaderContext context) throws IOException;
 
     @Override
     public void collect(int doc) throws IOException {

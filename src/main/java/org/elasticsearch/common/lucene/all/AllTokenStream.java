@@ -59,7 +59,7 @@ public final class AllTokenStream extends TokenFilter {
         if (allEntries.current() != null) {
             float boost = allEntries.current().boost();
             if (boost != 1.0f) {
-                payloadAttribute.setPayload(new Payload(encodeFloat(boost)));
+                payloadAttribute.setPayload(new BytesRef(encodeFloat(boost)));
             } else {
                 payloadAttribute.setPayload(null);
             }

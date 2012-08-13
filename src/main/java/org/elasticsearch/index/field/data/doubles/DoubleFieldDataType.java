@@ -38,11 +38,12 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new DoubleFieldDataComparator(numHits, fieldname, cache);
+                    //return new DoubleFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getDoubleComparator(numHits, fieldname, cache, null);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.DOUBLE;
                 }
             };
@@ -51,11 +52,12 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    //return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    return Comparators.getDoubleComparator(numHits, fieldname, cache, reversed ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.DOUBLE;
                 }
             };
@@ -64,11 +66,12 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY);
+                    //return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY);
+                    return Comparators.getDoubleComparator(numHits, fieldname, cache, reversed ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.DOUBLE;
                 }
             };
@@ -76,11 +79,13 @@ public class DoubleFieldDataType implements FieldDataType<DoubleFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, Double.parseDouble(missing));
+                //return new DoubleFieldDataMissingComparator(numHits, fieldname, cache, Double.parseDouble(missing));
+                return Comparators.getDoubleComparator(numHits, fieldname, cache, Double.parseDouble(missing));
+
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.DOUBLE;
             }
         };

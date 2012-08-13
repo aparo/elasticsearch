@@ -46,7 +46,9 @@ public abstract class NumericFieldDataComparator extends FieldComparator {
     public abstract FieldDataType fieldDataType();
 
     @Override
-    public void setNextReader(AtomicReaderContext context) throws IOException {
+    public FieldComparator setNextReader(AtomicReaderContext context) throws IOException {
         currentFieldData = (NumericFieldData) fieldDataCache.cache(fieldDataType(), context.reader(), fieldName);
+        //PARO TODO FIX must return FieldComparator
+        return this;
     }
 }

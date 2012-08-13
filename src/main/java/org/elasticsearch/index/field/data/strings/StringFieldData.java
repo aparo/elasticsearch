@@ -92,27 +92,30 @@ public abstract class StringFieldData extends FieldData<StringDocFieldData> {
 
     static class StringTypeLoader extends FieldDataLoader.FreqsTypeLoader<StringFieldData> {
 
-        private final ArrayList<String> terms = new ArrayList<String>();
+        private final ArrayList<BytesRef> terms = new ArrayList<BytesRef>();
+        private final ArrayList<String> termsString = new ArrayList<String>();
 
         StringTypeLoader() {
             super();
             // the first one indicates null value
             terms.add(null);
+            termsString.add(null);
         }
 
         @Override
-        public void collectTerm(String term) {
+        public void collectTerm(BytesRef term) {
             terms.add(term);
+            termsString.add(term.utf8ToString());
         }
 
         @Override
         public StringFieldData buildSingleValue(String field, int[] ordinals) {
-            return new SingleValueStringFieldData(field, ordinals, terms.toArray(new String[terms.size()]));
+            return new SingleValueStringFieldData(field, ordinals, termsString.toArray(new String[termsString.size()]));
         }
 
         @Override
         public StringFieldData buildMultiValue(String field, int[][] ordinals) {
-            return new MultiValueStringFieldData(field, ordinals, terms.toArray(new String[terms.size()]));
+            return new MultiValueStringFieldData(field, ordinals, termsString.toArray(new String[termsString.size()]));
         }
     }
 }

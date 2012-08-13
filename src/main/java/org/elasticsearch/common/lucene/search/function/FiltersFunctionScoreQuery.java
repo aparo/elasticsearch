@@ -106,12 +106,12 @@ public class FiltersFunctionScoreQuery extends Query {
     }
 
     @Override
-    public Weight createWeight(Searcher searcher) throws IOException {
+    public Weight createWeight(IndexSearcher searcher) throws IOException {
         return new CustomBoostFactorWeight(searcher);
     }
 
     class CustomBoostFactorWeight extends Weight {
-        Searcher searcher;
+        IndexSearcher searcher;
         Weight subQueryWeight;
 
         public CustomBoostFactorWeight(Searcher searcher) throws IOException {
@@ -154,18 +154,18 @@ public class FiltersFunctionScoreQuery extends Query {
             return new CustomBoostFactorScorer(getSimilarity(searcher), this, subQueryScorer, scoreMode, filterFunctions, maxBoost, docSets);
         }
 
-        @Override
-        public Explanation explain(IndexReader reader, int doc) throws IOException {
-            Explanation subQueryExpl = subQueryWeight.explain(reader, doc);
+        @Override 
+        public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
+            Explanation subQueryExpl = subQueryWeight.explain(context, doc);
             if (!subQueryExpl.isMatch()) {
                 return subQueryExpl;
             }
 
             if (scoreMode == ScoreMode.First) {
                 for (FilterFunction filterFunction : filterFunctions) {
-                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
+                    DocSet docSet = DocSets.convert(context.reader(), filterFunction.filter.getDocIdSet(context, context.reader().getLiveDocs()));
                     if (docSet.get(doc)) {
-                        filterFunction.function.setNextReader(reader);
+                        filterFunction.function.setNextReader(context);
                         Explanation functionExplanation = filterFunction.function.explainFactor(doc);
                         float sc = getValue() * subQueryExpl.getValue() * functionExplanation.getValue();
                         Explanation res = new ComplexExplanation(true, sc, "custom score, product of:");
@@ -183,9 +183,9 @@ public class FiltersFunctionScoreQuery extends Query {
                 float min = Float.POSITIVE_INFINITY;
                 ArrayList<Explanation> filtersExplanations = new ArrayList<Explanation>();
                 for (FilterFunction filterFunction : filterFunctions) {
-                    DocSet docSet = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
+                    DocSet docSet = DocSets.convert(context.reader(), filterFunction.filter.getDocIdSet(context, context.reader().getLiveDocs()));
                     if (docSet.get(doc)) {
-                        filterFunction.function.setNextReader(reader);
+                        filterFunction.function.setNextReader(context);
                         Explanation functionExplanation = filterFunction.function.explainFactor(doc);
                         float factor = functionExplanation.getValue();
                         count++;
@@ -239,6 +239,40 @@ public class FiltersFunctionScoreQuery extends Query {
             res.addDetail(new Explanation(getValue(), "queryBoost"));
             return res;
         }
+
+        public Query getQuery() {
+            return FiltersFunctionScoreQuery.this;
+        }
+
+        @Override public float getValueForNormalization() throws IOException {
+            float sum = subQueryWeight.getValueForNormalization();
+            sum *= getBoost() * getBoost();
+            return sum;
+        }
+
+        @Override public void normalize(float norm, float topLevelBoost) {
+            norm *= getBoost();
+            subQueryWeight.normalize(norm, topLevelBoost);
+        }
+
+        @Override public Scorer scorer(AtomicReaderContext context, boolean scoreDocsInOrder,
+        boolean topScorer, Bits acceptDocs) throws IOException {
+            Scorer subQueryScorer = subQueryWeight.scorer(context, scoreDocsInOrder, topScorer, acceptDocs);
+            if (subQueryScorer == null) {
+                return null;
+            }
+            for (int i = 0; i < filterFunctions.length; i++) {
+                FilterFunction filterFunction = filterFunctions[i];
+                filterFunction.function.setNextReader(context);
+                docSets[i] = DocSets.convert(context.reader(), filterFunction.filter.getDocIdSet(context, acceptDocs));
+            }
+            return new CustomBoostFactorScorer(this, subQueryScorer, scoreMode, filterFunctions, maxBoost, docSets);
+        }
+
+        public float getValue() {
+            return getBoost();
+        }
+
     }
 
 
@@ -250,9 +284,9 @@ public class FiltersFunctionScoreQuery extends Query {
         private final float maxBoost;
         private final DocSet[] docSets;
 
-        private CustomBoostFactorScorer(Similarity similarity, CustomBoostFactorWeight w, Scorer scorer,
+        private CustomBoostFactorScorer(CustomBoostFactorWeight w, Scorer scorer,
                                         ScoreMode scoreMode, FilterFunction[] filterFunctions, float maxBoost, DocSet[] docSets) throws IOException {
-            super(similarity);
+            super(w);
             this.subQueryWeight = w.getValue();
             this.scorer = scorer;
             this.scoreMode = scoreMode;
@@ -334,6 +368,11 @@ public class FiltersFunctionScoreQuery extends Query {
             }
             float score = scorer.score();
             return subQueryWeight * score * factor;
+        }
+
+        @Override
+        public float freq() throws IOException {
+            return scorer.freq();
         }
     }
 

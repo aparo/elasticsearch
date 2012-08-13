@@ -174,33 +174,30 @@ public class SimpleBloomCache extends AbstractIndexComponent implements BloomCac
 
         BloomFilterLoader(IndexReader reader, String field) {
             this.reader = reader;
-            this.field = StringHelper.intern(field);
+            //this.field = StringHelper.intern(field);
+            this.field = field;
         }
 
         @SuppressWarnings({"StringEquality"})
         @Override
         public void run() {
-            TermDocs termDocs = null;
-            TermEnum termEnum = null;
+            BloomFilter filter = BloomFilterFactory.getFilter(reader.numDocs(), 15);
             try {
-                Unicode.UTF8Result utf8Result = new Unicode.UTF8Result();
-                BloomFilter filter = BloomFilterFactory.getFilter(reader.numDocs(), 15);
-                termDocs = reader.termDocs();
-                termEnum = reader.terms(new Term(field));
-                do {
-                    Term term = termEnum.term();
-                    if (term == null || term.field() != field) break;
-
-                    // LUCENE MONITOR: 4.0, move to use bytes!
-                    Unicode.fromStringAsUtf8(term.text(), utf8Result);
-                    termDocs.seek(termEnum);
-                    while (termDocs.next()) {
+                Terms terms= MultiFields.getTerms(reader, field);
+                TermsEnum termEnum;
+                if (terms!=null){
+                    termEnum=terms.iterator(null);
+                    BytesRef text;
+                    while((text = termEnum.next()) != null) {
+                        DocsEnum docsEnum = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader), field, text);
+                        int doc;
+	                    while((doc = docsEnum.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
                         // when traversing, make sure to ignore deleted docs, so the key->docId will be correct
-                        if (!reader.isDeleted(termDocs.doc())) {
-                            filter.add(utf8Result.result, 0, utf8Result.length);
+                            filter.add(text.bytes, 0, text.length);
                         }
                     }
-                } while (termEnum.next());
+                }
+
                 ConcurrentMap<String, BloomFilterEntry> fieldCache = cache.get(reader.getCoreCacheKey());
                 if (fieldCache != null) {
                     if (fieldCache.containsKey(field)) {
@@ -217,21 +214,6 @@ public class SimpleBloomCache extends AbstractIndexComponent implements BloomCac
                 // ignore failures that result from a closed reader...
                 if (reader.getRefCount() > 0) {
                     logger.warn("failed to load bloom filter for [{}]", e, field);
-                }
-            } finally {
-                try {
-                    if (termDocs != null) {
-                        termDocs.close();
-                    }
-                } catch (Exception e) {
-                    // ignore
-                }
-                try {
-                    if (termEnum != null) {
-                        termEnum.close();
-                    }
-                } catch (Exception e) {
-                    // ignore
                 }
             }
         }

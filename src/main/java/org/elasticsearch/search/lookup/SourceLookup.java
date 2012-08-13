@@ -21,19 +21,15 @@ package org.elasticsearch.search.lookup;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
-import org.elasticsearch.index.mapper.internal.SourceFieldSelector;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  *
@@ -61,12 +57,13 @@ public class SourceLookup implements Map {
             return source;
         }
         try {
-            Document doc = reader.document(docId, SourceFieldSelector.INSTANCE);
-            Field sourceField = doc.getFieldable(SourceFieldMapper.NAME);
+
+            Document doc = reader.document(docId, new HashSet<String>(Arrays.asList(SourceFieldMapper.NAME)));
+            IndexableField sourceField = doc.getField(SourceFieldMapper.NAME);
             if (sourceField == null) {
                 source = ImmutableMap.of();
             } else {
-                this.source = sourceAsMap(sourceField.getBinaryValue(), sourceField.getBinaryOffset(), sourceField.getBinaryLength());
+                this.source = sourceAsMap(sourceField.binaryValue().bytes, sourceField.binaryValue().offset, sourceField.binaryValue().length);
             }
         } catch (Exception e) {
             throw new ElasticSearchParseException("failed to parse / load source", e);

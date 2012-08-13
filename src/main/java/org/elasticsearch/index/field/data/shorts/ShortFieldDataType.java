@@ -38,12 +38,14 @@ public class ShortFieldDataType implements FieldDataType<ShortFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ShortFieldDataComparator(numHits, fieldname, cache);
+                    //return new ShortFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getShortComparator(numHits, fieldname, cache, null);
+
                 }
 
                 @Override
-                public int reducedType() {
-                    return SortField.SHORT;
+                public SortField.Type reducedType() {
+                    return SortField.Type.SHORT;
                 }
             };
         }
@@ -51,12 +53,13 @@ public class ShortFieldDataType implements FieldDataType<ShortFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ShortFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Short.MIN_VALUE : Short.MAX_VALUE);
+                    //return new ShortFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Short.MIN_VALUE : Short.MAX_VALUE);
+                    return Comparators.getShortComparator(numHits, fieldname, cache, reversed ? Short.MIN_VALUE : Short.MAX_VALUE);
                 }
 
                 @Override
-                public int reducedType() {
-                    return SortField.SHORT;
+                public SortField.Type reducedType() {
+                    return SortField.Type.SHORT;
                 }
             };
         }
@@ -64,24 +67,28 @@ public class ShortFieldDataType implements FieldDataType<ShortFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ShortFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Short.MAX_VALUE : Short.MIN_VALUE);
+                    //return new ShortFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Short.MAX_VALUE : Short.MIN_VALUE);
+                    return Comparators.getShortComparator(numHits, fieldname, cache, reversed ? Short.MIN_VALUE : Short.MAX_VALUE);
+
                 }
 
                 @Override
-                public int reducedType() {
-                    return SortField.SHORT;
+                public SortField.Type reducedType() {
+                    return SortField.Type.SHORT;
                 }
             };
         }
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new ShortFieldDataMissingComparator(numHits, fieldname, cache, Short.parseShort(missing));
+                //return new ShortFieldDataMissingComparator(numHits, fieldname, cache, Short.parseShort(missing));
+                return Comparators.getShortComparator(numHits, fieldname, cache, Short.parseShort(missing));
+
             }
 
             @Override
-            public int reducedType() {
-                return SortField.SHORT;
+            public SortField.Type reducedType() {
+                return SortField.Type.SHORT;
             }
         };
     }

@@ -46,8 +46,39 @@ public class FieldDataLoader {
 
         int t = 1;  // current term number
 
-        TermDocs termDocs = reader.termDocs();
-        TermEnum termEnum = reader.terms(new Term(field));
+        Terms terms = MultiFields.getTerms(reader, field);
+        try {
+            if (terms != null) {
+                TermsEnum termsEnum = terms.iterator(null);
+                BytesRef text;
+                while ((text = termsEnum.next()) != null) {
+                    loader.collectTerm(text);
+                    DocsEnum docsEnum = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader), field, text);
+                    int doc;
+                    while ((doc = docsEnum.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                        int[] ordinal;
+                        if (idx[doc] >= ordinals.size()) {
+                            ordinal = new int[reader.maxDoc()];
+                            ordinals.add(ordinal);
+                        } else {
+                            ordinal = ordinals.get(idx[doc]);
+                        }
+                        ordinal[doc] = t;
+                        idx[doc]++;
+                    }
+                    t++;
+                }
+            }
+        } catch (RuntimeException e) {
+            if (e.getClass().getName().endsWith("StopFillCacheException")) {
+                // all is well, in case numeric parsers are used.
+            } else {
+                throw e;
+            }
+        }
+
+        /*DocsEnum termDocs = reader.termDocs();
+        Terms termEnum = reader.terms(field);
         try {
             // bulk read (in lucene 4 it won't be needed).
             int size = Math.min(128, reader.maxDoc());
@@ -86,7 +117,7 @@ public class FieldDataLoader {
         } finally {
             termDocs.close();
             termEnum.close();
-        }
+        }*/
 
         if (ordinals.size() == 1) {
             return loader.buildSingleValue(field, ordinals.get(0));
@@ -103,7 +134,7 @@ public class FieldDataLoader {
 
         void init();
 
-        void collectTerm(String term);
+        void collectTerm(BytesRef term);
 
         T buildSingleValue(String fieldName, int[] ordinals);
 

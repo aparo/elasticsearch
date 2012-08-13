@@ -40,7 +40,6 @@ import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
 import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.FieldSelector;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.*;
 import org.apache.lucene.store.RAMDirectory;
@@ -262,7 +261,7 @@ public class CustomMemoryIndex implements Serializable {
 
         TokenStream stream;
         try {
-            stream = analyzer.reusableTokenStream(fieldName, new FastStringReader(text));
+            stream = analyzer.tokenStream(fieldName, new FastStringReader(text));
         } catch (IOException ex) {
             throw new RuntimeException(ex);
         }
@@ -771,7 +770,7 @@ public class CustomMemoryIndex implements Serializable {
      */
     final class MemoryIndexReader extends IndexReader {
 
-        private Searcher searcher; // needed to find searcher.getSimilarity()
+        private IndexSearcher searcher; // needed to find searcher.getSimilarity()
 
         private MemoryIndexReader() {
             super(); // avoid as much superclass baggage as possible

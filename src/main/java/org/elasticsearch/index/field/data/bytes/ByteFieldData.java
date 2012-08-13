@@ -146,7 +146,7 @@ public abstract class ByteFieldData extends NumericFieldData<ByteDocFieldData> {
         }
 
         @Override
-        public void collectTerm(String term) {
+        public void collectTerm(BytesRef term) {
             terms.add((byte) FieldCache.NUMERIC_UTILS_INT_PARSER.parseInt(term));
         }
 

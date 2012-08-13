@@ -38,11 +38,13 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new IntFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getIntegerComparator(numHits, fieldname, cache, null);
+
+                    //return new IntFieldDataComparator(numHits, fieldname, cache);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.INT;
                 }
             };
@@ -51,11 +53,12 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new IntFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Integer.MIN_VALUE : Integer.MAX_VALUE);
+                    return Comparators.getIntegerComparator(numHits, fieldname, cache, reversed ? Integer.MIN_VALUE : Integer.MAX_VALUE);
+                    //return new IntFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Integer.MIN_VALUE : Integer.MAX_VALUE);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.INT;
                 }
             };
@@ -64,11 +67,12 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new IntFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Integer.MAX_VALUE : Integer.MIN_VALUE);
+                    return Comparators.getIntegerComparator(numHits, fieldname, cache, reversed ? Integer.MIN_VALUE : Integer.MAX_VALUE);
+                    //return new IntFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Integer.MAX_VALUE : Integer.MIN_VALUE);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.INT;
                 }
             };
@@ -76,11 +80,12 @@ public class IntFieldDataType implements FieldDataType<IntFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new IntFieldDataMissingComparator(numHits, fieldname, cache, Integer.parseInt(missing));
+                return Comparators.getIntegerComparator(numHits, fieldname, cache, Integer.parseInt(missing));
+                //return new IntFieldDataMissingComparator(numHits, fieldname, cache, Integer.parseInt(missing));
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.INT;
             }
         };

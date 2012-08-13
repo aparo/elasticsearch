@@ -38,11 +38,12 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ByteFieldDataComparator(numHits, fieldname, cache);
+                    //return new ByteFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getByteComparator(numHits, fieldname, cache, null);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.BYTE;
                 }
             };
@@ -51,11 +52,13 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ByteFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Byte.MIN_VALUE : Byte.MAX_VALUE);
+                    //return new ByteFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Byte.MIN_VALUE : Byte.MAX_VALUE);
+                    return Comparators.getByteComparator(numHits, fieldname, cache, reversed ? Byte.MIN_VALUE : Byte.MAX_VALUE);
+
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.BYTE;
                 }
             };
@@ -64,11 +67,13 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new ByteFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Byte.MAX_VALUE : Byte.MIN_VALUE);
+                    //return new ByteFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Byte.MAX_VALUE : Byte.MIN_VALUE);
+                    return Comparators.getByteComparator(numHits, fieldname, cache, reversed ? Byte.MIN_VALUE : Byte.MAX_VALUE);
+
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.BYTE;
                 }
             };
@@ -76,11 +81,13 @@ public class ByteFieldDataType implements FieldDataType<ByteFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new ByteFieldDataMissingComparator(numHits, fieldname, cache, Byte.parseByte(missing));
+                //return new ByteFieldDataMissingComparator(numHits, fieldname, cache, Byte.parseByte(missing));
+                return Comparators.getByteComparator(numHits, fieldname, cache, Byte.parseByte(missing));
+
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.BYTE;
             }
         };

@@ -608,8 +608,8 @@ public abstract class BlobStoreIndexShardGateway extends AbstractIndexShardCompo
         // read the gateway data persisted
         long version = -1;
         try {
-            if (IndexReader.indexExists(store.directory())) {
-                version = IndexReader.getCurrentVersion(store.directory());
+            if (DirectoryReader.indexExists(store.directory())) {
+                version = DirectoryReader.open(store.directory()).getVersion();
             }
         } catch (IOException e) {
             throw new IndexShardGatewayRecoveryException(shardId(), "Failed to fetch index version after copying it over", e);
@@ -637,7 +637,7 @@ public abstract class BlobStoreIndexShardGateway extends AbstractIndexShardCompo
         try {
             // we create an output with no checksum, this is because the pure binary data of the file is not
             // the checksum (because of seek). We will create the checksum file once copying is done
-            indexOutput = store.createOutputRaw(fileInfo.physicalName());
+            indexOutput = store.createOutputRaw(fileInfo.physicalName(), IOContext.DEFAULT);
         } catch (IOException e) {
             failures.add(e);
             latch.countDown();
@@ -752,7 +752,7 @@ public abstract class BlobStoreIndexShardGateway extends AbstractIndexShardCompo
 
             IndexInput indexInput = null;
             try {
-                indexInput = indexShard.store().openInputRaw(fileInfo.physicalName());
+                indexInput = indexShard.store().openInputRaw(fileInfo.physicalName(), IOContext.DEFAULT);
                 indexInput.seek(partNumber * chunkBytes);
                 InputStreamIndexInput is = new ThreadSafeInputStreamIndexInput(indexInput, chunkBytes);
 

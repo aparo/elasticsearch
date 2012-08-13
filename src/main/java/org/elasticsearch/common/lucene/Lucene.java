@@ -79,12 +79,52 @@ public class Lucene {
         if ("3.0".equals(version)) {
             return Version.LUCENE_30;
         }
+        if ("4.0".equals(version)) {
+            return Version.LUCENE_40;
+        }        
         logger.warn("no version match {}, default to {}", version, defaultVersion);
         return defaultVersion;
     }
 
-    public static long count(IndexSearcher searcher, Query query, float minScore) throws IOException {
-        return count(searcher, query, null, minScore);
+    public static FieldType cloneType(FieldType ft){
+        FieldType result = new FieldType();
+        result.setOmitNorms(ft.omitNorms());
+        result.setIndexed(ft.indexed());
+        result.setTokenized(ft.tokenized());
+        result.setIndexOptions(ft.indexOptions());
+        result.setStored(ft.stored());
+        result.setStoreTermVectors(ft.storeTermVectors());
+        result.setStoreTermVectorOffsets(ft.storeTermVectorOffsets());
+        result.setStoreTermVectorPositions(ft.storeTermVectorPositions());
+        return result;
+    }
+
+    public static FieldType getDefaultFieldType(boolean stored, boolean indexed, boolean tokenized,
+                                                boolean termVector, boolean termVectorOffset, boolean termVectorPositions,
+                                                boolean omitNorms, FieldInfo.IndexOptions indexOptions) {
+        FieldType result = new FieldType();
+        result.setStored(stored);
+        result.setIndexed(indexed);
+        result.setTokenized(tokenized);
+        result.setStoreTermVectors(termVector);
+        result.setStoreTermVectorOffsets(termVectorOffset);
+        result.setStoreTermVectorPositions(termVectorPositions);
+        result.setOmitNorms(omitNorms);
+        result.setIndexOptions(indexOptions);
+        return result;
+    }
+
+    public static FieldType getDefaultFieldType(){
+        return getDefaultFieldType(false, false, false, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+    }
+
+    public static FieldType getDefaultFieldType(boolean store, boolean index) {
+        return getDefaultFieldType(store, index, index, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+    }
+
+
+    public static long count(IndexSearcher IndexSearcher, Query query, float minScore) throws IOException {
+        return count(IndexSearcher, query, null, minScore);
     }
 
     public static long count(IndexSearcher searcher, Query query, Filter filter, float minScore) throws IOException {
@@ -94,15 +134,10 @@ public class Lucene {
     }
 
     public static int docId(IndexReader reader, Term term) throws IOException {
-        TermDocs termDocs = reader.termDocs(term);
-        try {
-            if (termDocs.next()) {
-                return termDocs.doc();
-            }
+        DocsEnum termDocs = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader),term.field(), term.bytes());
+        if (termDocs==null)
             return NO_DOC;
-        } finally {
-            termDocs.close();
-        }
+        return termDocs.docID();
     }
 
     /**
@@ -135,7 +170,36 @@ public class Lucene {
                 if (in.readBoolean()) {
                     field = in.readUTF();
                 }
-                fields[i] = new SortField(field, in.readVInt(), in.readBoolean());
+                SortField.Type type=SortField.Type.SCORE;
+                int typeInt = in.readVInt();
+                if(typeInt==0){
+                    type=SortField.Type.SCORE;
+                } else if(typeInt==1){
+                    type=SortField.Type.DOC;
+                } else if(typeInt==2){
+                    type=SortField.Type.STRING;
+                } else if(typeInt==3){
+                    type=SortField.Type.INT;
+                } else if(typeInt==4){
+                    type=SortField.Type.FLOAT;
+                } else if(typeInt==5){
+                    type=SortField.Type.LONG;
+                } else if(typeInt==6){
+                    type=SortField.Type.DOUBLE;
+                } else if(typeInt==7){
+                    type=SortField.Type.SHORT;
+                } else if(typeInt==8){
+                    type=SortField.Type.CUSTOM;
+                } else if(typeInt==9){
+                    type=SortField.Type.BYTE;
+                } else if(typeInt==10){
+                    type=SortField.Type.STRING_VAL;
+                } else if(typeInt==11){
+                    type=SortField.Type.BYTES;
+                } else if(typeInt==12){
+                    type=SortField.Type.REWRITEABLE;
+                }
+                fields[i] = new SortField(field, type, in.readBoolean());
             }
 
             FieldDoc[] fieldDocs = new FieldDoc[in.readVInt()];
@@ -202,9 +266,9 @@ public class Lucene {
                     out.writeUTF(sortField.getField());
                 }
                 if (sortField.getComparatorSource() != null) {
-                    out.writeVInt(((FieldDataType.ExtendedFieldComparatorSource) sortField.getComparatorSource()).reducedType());
+                    out.writeVInt(((FieldDataType.ExtendedFieldComparatorSource) sortField.getComparatorSource()).reducedType().ordinal());
                 } else {
-                    out.writeVInt(sortField.getType());
+                    out.writeVInt(sortField.getType().ordinal());
                 }
                 out.writeBoolean(sortField.getReverse());
             }
@@ -315,7 +379,7 @@ public class Lucene {
 
     public static SegmentInfo getSegmentInfo(SegmentReader reader) {
         try {
-            return (SegmentInfo) segmentReaderSegmentInfoField.get(reader);
+            return ((SegmentInfoPerCommit) segmentReaderSegmentInfoField.get(reader)).info;
         } catch (IllegalAccessException e) {
             return null;
         }
@@ -387,29 +451,6 @@ public class Lucene {
         public boolean acceptsDocsOutOfOrder() {
             return true;
         }
-    }
-
-    public static FieldType getDefaultFieldType(boolean stored, boolean indexed, boolean tokenized,
-                                                boolean termVector, boolean termVectorOffset, boolean termVectorPositions,
-                                                boolean omitNorms, FieldInfo.IndexOptions indexOptions) {
-        FieldType result = new FieldType();
-        result.setStored(stored);
-        result.setIndexed(indexed);
-        result.setTokenized(tokenized);
-        result.setStoreTermVectors(termVector);
-        result.setStoreTermVectorOffsets(termVectorOffset);
-        result.setStoreTermVectorPositions(termVectorPositions);
-        result.setOmitNorms(omitNorms);
-        result.setIndexOptions(indexOptions);
-        return result;
-    }
-
-    public static FieldType getDefaultFieldType(){
-        return getDefaultFieldType(false, false, false, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
-    }
-
-    public static FieldType getDefaultFieldType(boolean store, boolean index) {
-        return getDefaultFieldType(store, index, index, false, false, false, false, FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
     }
 
     private Lucene() {

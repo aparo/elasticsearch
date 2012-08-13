@@ -27,21 +27,45 @@ import org.apache.lucene.document.Field;
 public class FieldBuilder {
 
     private final Field field;
+    private final FieldType fieldType;
 
-    FieldBuilder(String name, String value, Field.Store store, Field.Index index) {
-        field = new Field(name, value, store, index);
+
+    FieldBuilder(String name, String value, boolean store, boolean index) {
+        fieldType = Lucene.getDefaultFieldType();
+        fieldType.setStored(store);
+        fieldType.setIndexed(index);
+        if(index){
+            fieldType.setTokenized(index);
+        }
+        fieldType.setIndexOptions(FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+        field = new Field(name, value, fieldType);
     }
 
-    FieldBuilder(String name, String value, Field.Store store, Field.Index index, Field.TermVector termVector) {
-        field = new Field(name, value, store, index, termVector);
+    FieldBuilder(String name, String value, boolean store, boolean index, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions) {
+        fieldType = Lucene.getDefaultFieldType();
+        fieldType.setStored(store);
+        fieldType.setIndexed(index);
+        if(index){
+            fieldType.setTokenized(index);
+        }
+        fieldType.setStoreTermVectors(storeTermVectors);
+        fieldType.setStoreTermVectorOffsets(storeTermVectorOffsets);
+        fieldType.setStoreTermVectorPositions(storeTermVectorPositions);
+        if(storeTermVectors)
+            fieldType.setIndexOptions(FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS);
+        field = new Field(name, value, fieldType);
     }
 
-    FieldBuilder(String name, byte[] value, Field.Store store) {
-        field = new Field(name, value, store);
+    FieldBuilder(String name, byte[] value, boolean store) {
+        fieldType = Lucene.getDefaultFieldType();
+        fieldType.setStored(store);
+        field = new Field(name, value, fieldType);
     }
 
-    FieldBuilder(String name, byte[] value, int offset, int length, Field.Store store) {
-        field = new Field(name, value, offset, length, store);
+    FieldBuilder(String name, byte[] value, int offset, int length, boolean store) {
+        fieldType = Lucene.getDefaultFieldType();
+        fieldType.setStored(store);
+        field = new Field(name, value, offset, length, fieldType);
     }
 
     public FieldBuilder boost(float boost) {
@@ -50,12 +74,12 @@ public class FieldBuilder {
     }
 
     public FieldBuilder omitNorms(boolean omitNorms) {
-        field.setOmitNorms(omitNorms);
+        fieldType.setOmitNorms(omitNorms);
         return this;
     }
 
-    public FieldBuilder omitTermFreqAndPositions(boolean omitTermFreqAndPositions) {
-        field.setOmitTermFreqAndPositions(omitTermFreqAndPositions);
+    public FieldBuilder indexOptions(FieldInfo.IndexOptions indexOptions) {
+        fieldType.setIndexOptions(indexOptions);
         return this;
     }
 

@@ -42,12 +42,15 @@ import java.io.IOException;
 public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     public static class Defaults {
-        public static final Field.Index INDEX = Field.Index.ANALYZED;
-        public static final Field.Store STORE = Field.Store.NO;
-        public static final Field.TermVector TERM_VECTOR = Field.TermVector.NO;
+        public static final boolean INDEX = true;
+        public static final boolean STORE_TERM_VECTOR = false;
+        public static final boolean STORE_TERM_VECTOR_OFFSETS = false;
+        public static final boolean STORE_TERM_VECTOR_POSITIONS = false;
+        public static final boolean STORE = false;
+        public static final boolean TOKENIZE = true;
         public static final float BOOST = 1.0f;
         public static final boolean OMIT_NORMS = false;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = false;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
     }
 
     public abstract static class OpenBuilder<T extends Builder, Y extends AbstractFieldMapper> extends AbstractFieldMapper.Builder<T, Y> {
@@ -57,18 +60,33 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         }
 
         @Override
-        public T index(Field.Index index) {
+        public T index(boolean index) {
             return super.index(index);
         }
 
         @Override
-        public T store(Field.Store store) {
+        public T store(boolean store) {
             return super.store(store);
         }
 
         @Override
-        public T termVector(Field.TermVector termVector) {
-            return super.termVector(termVector);
+        public T tokenize(boolean store) {
+            return super.tokenize(store);
+        }
+
+        @Override
+        public T storeTermVectors(boolean storeTermVectors) {
+            return super.storeTermVectors(storeTermVectors);
+        }
+
+        @Override
+        public T storeTermVectorOffsets(boolean storeTermVectorOffsets) {
+            return super.storeTermVectorOffsets(storeTermVectorOffsets);
+        }
+
+        @Override
+        public T storeTermVectorPositions(boolean storeTermVectorPositions) {
+            return super.storeTermVectorPositions(storeTermVectorPositions);
         }
 
         @Override
@@ -79,11 +97,11 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         @Override
         public T omitNorms(boolean omitNorms) {
             return super.omitNorms(omitNorms);
-        }
-
+        }        
+        
         @Override
-        public T omitTermFreqAndPositions(boolean omitTermFreqAndPositions) {
-            return super.omitTermFreqAndPositions(omitTermFreqAndPositions);
+        public T indexOptions(FieldInfo.IndexOptions indexOptions) {
+            return super.indexOptions(indexOptions);
         }
 
         @Override
@@ -104,17 +122,23 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     public abstract static class Builder<T extends Builder, Y extends AbstractFieldMapper> extends Mapper.Builder<T, Y> {
 
-        protected Field.Index index = Defaults.INDEX;
+        protected boolean index = Defaults.INDEX;
 
-        protected Field.Store store = Defaults.STORE;
+        protected boolean store = Defaults.STORE;
 
-        protected Field.TermVector termVector = Defaults.TERM_VECTOR;
+        protected boolean tokenize = Defaults.TOKENIZE;
+
+        protected boolean storeTermVectors = Defaults.STORE_TERM_VECTOR;
+
+        protected boolean storeTermVectorOffsets = Defaults.STORE_TERM_VECTOR_OFFSETS;
+
+        protected boolean storeTermVectorPositions = Defaults.STORE_TERM_VECTOR_POSITIONS;
 
         protected float boost = Defaults.BOOST;
 
         protected boolean omitNorms = Defaults.OMIT_NORMS;
 
-        protected boolean omitTermFreqAndPositions = Defaults.OMIT_TERM_FREQ_AND_POSITIONS;
+        protected FieldInfo.IndexOptions indexOptions = Defaults.INDEX_OPTIONS;
 
         protected String indexName;
 
@@ -128,18 +152,33 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
             super(name);
         }
 
-        protected T index(Field.Index index) {
+        protected T index(boolean index) {
             this.index = index;
             return builder;
         }
 
-        protected T store(Field.Store store) {
+        protected T store(boolean store) {
             this.store = store;
             return builder;
         }
 
-        protected T termVector(Field.TermVector termVector) {
-            this.termVector = termVector;
+        protected T tokenize(boolean tokenize) {
+            this.tokenize = tokenize;
+            return builder;
+        }
+
+        protected T storeTermVectors(boolean storeTermVectors) {
+            this.storeTermVectors = storeTermVectors;
+            return builder;
+        }
+
+        protected T storeTermVectorOffsets(boolean storeTermVectorOffsets) {
+            this.storeTermVectorOffsets = storeTermVectorOffsets;
+            return builder;
+        }
+
+        protected T storeTermVectorPositions(boolean storeTermVectorPositions) {
+            this.storeTermVectorPositions = storeTermVectorPositions;
             return builder;
         }
 
@@ -153,8 +192,8 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
             return builder;
         }
 
-        protected T omitTermFreqAndPositions(boolean omitTermFreqAndPositions) {
-            this.omitTermFreqAndPositions = omitTermFreqAndPositions;
+        protected T indexOptions(FieldInfo.IndexOptions indexOptions) {
+            this.indexOptions = indexOptions;
             return builder;
         }
 
@@ -214,28 +253,54 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     protected final NamedAnalyzer searchAnalyzer;
 
-    protected AbstractFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
-                                  float boost, boolean omitNorms, boolean omitTermFreqAndPositions, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
+    protected boolean index;
+    protected boolean tokenize;
+    protected boolean store;
+    protected boolean storeTermVectors;
+    protected boolean storeTermVectorOffsets;
+    protected boolean storeTermVectorPositions;
+    protected boolean omitNorms;
+    protected FieldInfo.IndexOptions indexOptions;
+
+    protected AbstractFieldMapper(Names names, boolean index, boolean tokenize, boolean store,
+                                  boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
+                                  float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
+                                  NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
         this.names = names;
         this.index = index;
+        this.tokenize = tokenize;
         this.store = store;
-        this.termVector = termVector;
+        this.storeTermVectors=storeTermVectors;
+        this.storeTermVectorOffsets=storeTermVectorOffsets;
+        this.storeTermVectorPositions=storeTermVectorPositions;
+        this.omitNorms=omitNorms;
+        this.indexOptions=indexOptions;
         this.boost = boost;
-        this.omitNorms = omitNorms;
-        this.omitTermFreqAndPositions = omitTermFreqAndPositions;
-        this.indexOptions = omitTermFreqAndPositions ? FieldInfo.IndexOptions.DOCS_ONLY : FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS;
         // automatically set to keyword analyzer if its indexed and not analyzed
-        if (indexAnalyzer == null && !index.isAnalyzed() && index.isIndexed()) {
+        if (indexAnalyzer == null && index && !tokenize) {
             this.indexAnalyzer = Lucene.KEYWORD_ANALYZER;
         } else {
             this.indexAnalyzer = indexAnalyzer;
         }
         // automatically set to keyword analyzer if its indexed and not analyzed
-        if (searchAnalyzer == null && !index.isAnalyzed() && index.isIndexed()) {
+        if (searchAnalyzer == null && index && !tokenize) {
             this.searchAnalyzer = Lucene.KEYWORD_ANALYZER;
         } else {
             this.searchAnalyzer = searchAnalyzer;
         }
+    }
+
+    public FieldType getFieldType(){
+        FieldType fieldType = Lucene.getDefaultFieldType();
+        fieldType.setIndexed(index);
+        fieldType.setTokenized(tokenize);
+        fieldType.setStored(store);
+        fieldType.setStoreTermVectors(storeTermVectors);
+        fieldType.setStoreTermVectorOffsets(storeTermVectorOffsets);
+        fieldType.setStoreTermVectorPositions(storeTermVectorPositions);
+        fieldType.setOmitNorms(omitNorms);
+        fieldType.setIndexOptions(indexOptions);
+        return fieldType;
     }
 
     @Override
@@ -249,33 +314,48 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     }
 
     @Override
-    public Field.Index index() {
+    public boolean index() {
         return this.index;
     }
 
     @Override
-    public Field.Store store() {
+    public boolean store() {
         return this.store;
     }
 
     @Override
     public boolean stored() {
-        return store == Field.Store.YES;
+        return this.store;
+    }
+
+    @Override
+    public boolean tokenized() {
+        return this.tokenize;
     }
 
     @Override
     public boolean indexed() {
-        return index != Field.Index.NO;
+        return this.index;
     }
 
     @Override
-    public boolean analyzed() {
-        return index == Field.Index.ANALYZED;
+    public FieldInfo.IndexOptions indexOptions() {
+        return this.indexOptions;
     }
 
     @Override
-    public Field.TermVector termVector() {
-        return this.termVector;
+    public boolean storeTermVectors() {
+        return this.storeTermVectors;
+    }
+
+    @Override
+    public boolean storeTermVectorOffsets() {
+        return this.storeTermVectorOffsets;
+    }
+
+    @Override
+    public boolean storeTermVectorPositions() {
+        return this.storeTermVectorPositions;
     }
 
     @Override
@@ -286,11 +366,6 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     @Override
     public boolean omitNorms() {
         return this.omitNorms;
-    }
-
-    @Override
-    public boolean omitTermFreqAndPositions() {
-        return this.omitTermFreqAndPositions;
     }
 
     @Override
@@ -315,8 +390,6 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
             if (field == null) {
                 return;
             }
-            field.setOmitNorms(omitNorms);
-            field.setIndexOptions(indexOptions);
             if (!customBoost()) {
                 field.setBoost(boost);
             }
@@ -348,7 +421,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     }
 
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return valueAsString(field);
     }
 
@@ -379,12 +452,12 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     @Override
     public Query fuzzyQuery(String value, String minSim, int prefixLength, int maxExpansions) {
-        return new FuzzyQuery(names().createIndexNameTerm(indexedValue(value)), Float.parseFloat(minSim), prefixLength, maxExpansions);
+        return new FuzzyQuery(new Term(names().indexName(), indexedValue(value)),  prefixLength, maxExpansions);
     }
 
     @Override
     public Query fuzzyQuery(String value, double minSim, int prefixLength, int maxExpansions) {
-        return new FuzzyQuery(names().createIndexNameTerm(value), (float) minSim, prefixLength, maxExpansions);
+        return new FuzzyQuery(new Term(names().indexName(), indexedValue(value)),  prefixLength, maxExpansions);
     }
 
     @Override
@@ -404,16 +477,16 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     @Override
     public Query rangeQuery(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return new TermRangeQuery(names.indexName(),
-                lowerTerm == null ? null : indexedValue(lowerTerm),
-                upperTerm == null ? null : indexedValue(upperTerm),
+                lowerTerm == null ? null : new BytesRef(indexedValue(lowerTerm)),
+                upperTerm == null ? null : new BytesRef(indexedValue(upperTerm)),
                 includeLower, includeUpper);
     }
 
     @Override
     public Filter rangeFilter(String lowerTerm, String upperTerm, boolean includeLower, boolean includeUpper, @Nullable QueryParseContext context) {
         return new TermRangeFilter(names.indexName(),
-                lowerTerm == null ? null : indexedValue(lowerTerm),
-                upperTerm == null ? null : indexedValue(upperTerm),
+                lowerTerm == null ? null : new BytesRef(indexedValue(lowerTerm)),
+                upperTerm == null ? null : new BytesRef(indexedValue(upperTerm)),
                 includeLower, includeUpper);
     }
 
@@ -434,14 +507,23 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
             return;
         }
         AbstractFieldMapper fieldMergeWith = (AbstractFieldMapper) mergeWith;
-        if (!this.index.equals(fieldMergeWith.index)) {
+        if (this.indexed() != fieldMergeWith.indexed()) {
             mergeContext.addConflict("mapper [" + names.fullName() + "] has different index values");
         }
-        if (!this.store.equals(fieldMergeWith.store)) {
+        if (this.tokenized() != fieldMergeWith.tokenized()) {
+            mergeContext.addConflict("mapper [" + names.fullName() + "] has different tokenize values");
+        }
+        if (this.stored() != fieldMergeWith.stored()) {
             mergeContext.addConflict("mapper [" + names.fullName() + "] has different store values");
         }
         if (!this.termVector.equals(fieldMergeWith.termVector)) {
             mergeContext.addConflict("mapper [" + names.fullName() + "] has different term_vector values");
+        }
+        if (this.storeTermVectorOffsets() != fieldMergeWith.storeTermVectorOffsets()) {
+            mergeContext.addConflict("mapper [" + names.fullName() + "] has different term_vector offset values");
+        }
+        if (this.storeTermVectorPositions() != fieldMergeWith.storeTermVectorPositions()) {
+            mergeContext.addConflict("mapper [" + names.fullName() + "] has different term_vector positions values");
         }
         if (this.indexAnalyzer == null) {
             if (fieldMergeWith.indexAnalyzer != null) {

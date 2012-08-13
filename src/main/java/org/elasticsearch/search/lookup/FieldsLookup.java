@@ -20,11 +20,11 @@
 package org.elasticsearch.search.lookup;
 
 import com.google.common.collect.Maps;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.document.DocumentStoredFieldVisitor;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.Nullable;
-import org.elasticsearch.common.lucene.document.SingleFieldSelector;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
 
@@ -44,24 +44,22 @@ public class FieldsLookup implements Map {
     @Nullable
     private final String[] types;
 
-    private IndexReader reader;
+    private AtomicReaderContext context;
 
     private int docId = -1;
 
     private final Map<String, FieldLookup> cachedFieldData = Maps.newHashMap();
-
-    private final SingleFieldSelector fieldSelector = new SingleFieldSelector();
 
     FieldsLookup(MapperService mapperService, @Nullable String[] types) {
         this.mapperService = mapperService;
         this.types = types;
     }
 
-    public void setNextReader(IndexReader reader) {
-        if (this.reader == reader) { // if we are called with the same reader, don't invalidate source
+    public void setNextReader(AtomicReaderContext context) {
+        if (this.context == context) { // if we are called with the same reader, don't invalidate source
             return;
         }
-        this.reader = reader;
+        this.context = context;
         clearCache();
         this.docId = -1;
     }
@@ -151,9 +149,10 @@ public class FieldsLookup implements Map {
             cachedFieldData.put(name, data);
         }
         if (data.doc() == null) {
-            fieldSelector.name(data.mapper().names().indexName());
             try {
-                data.doc(reader.document(docId, fieldSelector));
+                final DocumentStoredFieldVisitor visitor = new DocumentStoredFieldVisitor(data.mapper().names().indexName());
+                context.reader().document(docId, visitor);
+                data.doc(visitor.getDocument());
             } catch (IOException e) {
                 throw new ElasticSearchParseException("failed to load field [" + name + "]", e);
             }

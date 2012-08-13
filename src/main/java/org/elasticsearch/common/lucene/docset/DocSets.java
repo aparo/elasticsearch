@@ -117,7 +117,7 @@ public class DocSets {
     /**
      * Returns a cacheable version of the doc id set (might be the same instance provided as a parameter).
      */
-    public static DocSet cacheable(IndexReader reader, @Nullable DocIdSet set) throws IOException {
+    public static DocSet cacheable(AtomicReaderContext atomicReaderContext, @Nullable DocIdSet set) throws IOException {
         if (set == null) {
             return DocSet.EMPTY_DOC_SET;
         }
@@ -145,7 +145,7 @@ public class DocSets {
         }
 
         // work with the iterator...
-        FixedBitSet fixedBitSet = new FixedBitSet(reader.maxDoc());
+        FixedBitSet fixedBitSet = new FixedBitSet(atomicReaderContext.reader().maxDoc());
         fixedBitSet.set(doc);
         while ((doc = it.nextDoc()) != DocIdSetIterator.NO_MORE_DOCS) {
             fixedBitSet.set(doc);

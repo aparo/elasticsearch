@@ -41,11 +41,13 @@ public class StringFieldDataType implements FieldDataType<StringFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new StringOrdValFieldDataComparator(numHits, fieldname, sortPos, reversed, cache);
+                //return new StringOrdValFieldDataComparator(numHits, fieldname, sortPos, reversed, cache);
+                return Comparators.getTermOrdValComparator(numHits, fieldname);
+
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.STRING;
             }
         };

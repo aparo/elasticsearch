@@ -146,7 +146,7 @@ public abstract class FloatFieldData extends NumericFieldData<FloatDocFieldData>
         }
 
         @Override
-        public void collectTerm(String term) {
+        public void collectTerm(BytesRef term) {
             terms.add(FieldCache.NUMERIC_UTILS_FLOAT_PARSER.parseFloat(term));
         }
 

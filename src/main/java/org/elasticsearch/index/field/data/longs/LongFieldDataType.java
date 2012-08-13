@@ -33,16 +33,19 @@ import java.io.IOException;
 public class LongFieldDataType implements FieldDataType<LongFieldData> {
 
     @Override
-    public ExtendedFieldComparatorSource newFieldComparatorSource(final FieldDataCache cache, final String missing) {
+    public ExtendedFieldComparatorSource newFieldComparatorSource(final FieldDataCache cache1, final String missing) {
+        //PARO FIX we disable cache
+        final FieldDataCache cache = null;
         if (missing == null) {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new LongFieldDataComparator(numHits, fieldname, cache);
+                    //return new LongFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getLongComparator(numHits, fieldname, cache, null);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.LONG;
                 }
             };
@@ -51,11 +54,12 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new LongFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Long.MIN_VALUE : Long.MAX_VALUE);
+                    //return new LongFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Long.MIN_VALUE : Long.MAX_VALUE);
+                    return Comparators.getLongComparator(numHits, fieldname, cache, reversed ? Long.MIN_VALUE : Long.MAX_VALUE);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.LONG;
                 }
             };
@@ -64,11 +68,13 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new LongFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Long.MAX_VALUE : Long.MIN_VALUE);
+                    //return new LongFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Long.MAX_VALUE : Long.MIN_VALUE);
+                    return Comparators.getLongComparator(numHits, fieldname, cache, reversed ? Long.MIN_VALUE : Long.MAX_VALUE);
+
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.LONG;
                 }
             };
@@ -76,11 +82,13 @@ public class LongFieldDataType implements FieldDataType<LongFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new LongFieldDataMissingComparator(numHits, fieldname, cache, Long.parseLong(missing));
+                //return new LongFieldDataMissingComparator(numHits, fieldname, cache, Long.parseLong(missing));
+                return Comparators.getLongComparator(numHits, fieldname, cache, Long.parseLong(missing));
+
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.LONG;
             }
         };

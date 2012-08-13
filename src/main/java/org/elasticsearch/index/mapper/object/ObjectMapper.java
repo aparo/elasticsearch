@@ -304,7 +304,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             this.mappers = copyOf(mappers);
         }
         this.nestedTypePath = "__" + fullPath;
-        this.nestedTypeFilter = new TermFilter(TypeFieldMapper.TERM_FACTORY.createTerm(nestedTypePath));
+        this.nestedTypeFilter = new TermFilter(TypeFieldMapper.createTerm(nestedTypePath));
     }
 
     @Override
@@ -402,7 +402,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         if (nested.isNested()) {
             Document nestedDoc = new Document();
             // pre add the uid field if possible (id was already provided)
-            Field uidField = context.doc().getFieldable(UidFieldMapper.NAME);
+            IndexableField uidField = context.doc().getField(UidFieldMapper.NAME);
             if (uidField != null) {
                 // we don't need to add it as a full uid field in nested docs, since we don't need versioning
                 // we also rely on this for UidField#loadVersion
@@ -455,7 +455,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
         if (nested.isNested()) {
             Document nestedDoc = context.switchDoc(restoreDoc);
             if (nested.isIncludeInParent()) {
-                for (Field field : nestedDoc.getFields()) {
+                for (IndexableField field : nestedDoc.getFields()) {
                     if (field.name().equals(UidFieldMapper.NAME) || field.name().equals(TypeFieldMapper.NAME)) {
                         continue;
                     } else {
@@ -466,7 +466,7 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             if (nested.isIncludeInRoot()) {
                 // don't add it twice, if its included in parent, and we are handling the master doc...
                 if (!(nested.isIncludeInParent() && context.doc() == context.rootDoc())) {
-                    for (Field field : nestedDoc.getFields()) {
+                    for (IndexableField field : nestedDoc.getFields()) {
                         if (field.name().equals(UidFieldMapper.NAME) || field.name().equals(TypeFieldMapper.NAME)) {
                             continue;
                         } else {

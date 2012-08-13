@@ -23,6 +23,7 @@ import gnu.trove.map.hash.TIntObjectHashMap;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.ToStringUtils;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
@@ -201,7 +202,7 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
     }
 
     @Override
-    public Weight createWeight(Searcher searcher) throws IOException {
+    public Weight createWeight(IndexSearcher searcher) throws IOException {
         if (parentDocs != null) {
             return new ParentWeight(searcher, query.weight(searcher));
         }
@@ -217,11 +218,11 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
 
     class ParentWeight extends Weight {
 
-        final Searcher searcher;
+        final IndexSearcher searcher;
 
         final Weight queryWeight;
 
-        public ParentWeight(Searcher searcher, Weight queryWeight) throws IOException {
+        public ParentWeight(IndexSearcher searcher, Weight queryWeight) throws IOException {
             this.searcher = searcher;
             this.queryWeight = queryWeight;
         }

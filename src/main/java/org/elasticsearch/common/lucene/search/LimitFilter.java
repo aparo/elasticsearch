@@ -39,12 +39,13 @@ public class LimitFilter extends NoCacheFilter {
         return limit;
     }
 
+
     @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
         if (counter > limit) {
             return null;
         }
-        return new LimitDocSet(atomicReaderContext.reader().maxDoc(), limit);
+        return new LimitDocSet(context.reader().maxDoc(), limit);
     }
 
     public class LimitDocSet extends GetDocSet {

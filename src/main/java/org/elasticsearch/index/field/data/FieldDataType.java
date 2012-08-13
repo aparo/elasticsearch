@@ -57,6 +57,6 @@ public interface FieldDataType<T extends FieldData> {
     // on another node (we don't have the custom source them...)
     public abstract class ExtendedFieldComparatorSource extends FieldComparatorSource {
 
-        public abstract int reducedType();
+        public abstract SortField.Type reducedType();
     }
 }

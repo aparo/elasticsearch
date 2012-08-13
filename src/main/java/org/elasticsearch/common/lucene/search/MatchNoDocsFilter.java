@@ -32,11 +32,6 @@ import java.io.IOException;
 public class MatchNoDocsFilter extends Filter {
 
     @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        return null;
-    }
-
-    @Override
     public int hashCode() {
         return this.getClass().hashCode();
     }
@@ -60,5 +55,10 @@ public class MatchNoDocsFilter extends Filter {
     @Override
     public String toString() {
         return "MatchNoDocsFilter";
+    }
+
+    @Override
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits acceptDocs) throws IOException {
+        return null;
     }
 }

@@ -177,7 +177,7 @@ public abstract class LongFieldData extends NumericFieldData<LongDocFieldData> {
         }
 
         @Override
-        public void collectTerm(String term) {
+        public void collectTerm(BytesRef term) {
             terms.add(FieldCache.NUMERIC_UTILS_LONG_PARSER.parseLong(term));
         }
 

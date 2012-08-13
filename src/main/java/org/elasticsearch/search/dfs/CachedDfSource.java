@@ -20,6 +20,8 @@
 package org.elasticsearch.search.dfs;
 
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DocumentStoredFieldVisitor;
+import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.Similarity;
@@ -29,13 +31,14 @@ import java.io.IOException;
 /**
  *
  */
-public class CachedDfSource extends Searcher {
+public class CachedDfSource extends IndexSearcher {
 
     private final AggregatedDfs dfs;
 
     private final int maxDoc;
 
-    public CachedDfSource(AggregatedDfs dfs, Similarity similarity) throws IOException {
+    public CachedDfSource(IndexReader reader, AggregatedDfs dfs, Similarity similarity) throws IOException {
+        super(reader);
         this.dfs = dfs;
         setSimilarity(similarity);
         if (dfs.maxDoc() > Integer.MAX_VALUE) {
@@ -82,7 +85,7 @@ public class CachedDfSource extends Searcher {
         throw new UnsupportedOperationException();
     }
 
-    public Document doc(int i, FieldSelector fieldSelector) {
+    public Document doc(int i, DocumentStoredFieldVisitor fieldSelector) {
         throw new UnsupportedOperationException();
     }
 

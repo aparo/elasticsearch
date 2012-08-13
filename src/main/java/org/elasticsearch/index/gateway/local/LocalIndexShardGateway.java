@@ -101,10 +101,10 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
         long version = -1;
         long translogId = -1;
         try {
-            if (IndexReader.indexExists(indexShard.store().directory())) {
+            if (DirectoryReader.indexExists(indexShard.store().directory())) {
                 if (indexShouldExists) {
-                    version = IndexReader.getCurrentVersion(indexShard.store().directory());
-                    Map<String, String> commitUserData = IndexReader.getCommitUserData(indexShard.store().directory());
+                    version = DirectoryReader.open(indexShard.store().directory()).getVersion();
+                    Map<String, String> commitUserData = DirectoryReader.open(indexShard.store().directory()).getIndexCommit().getUserData();
                     if (commitUserData.containsKey(Translog.TRANSLOG_ID_KEY)) {
                         translogId = Long.parseLong(commitUserData.get(Translog.TRANSLOG_ID_KEY));
                     } else {
@@ -116,8 +116,7 @@ public class LocalIndexShardGateway extends AbstractIndexShardComponent implemen
                     // its a "new index create" API, we have to do something, so better to clean it than use same data
                     logger.trace("cleaning existing shard, shouldn't exists");
                     IndexWriter writer = new IndexWriter(indexShard.store().directory(), new IndexWriterConfig(Lucene.VERSION, Lucene.STANDARD_ANALYZER).setOpenMode(IndexWriterConfig.OpenMode.CREATE));
-                    writer.close();
-                }
+                    writer.close();                }
             } else if (indexShouldExists && indexShard.store().indexStore().persistent()) {
                 throw new IndexShardGatewayRecoveryException(shardId(), "shard allocated for local recovery (post api), should exists, but doesn't");
             }

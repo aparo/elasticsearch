@@ -40,18 +40,6 @@ public class NotDeletedFilter extends Filter {
         this.filter = filter;
     }
 
-    @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        DocIdSet docIdSet = filter.getDocIdSet(atomicReaderContext, bits);
-        if (docIdSet == null) {
-            return null;
-        }
-        if (!atomicReaderContext.reader().hasDeletions()) {
-            return docIdSet;
-        }
-        return new NotDeletedDocIdSet(docIdSet, atomicReaderContext.reader());
-    }
-
     public Filter filter() {
         return this.filter;
     }
@@ -61,13 +49,25 @@ public class NotDeletedFilter extends Filter {
         return "NotDeleted(" + filter + ")";
     }
 
+    @Override
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits acceptDocs) throws IOException {
+        DocIdSet docIdSet = filter.getDocIdSet(context, acceptDocs);
+        if (docIdSet == null) {
+            return null;
+        }
+        if (!context.reader().hasDeletions()) {
+            return docIdSet;
+        }
+        return new NotDeletedDocIdSet(docIdSet, context);
+    }
+
     static class NotDeletedDocIdSet extends DocIdSet {
 
         private final DocIdSet innerSet;
 
-        private final IndexReader reader;
+        private final AtomicReaderContext reader;
 
-        NotDeletedDocIdSet(DocIdSet innerSet, IndexReader reader) {
+        NotDeletedDocIdSet(DocIdSet innerSet, AtomicReaderContext reader) {
             this.innerSet = innerSet;
             this.reader = reader;
         }
@@ -84,16 +84,16 @@ public class NotDeletedFilter extends Filter {
 
     static class NotDeletedDocIdSetIterator extends FilteredDocIdSetIterator {
 
-        private final IndexReader reader;
+        private final AtomicReaderContext reader;
 
-        NotDeletedDocIdSetIterator(DocIdSetIterator innerIter, IndexReader reader) {
+        NotDeletedDocIdSetIterator(DocIdSetIterator innerIter, AtomicReaderContext reader) {
             super(innerIter);
             this.reader = reader;
         }
 
         @Override
         protected boolean match(int doc) {
-            return !reader.isDeleted(doc);
+            return reader.reader().getLiveDocs().get(doc);
         }
     }
 }

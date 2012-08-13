@@ -38,8 +38,8 @@ public class BoostScoreFunction implements ScoreFunction {
         return boost;
     }
 
-    @Override
-    public void setNextReader(IndexReader reader) {
+    @Override 
+    public void setNextReader(AtomicReaderContext context) {
         // nothing to do here...
     }
 

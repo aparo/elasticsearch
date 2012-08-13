@@ -152,23 +152,22 @@ public class MultiPhrasePrefixQuery extends Query {
     }
 
     private void getPrefixTerms(List<Term> terms, final Term prefix, final IndexReader reader) throws IOException {
-        TermEnum enumerator = reader.terms(prefix);
-        try {
-            do {
-                Term term = enumerator.term();
-                if (term != null
-                        && term.text().startsWith(prefix.text())
-                        && term.field().equals(field)) {
-                    terms.add(term);
-                } else {
-                    break;
-                }
+        //TODO FIX lucene4 has a faster prefix searcher
+        Terms mterms=MultiFields.getTerms(reader, prefix.field());
+        if (mterms==null)
+            return;
+
+        TermsEnum termsEnum = mterms.iterator(null);
+        BytesRef text;
+        BytesRef prefixb=prefix.bytes();
+
+	    while((text = termsEnum.next()) != null) {
+            if(text.bytesEquals(prefixb)){
+                terms.add(new Term(prefix.field(), text.utf8ToString()));
                 if (terms.size() >= maxExpansions) {
                     break;
                 }
-            } while (enumerator.next());
-        } finally {
-            enumerator.close();
+            }
         }
     }
 

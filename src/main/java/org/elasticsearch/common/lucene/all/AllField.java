@@ -36,27 +36,31 @@ public class AllField extends Field {
 
     private final Analyzer analyzer;
 
-    public AllField(String name, Field.Store store, Field.TermVector termVector, AllEntries allEntries, Analyzer analyzer) {
-        super(name, store, Field.Index.ANALYZED, termVector);
+    private final FieldType fieldType;
 
+    public AllField(String name, FieldType fieldType, AllEntries allEntries, Analyzer analyzer) {
+        super(name, fieldType);
+        this.fieldType=fieldType;
+        this.fieldType.setIndexed(true);
+        this.fieldType.setTokenized(true);
         this.allEntries = allEntries;
         this.analyzer = analyzer;
     }
 
-    @Override
+    @Override 
     public String stringValue() {
-        if (isStored()) {
+        if (this.fieldType().stored()) {
             return allEntries.buildText();
         }
         return null;
     }
 
-    @Override
+    @Override 
     public Reader readerValue() {
         return null;
     }
 
-    @Override
+    @Override 
     public TokenStream tokenStreamValue() {
         try {
             allEntries.reset(); // reset the all entries, just in case it was read already

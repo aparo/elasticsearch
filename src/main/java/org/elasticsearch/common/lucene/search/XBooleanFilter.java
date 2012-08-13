@@ -42,10 +42,10 @@ public class XBooleanFilter extends Filter {
     ArrayList<Filter> notFilters = null;
     ArrayList<Filter> mustFilters = null;
 
-    private DocIdSet getDISI(ArrayList<Filter> filters, int index, AtomicReaderContext atomicReaderContext, Bits bits)
+    private DocIdSet getDISI(ArrayList<Filter> filters, int index, AtomicReaderContext context)
             throws IOException {
-        DocIdSet docIdSet = filters.get(index).getDocIdSet(atomicReaderContext, bits);
-        if (docIdSet == DocIdSet.EMPTY_DOCIDSET || docIdSet == DocSet.EMPTY_DOC_SET) {
+        DocIdSet docIdSet = filters.get(index).getDocIdSet(context, context.reader().getLiveDocs());
+        if (docIdSet == DocIdSet.EMPTY_DOCIDSET) {
             return null;
         }
         return docIdSet;
@@ -61,70 +61,6 @@ public class XBooleanFilter extends Filter {
 
     public List<Filter> getNotFilters() {
         return this.notFilters;
-    }
-
-    /**
-     * Returns the a DocIdSetIterator representing the Boolean composition
-     * of the filters that have been added.
-     */
-    @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        FixedBitSet res = null;
-
-        if (mustFilters == null && notFilters == null && shouldFilters != null && shouldFilters.size() == 1) {
-            return shouldFilters.get(0).getDocIdSet(atomicReaderContext, bits);
-        }
-
-        if (shouldFilters == null && notFilters == null && mustFilters != null && mustFilters.size() == 1) {
-            return mustFilters.get(0).getDocIdSet(atomicReaderContext, bits);
-        }
-
-        if (shouldFilters != null) {
-            for (int i = 0; i < shouldFilters.size(); i++) {
-                final DocIdSet disi = getDISI(shouldFilters, i, atomicReaderContext, bits);
-                if (disi == null) continue;
-                if (res == null) {
-                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
-                }
-                DocSets.or(res, disi);
-            }
-
-            // if no should clauses match, return null (act as min_should_match set to 1)
-            if (res == null && !shouldFilters.isEmpty()) {
-                return null;
-            }
-        }
-
-
-        if (notFilters != null) {
-            for (int i = 0; i < notFilters.size(); i++) {
-                if (res == null) {
-                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
-                    res.set(0, atomicReaderContext.reader().maxDoc()); // NOTE: may set bits on deleted docs
-                }
-                final DocIdSet disi = getDISI(notFilters, i, atomicReaderContext, bits);
-                if (disi != null) {
-                    DocSets.andNot(res, disi);
-                }
-            }
-        }
-
-        if (mustFilters != null) {
-            for (int i = 0; i < mustFilters.size(); i++) {
-                final DocIdSet disi = getDISI(mustFilters, i, atomicReaderContext, bits);
-                if (disi == null) {
-                    return null;
-                }
-                if (res == null) {
-                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
-                    DocSets.or(res, disi);
-                } else {
-                    DocSets.and(res, disi);
-                }
-            }
-        }
-
-        return res;
     }
 
     /**
@@ -226,5 +162,67 @@ public class XBooleanFilter extends Filter {
                 buffer.append(filters.get(i).toString());
             }
         }
+    }
+
+    /**
+     * Returns the a DocIdSetIterator representing the Boolean composition
+     * of the filters that have been added.
+     */
+    @Override public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
+        FixedBitSet res = null;
+
+        if (mustFilters == null && notFilters == null && shouldFilters != null && shouldFilters.size() == 1) {
+            return shouldFilters.get(0).getDocIdSet(atomicReaderContext, bits);
+        }
+
+        if (shouldFilters == null && notFilters == null && mustFilters != null && mustFilters.size() == 1) {
+            return mustFilters.get(0).getDocIdSet(atomicReaderContext, bits);
+        }
+
+        if (shouldFilters != null) {
+            for (int i = 0; i < shouldFilters.size(); i++) {
+                final DocIdSet disi = getDISI(shouldFilters, i, atomicReaderContext);
+                if (disi == null) continue;
+                if (res == null) {
+                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
+                }
+                DocSets.or(res, disi);
+            }
+             // if no should clauses match, return null (act as min_should_match set to 1)
+             if (res == null && !shouldFilters.isEmpty()) {
+                 return null;
+             }
+        }
+
+
+        if (notFilters != null) {
+            for (int i = 0; i < notFilters.size(); i++) {
+                if (res == null) {
+                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
+                    res.set(0, atomicReaderContext.reader().maxDoc()); // NOTE: may set bits on deleted docs
+                }
+                final DocIdSet disi = getDISI(notFilters, i, atomicReaderContext);
+                if (disi != null) {
+                    DocSets.andNot(res, disi);
+                }
+            }
+        }
+
+        if (mustFilters != null) {
+            for (int i = 0; i < mustFilters.size(); i++) {
+                final DocIdSet disi = getDISI(mustFilters, i, atomicReaderContext);
+                if (disi == null) {
+                    return null;
+                }
+                if (res == null) {
+                    res = new FixedBitSet(atomicReaderContext.reader().maxDoc());
+                    DocSets.or(res, disi);
+                } else {
+                    DocSets.and(res, disi);
+                }
+            }
+        }
+
+        return res;
     }
 }

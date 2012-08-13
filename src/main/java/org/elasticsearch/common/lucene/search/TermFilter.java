@@ -46,26 +46,14 @@ public class TermFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        FixedBitSet result = null;
-        TermDocs td = reader.termDocs();
-        try {
-            td.seek(term);
-            // batch read, in Lucene 4.0 its no longer needed
-            int[] docs = new int[Lucene.BATCH_ENUM_DOCS];
-            int[] freqs = new int[Lucene.BATCH_ENUM_DOCS];
-            int number = td.read(docs, freqs);
-            if (number > 0) {
-                result = new FixedBitSet(reader.maxDoc());
-                while (number > 0) {
-                    for (int i = 0; i < number; i++) {
-                        result.set(docs[i]);
-                    }
-                    number = td.read(docs, freqs);
-                }
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
+        DocsEnum docsEnum = MultiFields.getTermDocsEnum(context.reader(), MultiFields.getLiveDocs(context.reader()), term.field(), term.bytes());
+        int doc;
+        FixedBitSet result = new FixedBitSet(context.reader().maxDoc());
+        if(docsEnum!=null){
+            while((doc = docsEnum.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                result.set(doc);
             }
-        } finally {
-            td.close();
         }
         return result;
     }

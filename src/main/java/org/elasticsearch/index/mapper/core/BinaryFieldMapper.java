@@ -49,7 +49,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final long COMPRESS_THRESHOLD = -1;
-        public static final Field.Store STORE = Field.Store.YES;
+        public static final boolean STORE = true;
     }
 
     public static class Builder extends AbstractFieldMapper.Builder<Builder, BinaryFieldMapper> {
@@ -60,7 +60,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
         public Builder(String name) {
             super(name);
-            store = Defaults.STORE;
+            store = true;//Defaults.STORE;
             builder = this;
         }
 
@@ -113,23 +113,23 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
 
     private long compressThreshold;
 
-    protected BinaryFieldMapper(Names names, Field.Store store, Boolean compress, long compressThreshold) {
-        super(names, Field.Index.NO, store, Field.TermVector.NO, 1.0f, true, true, null, null);
+    protected BinaryFieldMapper(Names names, boolean store, Boolean compress, long compressThreshold) {
+        super(names, false, false, store, false, false, false, 1.0f, true, FieldInfo.IndexOptions.DOCS_ONLY, null, null);
         this.compress = compress;
         this.compressThreshold = compressThreshold;
     }
 
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return value(field);
     }
 
     @Override
-    public byte[] value(Field field) {
-        byte[] value = field.getBinaryValue();
-        if (value == null) {
+    public byte[] value(IndexableField field) {
+        byte[] value = field.binaryValue().bytes;
+        if (value==null)
             return value;
-        }
+
         try {
             return CompressorFactory.uncompressIfNeeded(new BytesArray(value)).toBytes();
         } catch (IOException e) {
@@ -148,7 +148,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return null;
     }
 
@@ -183,7 +183,7 @@ public class BinaryFieldMapper extends AbstractFieldMapper<byte[]> {
         if (value == null) {
             return null;
         }
-        return new Field(names.indexName(), value);
+        return new Field(names.indexName(), value, Lucene.getDefaultFieldType());
     }
 
     @Override

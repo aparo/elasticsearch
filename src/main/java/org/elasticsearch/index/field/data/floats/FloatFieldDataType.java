@@ -38,11 +38,12 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new FloatFieldDataComparator(numHits, fieldname, cache);
+                    //return new FloatFieldDataComparator(numHits, fieldname, cache);
+                    return Comparators.getFloatComparator(numHits, fieldname, cache, null);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.FLOAT;
                 }
             };
@@ -51,11 +52,12 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new FloatFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY);
+                    //return new FloatFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY);
+                    return Comparators.getFloatComparator(numHits, fieldname, cache, reversed ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY);
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.FLOAT;
                 }
             };
@@ -64,11 +66,14 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
             return new ExtendedFieldComparatorSource() {
                 @Override
                 public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                    return new FloatFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Float.POSITIVE_INFINITY : Float.NEGATIVE_INFINITY);
+                    //return new FloatFieldDataMissingComparator(numHits, fieldname, cache, reversed ? Float.POSITIVE_INFINITY : Float.NEGATIVE_INFINITY);
+                    return Comparators.getFloatComparator(numHits, fieldname, cache, reversed ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY);
+
+
                 }
 
                 @Override
-                public int reducedType() {
+                public SortField.Type reducedType() {
                     return SortField.Type.FLOAT;
                 }
             };
@@ -76,11 +81,13 @@ public class FloatFieldDataType implements FieldDataType<FloatFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new FloatFieldDataMissingComparator(numHits, fieldname, cache, Float.parseFloat(missing));
+                //return new FloatFieldDataMissingComparator(numHits, fieldname, cache, Float.parseFloat(missing));
+                return Comparators.getFloatComparator(numHits, fieldname, cache, Float.parseFloat(missing));
+
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.FLOAT;
             }
         };

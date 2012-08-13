@@ -146,7 +146,7 @@ public abstract class DoubleFieldData extends NumericFieldData<DoubleDocFieldDat
         }
 
         @Override
-        public void collectTerm(String term) {
+        public void collectTerm(BytesRef term) {
             terms.add(FieldCache.NUMERIC_UTILS_DOUBLE_PARSER.parseDouble(term));
         }
 

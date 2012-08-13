@@ -46,15 +46,15 @@ public class NotFilter extends Filter {
     }
 
     @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        DocIdSet set = filter.getDocIdSet(atomicReaderContext, bits);
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
+        DocIdSet set = filter.getDocIdSet(context, bits);
         if (set == null) {
-            return new AllDocSet(atomicReaderContext.reader().maxDoc());
+            return new AllDocSet(context.reader().maxDoc());
         }
         if (set instanceof DocSet) {
-            return new NotDocSet((DocSet) set, atomicReaderContext.reader().maxDoc());
+            return new NotDocSet((DocSet) set, context.reader().maxDoc());
         }
-        return new NotDocIdSet(set, atomicReaderContext.reader().maxDoc());
+        return new NotDocIdSet(set, context.reader().maxDoc());
     }
 
     @Override

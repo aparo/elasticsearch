@@ -46,15 +46,15 @@ public class AndFilter extends Filter {
         return filters;
     }
 
-    @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
+    @Override 
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
         if (filters.size() == 1) {
-            return filters.get(0).getDocIdSet(atomicReaderContext, bits);
+            return filters.get(0).getDocIdSet(context, bits);
         }
         List sets = Lists.newArrayListWithExpectedSize(filters.size());
         boolean allAreDocSet = true;
         for (Filter filter : filters) {
-            DocIdSet set = filter.getDocIdSet(atomicReaderContext, bits);
+            DocIdSet set = filter.getDocIdSet(context, bits);
             if (set == null) { // none matching for this filter, we AND, so return EMPTY
                 return DocSet.EMPTY_DOC_SET;
             }

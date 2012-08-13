@@ -35,31 +35,31 @@ public class DocumentBuilder {
         return new DocumentBuilder();
     }
 
-    public static Field uidField(String value) {
+    public static IndexableField uidField(String value) {
         return uidField(value, 0);
     }
 
-    public static Field uidField(String value, long version) {
+    public static IndexableField uidField(String value, long version) {
         return new UidField("_uid", value, version);
     }
 
     public static FieldBuilder field(String name, String value) {
-        return field(name, value, Field.Store.YES, Field.Index.ANALYZED);
+        return field(name, value, true, true);
     }
 
-    public static FieldBuilder field(String name, String value, Field.Store store, Field.Index index) {
+    public static FieldBuilder field(String name, String value, boolean store, boolean index) {
         return new FieldBuilder(name, value, store, index);
     }
 
-    public static FieldBuilder field(String name, String value, Field.Store store, Field.Index index, Field.TermVector termVector) {
-        return new FieldBuilder(name, value, store, index, termVector);
+    public static FieldBuilder field(String name, String value, boolean store, boolean index, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions) {
+        return new FieldBuilder(name, value, store, index, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions);
     }
 
-    public static FieldBuilder field(String name, byte[] value, Field.Store store) {
+    public static FieldBuilder field(String name, byte[] value, boolean store) {
         return new FieldBuilder(name, value, store);
     }
 
-    public static FieldBuilder field(String name, byte[] value, int offset, int length, Field.Store store) {
+    public static FieldBuilder field(String name, byte[] value, int offset, int length, boolean store) {
         return new FieldBuilder(name, value, offset, length, store);
     }
 
@@ -70,11 +70,12 @@ public class DocumentBuilder {
     }
 
     public DocumentBuilder boost(float boost) {
-        document.setBoost(boost);
+        //FIX REMOVED IN LUCENE4
+        //document.setBoost(boost);
         return this;
     }
 
-    public DocumentBuilder add(Field field) {
+    public DocumentBuilder add(IndexableField field) {
         document.add(field);
         return this;
     }

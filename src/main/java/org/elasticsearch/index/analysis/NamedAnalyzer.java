@@ -71,12 +71,7 @@ public class NamedAnalyzer extends Analyzer {
 
     @Override
     protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        return analyzer.tokenStream(fieldName, reader);
-    }
-
-    @Override
-    public final TokenStream reusableTokenStream(String fieldName, Reader reader) throws IOException {
-        return analyzer.reusableTokenStream(fieldName, reader);
+        return analyzer.createComponents(fieldName, reader);
     }
 
     @Override

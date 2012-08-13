@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.field.function.sort;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.SortField;
@@ -51,7 +51,7 @@ public class StringFieldsFunctionDataComparator extends FieldComparator {
         }
 
         @Override
-        public int reducedType() {
+        public SortField.Type reducedType() {
             return SortField.Type.STRING;
         }
     }
@@ -68,8 +68,9 @@ public class StringFieldsFunctionDataComparator extends FieldComparator {
     }
 
     @Override
-    public void setNextReader(AtomicReaderContext context) throws IOException {
-        script.setNextReader(reader);
+    public FieldComparator setNextReader(AtomicReaderContext context) throws IOException {
+        script.setNextReader(context);
+        return this;
     }
 
     @Override
@@ -122,5 +123,11 @@ public class StringFieldsFunctionDataComparator extends FieldComparator {
     @Override
     public Comparable value(int slot) {
         return values[slot];
+    }
+
+    @Override
+    public int compareDocToValue(int doc, Object value) throws IOException {
+        //PARO FIX: add compare
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
     }
 }
