@@ -134,7 +134,7 @@ public class PercolatorService extends AbstractIndexComponent {
     }
 
     private Filter indexQueriesFilter(String indexName) {
-        return percolatorIndexService().cache().filter().cache(new TermFilter(TypeFieldMapper.TERM_FACTORY.createTerm(indexName)));
+        return percolatorIndexService().cache().filter().cache(new TermFilter(TypeFieldMapper.createTerm(indexName)));
     }
 
     private boolean percolatorAllocated() {

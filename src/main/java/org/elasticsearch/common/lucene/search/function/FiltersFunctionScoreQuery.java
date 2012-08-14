@@ -19,9 +19,11 @@
 
 package org.elasticsearch.common.lucene.search.function;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.ToStringUtils;
 import org.elasticsearch.common.lucene.docset.DocSet;
 import org.elasticsearch.common.lucene.docset.DocSets;
@@ -114,31 +116,11 @@ public class FiltersFunctionScoreQuery extends Query {
         IndexSearcher searcher;
         Weight subQueryWeight;
 
-        public CustomBoostFactorWeight(Searcher searcher) throws IOException {
+        public CustomBoostFactorWeight(IndexSearcher searcher) throws IOException {
             this.searcher = searcher;
-            this.subQueryWeight = subQuery.weight(searcher);
+            this.subQueryWeight = subQuery.createWeight(searcher);
         }
 
-        public Query getQuery() {
-            return FiltersFunctionScoreQuery.this;
-        }
-
-        public float getValue() {
-            return getBoost();
-        }
-
-        @Override
-        public float sumOfSquaredWeights() throws IOException {
-            float sum = subQueryWeight.sumOfSquaredWeights();
-            sum *= getBoost() * getBoost();
-            return sum;
-        }
-
-        @Override
-        public void normalize(float norm) {
-            norm *= getBoost();
-            subQueryWeight.normalize(norm);
-        }
 
         @Override
         public Scorer scorer(IndexReader reader, boolean scoreDocsInOrder, boolean topScorer) throws IOException {

@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.elasticsearch.common.Strings;
@@ -47,10 +48,11 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = IndexFieldMapper.NAME;
         public static final String INDEX_NAME = IndexFieldMapper.NAME;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
-        public static final Field.Store STORE = Field.Store.NO;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
+        public static final boolean STORE = false;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_ONLY;
         public static final boolean ENABLED = false;
     }
 
@@ -64,7 +66,7 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
             index = Defaults.INDEX;
             store = Defaults.STORE;
             omitNorms = Defaults.OMIT_NORMS;
-            omitTermFreqAndPositions = Defaults.OMIT_TERM_FREQ_AND_POSITIONS;
+            indexOptions = Defaults.INDEX_OPTIONS;
         }
 
         public Builder enabled(boolean enabled) {
@@ -74,7 +76,7 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
 
         @Override
         public IndexFieldMapper build(BuilderContext context) {
-            return new IndexFieldMapper(name, indexName, store, termVector, boost, omitNorms, omitTermFreqAndPositions, enabled);
+            return new IndexFieldMapper(name, indexName, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, boost, omitNorms, indexOptions, enabled);
         }
     }
 
@@ -102,13 +104,15 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
     }
 
     protected IndexFieldMapper(String name, String indexName) {
-        this(name, indexName, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
-                Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.ENABLED);
+        this(name, indexName, Defaults.STORE, Defaults.STORE_TERM_VECTOR,
+                Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS, Defaults.BOOST,
+                Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS, Defaults.ENABLED);
     }
 
-    public IndexFieldMapper(String name, String indexName, Field.Store store, Field.TermVector termVector,
-                            float boost, boolean omitNorms, boolean omitTermFreqAndPositions, boolean enabled) {
-        super(new Names(name, indexName, indexName, name), Defaults.INDEX, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
+    public IndexFieldMapper(String name, String indexName, boolean store, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
+                            float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions, boolean enabled) {
+        super(new Names(name, indexName, indexName, name), Defaults.INDEX, Defaults.TOKENIZE, store,
+                storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, boost, omitNorms, indexOptions,
                 Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
         this.enabled = enabled;
     }
@@ -118,12 +122,12 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
     }
 
     public String value(Document document) {
-        Field field = document.getFieldable(names.indexName());
+        IndexableField field = document.getField(names.indexName());
         return field == null ? null : value(field);
     }
 
     @Override
-    public String value(Field field) {
+    public String value(IndexableField field) {
         return field.stringValue();
     }
 
@@ -133,7 +137,7 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return value(field);
     }
 
@@ -175,7 +179,7 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
         if (!enabled) {
             return null;
         }
-        return new Field(names.indexName(), context.index(), store, index);
+        return new Field(names.indexName(), context.index(), getFieldType());
     }
 
     @Override
@@ -191,7 +195,7 @@ public class IndexFieldMapper extends AbstractFieldMapper<String> implements Int
         }
         builder.startObject(CONTENT_TYPE);
         if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+            builder.field("store", store);
         }
         if (enabled != Defaults.ENABLED) {
             builder.field("enabled", enabled);

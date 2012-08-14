@@ -21,11 +21,13 @@ package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.NumericRangeFilter;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
@@ -74,8 +76,7 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
         @Override
         public DoubleFieldMapper build(BuilderContext context) {
             DoubleFieldMapper fieldMapper = new DoubleFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
-                    ignoreMalformed);
+                    precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, nullValue, ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -103,11 +104,11 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     private String nullValueAsString;
 
     protected DoubleFieldMapper(Names names, int precisionStep, String fuzzyFactor,
-                                Field.Index index, Field.Store store,
-                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
+                                boolean index, boolean tokenize, boolean store,
+                                float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
                                 Double nullValue, boolean ignoreMalformed) {
-        super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                ignoreMalformed, new NamedAnalyzer("_double/" + precisionStep, new NumericDoubleAnalyzer(precisionStep)),
+        super(names, precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, ignoreMalformed,
+                new NamedAnalyzer("_double/" + precisionStep, new NumericDoubleAnalyzer(precisionStep)),
                 new NamedAnalyzer("_double/max", new NumericDoubleAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -119,12 +120,12 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     }
 
     @Override
-    public Double value(Field field) {
-        byte[] value = field.getBinaryValue();
+    public Double value(IndexableField field) {
+        BytesRef value = field.binaryValue();
         if (value == null) {
             return null;
         }
-        return Numbers.bytesToDouble(value);
+        return Numbers.bytesToDouble(value.bytes);
     }
 
     @Override
@@ -134,7 +135,9 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
 
     @Override
     public String indexedValue(String value) {
-        return NumericUtils.doubleToPrefixCoded(Double.parseDouble(value));
+        BytesRef bytesRef = new BytesRef(NumericUtils.BUF_SIZE_LONG);
+        NumericUtils.longToPrefixCoded(NumericUtils.doubleToSortableLong(Double.parseDouble(value)), 0, bytesRef);
+        return bytesRef.utf8ToString();
     }
 
     @Override
@@ -313,20 +316,26 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
     @Override
     protected void doXContentBody(XContentBuilder builder) throws IOException {
         super.doXContentBody(builder);
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.indexed() != Defaults.INDEX) {
+            builder.field("index", this.indexed());
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.tokenized() != Defaults.TOKENIZE) {
+            builder.field("tokenize", this.tokenized());
+        }
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (omitNorms != Defaults.OMIT_NORMS) {
             builder.field("omit_norms", omitNorms);
-        }
-        if (omitTermFreqAndPositions != Defaults.OMIT_TERM_FREQ_AND_POSITIONS) {
-            builder.field("omit_term_freq_and_positions", omitTermFreqAndPositions);
         }
         if (precisionStep != Defaults.PRECISION_STEP) {
             builder.field("precision_step", precisionStep);
@@ -356,15 +365,10 @@ public class DoubleFieldMapper extends NumberFieldMapper<Double> {
 
         @Override
         public TokenStream tokenStreamValue() {
-            if (isIndexed) {
+            if (this.fieldType().indexed()) {
                 return mapper.popCachedStream().setDoubleValue(number);
             }
             return null;
-        }
-
-        @Override
-        public String numericAsString() {
-            return Double.toString(number);
         }
     }
 }

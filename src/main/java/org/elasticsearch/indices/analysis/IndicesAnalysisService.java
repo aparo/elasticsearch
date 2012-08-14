@@ -638,17 +638,6 @@ public class IndicesAnalysisService extends AbstractComponent {
                 return new GermanStemFilter(tokenStream);
             }
         }));
-        tokenFilterFactories.put("russian_stem", new PreBuiltTokenFilterFactoryFactory(new TokenFilterFactory() {
-            @Override
-            public String name() {
-                return "russian_stem";
-            }
-
-            @Override
-            public TokenStream create(TokenStream tokenStream) {
-                return new RussianStemFilter(tokenStream);
-            }
-        }));
 
         // Char Filter
         charFilterFactories.put("html_strip", new PreBuiltCharFilterFactoryFactory(new CharFilterFactory() {

@@ -21,11 +21,13 @@ package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.NumericRangeFilter;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
@@ -75,8 +77,7 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
         @Override
         public FloatFieldMapper build(BuilderContext context) {
             FloatFieldMapper fieldMapper = new FloatFieldMapper(buildNames(context),
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
-                    ignoreMalformed);
+                    precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, nullValue, ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -102,11 +103,11 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
 
     private String nullValueAsString;
 
-    protected FloatFieldMapper(Names names, int precisionStep, String fuzzyFactor, Field.Index index, Field.Store store,
-                               float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
+    protected FloatFieldMapper(Names names, int precisionStep, String fuzzyFactor, boolean index, boolean tokenize, boolean store,
+                               float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
                                Float nullValue, boolean ignoreMalformed) {
-        super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                ignoreMalformed, new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
+        super(names, precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, ignoreMalformed,
+                new NamedAnalyzer("_float/" + precisionStep, new NumericFloatAnalyzer(precisionStep)),
                 new NamedAnalyzer("_float/max", new NumericFloatAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
         this.nullValueAsString = nullValue == null ? null : nullValue.toString();
@@ -118,12 +119,12 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     }
 
     @Override
-    public Float value(Field field) {
-        byte[] value = field.getBinaryValue();
+    public Float value(IndexableField field) {
+        BytesRef value = field.binaryValue();
         if (value == null) {
             return null;
         }
-        return Numbers.bytesToFloat(value);
+        return Numbers.bytesToFloat(value.bytes);
     }
 
     @Override
@@ -133,7 +134,9 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
 
     @Override
     public String indexedValue(String value) {
-        return NumericUtils.floatToPrefixCoded(Float.parseFloat(value));
+        BytesRef bytesRef = new BytesRef(NumericUtils.BUF_SIZE_LONG);
+        NumericUtils.longToPrefixCoded(NumericUtils.doubleToSortableLong(Float.parseFloat(value)), 0, bytesRef);
+        return bytesRef.utf8ToString();
     }
 
     @Override
@@ -309,20 +312,26 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
     @Override
     protected void doXContentBody(XContentBuilder builder) throws IOException {
         super.doXContentBody(builder);
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.indexed() != Defaults.INDEX) {
+            builder.field("index", this.indexed());
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.tokenized() != Defaults.TOKENIZE) {
+            builder.field("tokenize", this.tokenized());
+        }
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (omitNorms != Defaults.OMIT_NORMS) {
             builder.field("omit_norms", omitNorms);
-        }
-        if (omitTermFreqAndPositions != Defaults.OMIT_TERM_FREQ_AND_POSITIONS) {
-            builder.field("omit_term_freq_and_positions", omitTermFreqAndPositions);
         }
         if (precisionStep != Defaults.PRECISION_STEP) {
             builder.field("precision_step", precisionStep);
@@ -352,15 +361,10 @@ public class FloatFieldMapper extends NumberFieldMapper<Float> {
 
         @Override
         public TokenStream tokenStreamValue() {
-            if (isIndexed) {
+            if (this.fieldType().indexed()) {
                 return mapper.popCachedStream().setFloatValue(number);
             }
             return null;
-        }
-
-        @Override
-        public String numericAsString() {
-            return Float.toString(number);
         }
     }
 }

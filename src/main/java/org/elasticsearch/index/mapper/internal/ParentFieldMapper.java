@@ -20,12 +20,13 @@
 package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.queries.TermsFilter;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.search.XTermsFilter;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.lucene.Lucene;
@@ -48,9 +49,10 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = ParentFieldMapper.NAME;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_ONLY;
     }
 
     public static class Builder extends Mapper.Builder<Builder, ParentFieldMapper> {
@@ -96,8 +98,9 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
     private final String type;
 
     protected ParentFieldMapper(String name, String indexName, String type) {
-        super(new Names(name, indexName, indexName, name), Defaults.INDEX, Field.Store.YES, Defaults.TERM_VECTOR, Defaults.BOOST,
-                Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
+        super(new Names(name, indexName, indexName, name), Defaults.INDEX, true, Defaults.TOKENIZE, Defaults.STORE_TERM_VECTOR,
+                Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS, Defaults.BOOST,
+                Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
         this.type = type;
     }
 
@@ -129,7 +132,7 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
             // we are in the parsing of _parent phase
             String parentId = context.parser().text();
             context.sourceToParse().parent(parentId);
-            return new Field(names.indexName(), Uid.createUid(context.stringBuilder(), type, parentId), store, index);
+            return new Field(names.indexName(), Uid.createUid(context.stringBuilder(), type, parentId), getFieldType());
         }
         // otherwise, we are running it post processing of the xcontent
         String parsedParentId = context.doc().get(Defaults.NAME);
@@ -150,7 +153,7 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
     }
 
     @Override
-    public Uid value(Field field) {
+    public Uid value(IndexableField field) {
         return Uid.createUid(field.stringValue());
     }
 
@@ -160,12 +163,12 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return field.stringValue();
     }
 
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         String fieldValue = field.stringValue();
         if (fieldValue == null) {
             return null;
@@ -199,12 +202,11 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
             return super.fieldFilter(value, context);
         }
         // we use all types, cause we don't know if its exact or not...
-        Term[] typesTerms = new Term[context.mapperService().types().size()];
-        int i = 0;
+        TermsFilter filter=new TermsFilter();
         for (String type : context.mapperService().types()) {
-            typesTerms[i++] = names.createIndexNameTerm(Uid.createUid(type, value));
+            filter.addTerm(names.createIndexNameTerm(Uid.createUid(type, value)));
         }
-        return new XTermsFilter(typesTerms);
+        return filter;
     }
 
     /**

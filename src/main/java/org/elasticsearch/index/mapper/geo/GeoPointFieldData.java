@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.geo;
 
 import gnu.trove.list.array.TDoubleArrayList;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.RamUsage;
 import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
@@ -181,10 +182,11 @@ public abstract class GeoPointFieldData extends FieldData<GeoPointDocFieldData> 
         }
 
         @Override
-        public void collectTerm(String term) {
-            int comma = term.indexOf(',');
-            lat.add(Double.parseDouble(term.substring(0, comma)));
-            lon.add(Double.parseDouble(term.substring(comma + 1)));
+        public void collectTerm(BytesRef term) {
+            String coord = term.utf8ToString();
+            int comma = coord.indexOf(',');
+            lat.add(Double.parseDouble(coord.substring(0, comma)));
+            lon.add(Double.parseDouble(coord.substring(comma + 1)));
 
         }
 

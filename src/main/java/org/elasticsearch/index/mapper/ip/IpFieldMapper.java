@@ -21,12 +21,14 @@ package org.elasticsearch.index.mapper.ip;
 
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.Nullable;
-import org.elasticsearch.common.Numbers;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -103,7 +105,7 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
         @Override
         public IpFieldMapper build(BuilderContext context) {
             IpFieldMapper fieldMapper = new IpFieldMapper(buildNames(context),
-                    precisionStep, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue);
+                    precisionStep, index, tokenize, store, boost, omitNorms, indexOptions, nullValue);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -128,11 +130,11 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
     private String nullValue;
 
     protected IpFieldMapper(Names names, int precisionStep,
-                            Field.Index index, Field.Store store,
-                            float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
+                            boolean index, boolean tokenize, boolean store,
+                            float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
                             String nullValue) {
-        super(names, precisionStep, null, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                false, new NamedAnalyzer("_ip/" + precisionStep, new NumericIpAnalyzer(precisionStep)),
+        super(names, precisionStep, null, index, tokenize, store, boost, omitNorms, indexOptions, false,
+                new NamedAnalyzer("_ip/" + precisionStep, new NumericIpAnalyzer(precisionStep)),
                 new NamedAnalyzer("_ip/max", new NumericIpAnalyzer(Integer.MAX_VALUE)));
         this.nullValue = nullValue;
     }
@@ -143,12 +145,12 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    public Long value(Field field) {
-        byte[] value = field.getBinaryValue();
+    public Long value(IndexableField field) {
+        Number value = field.numericValue();
         if (value == null) {
             return null;
         }
-        return Numbers.bytesToLong(value);
+        return value.longValue();
     }
 
     @Override
@@ -157,15 +159,15 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
     }
 
     /**
-     * IPs should return as a string, delegates to {@link #valueAsString(org.apache.lucene.document.Field)}.
+     * IPs should return as a string, delegates to {@link #valueAsString(org.apache.lucene.index.IndexableField)}.
      */
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return valueAsString(field);
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         Long value = value(field);
         if (value == null) {
             return null;
@@ -175,7 +177,9 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
 
     @Override
     public String indexedValue(String value) {
-        return NumericUtils.longToPrefixCoded(ipToLong(value));
+        BytesRef bytesRef = new BytesRef(NumericUtils.BUF_SIZE_LONG);
+        NumericUtils.longToPrefixCoded(ipToLong(value), 0, bytesRef);
+        return bytesRef.utf8ToString();
     }
 
     @Override
@@ -199,7 +203,7 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
 
     @Override
     public Query fuzzyQuery(String value, double minSim, int prefixLength, int maxExpansions) {
-        return new FuzzyQuery(names().createIndexNameTerm(value), (float) minSim, prefixLength, maxExpansions);
+        return new FuzzyQuery(new Term(names().indexName(), value),  prefixLength, maxExpansions);
     }
 
     @Override
@@ -289,21 +293,28 @@ public class IpFieldMapper extends NumberFieldMapper<Long> {
     @Override
     protected void doXContentBody(XContentBuilder builder) throws IOException {
         super.doXContentBody(builder);
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.indexed() != Defaults.INDEX) {
+            builder.field("index", this.indexed());
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.tokenized() != Defaults.TOKENIZE) {
+            builder.field("tokenize", this.tokenized());
+        }
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (omitNorms != Defaults.OMIT_NORMS) {
             builder.field("omit_norms", omitNorms);
         }
-        if (omitTermFreqAndPositions != Defaults.OMIT_TERM_FREQ_AND_POSITIONS) {
-            builder.field("omit_term_freq_and_positions", omitTermFreqAndPositions);
-        }
+
         if (precisionStep != Defaults.PRECISION_STEP) {
             builder.field("precision_step", precisionStep);
         }

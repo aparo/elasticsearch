@@ -78,24 +78,25 @@ public class Analysis {
         return value != null && "_none_".equals(value);
     }
 
-    public static Set<?> parseStemExclusion(Settings settings, Set<?> defaultStemExclusion) {
+    public static CharArraySet parseStemExclusion(Settings settings, CharArraySet defaultStemExclusion, Version version) {
         String value = settings.get("stem_exclusion");
         if (value != null) {
             if ("_none_".equals(value)) {
-                return ImmutableSet.of();
+                return CharArraySet.EMPTY_SET;
             } else {
-                return ImmutableSet.copyOf(Strings.commaDelimitedListToSet(value));
+                return CharArraySet.copy(version, Strings.commaDelimitedListToSet(value));
             }
         }
         String[] stopWords = settings.getAsArray("stem_exclusion", null);
         if (stopWords != null) {
-            return ImmutableSet.copyOf(Iterators.forArray(stopWords));
+
+            return CharArraySet.copy(version, new HashSet<String>(Arrays.asList(stopWords)));
         } else {
             return defaultStemExclusion;
         }
     }
 
-    public static final ImmutableMap<String, Set<?>> namedStopWords = MapBuilder.<String, Set<?>>newMapBuilder()
+    public static final ImmutableMap<String, CharArraySet> namedStopWords = MapBuilder.<String, CharArraySet>newMapBuilder()
             .put("_arabic_", ArabicAnalyzer.getDefaultStopSet())
             .put("_armenian_", ArmenianAnalyzer.getDefaultStopSet())
             .put("_basque_", BasqueAnalyzer.getDefaultStopSet())
@@ -125,7 +126,7 @@ public class Analysis {
             .put("_turkish_", TurkishAnalyzer.getDefaultStopSet())
             .immutableMap();
 
-    public static Set<?> parseArticles(Environment env, Settings settings, Version version) {
+    public static CharArraySet parseArticles(Environment env, Settings settings, Version version) {
         String value = settings.get("articles");
         if (value != null) {
             if ("_none_".equals(value)) {
@@ -146,7 +147,7 @@ public class Analysis {
         return null;
     }
 
-    public static Set<?> parseStopWords(Environment env, Settings settings, Set<?> defaultStopWords, Version version) {
+    public static CharArraySet parseStopWords(Environment env, Settings settings, CharArraySet defaultStopWords, Version version) {
         String value = settings.get("stopwords");
         if (value != null) {
             if ("_none_".equals(value)) {

@@ -19,10 +19,10 @@
 
 package org.elasticsearch.common.lucene.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similarities.Similarity;
+import org.apache.lucene.util.Bits;
 
 import java.io.IOException;
 import java.util.Set;

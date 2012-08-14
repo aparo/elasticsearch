@@ -22,6 +22,7 @@ package org.elasticsearch.index.field.data.floats;
 import gnu.trove.list.array.TFloatArrayList;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.FieldCache;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.RamUsage;
 import org.elasticsearch.index.field.data.FieldDataType;
 import org.elasticsearch.index.field.data.NumericFieldData;

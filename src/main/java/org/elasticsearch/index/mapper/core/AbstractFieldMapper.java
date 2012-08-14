@@ -21,10 +21,12 @@ package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.search.TermFilter;
@@ -236,22 +238,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
 
     protected final Names names;
 
-    protected final Field.Index index;
 
-    protected final Field.Store store;
-
-    protected final Field.TermVector termVector;
-
-    protected float boost;
-
-    protected final boolean omitNorms;
-
-    protected final boolean omitTermFreqAndPositions;
-    protected final FieldInfo.IndexOptions indexOptions;
-
-    protected final NamedAnalyzer indexAnalyzer;
-
-    protected final NamedAnalyzer searchAnalyzer;
 
     protected boolean index;
     protected boolean tokenize;
@@ -261,6 +248,11 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
     protected boolean storeTermVectorPositions;
     protected boolean omitNorms;
     protected FieldInfo.IndexOptions indexOptions;
+    protected float boost;
+
+    protected final NamedAnalyzer indexAnalyzer;
+
+    protected final NamedAnalyzer searchAnalyzer;
 
     protected AbstractFieldMapper(Names names, boolean index, boolean tokenize, boolean store,
                                   boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
@@ -516,7 +508,7 @@ public abstract class AbstractFieldMapper<T> implements FieldMapper<T>, Mapper {
         if (this.stored() != fieldMergeWith.stored()) {
             mergeContext.addConflict("mapper [" + names.fullName() + "] has different store values");
         }
-        if (!this.termVector.equals(fieldMergeWith.termVector)) {
+        if (this.storeTermVectors() !=fieldMergeWith.storeTermVectors()) {
             mergeContext.addConflict("mapper [" + names.fullName() + "] has different term_vector values");
         }
         if (this.storeTermVectorOffsets() != fieldMergeWith.storeTermVectorOffsets()) {

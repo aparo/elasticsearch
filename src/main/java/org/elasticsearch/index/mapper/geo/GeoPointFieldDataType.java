@@ -24,7 +24,6 @@ import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.SortField;
 import org.elasticsearch.index.cache.field.data.FieldDataCache;
 import org.elasticsearch.index.field.data.FieldDataType;
-import org.elasticsearch.index.field.data.strings.StringOrdValFieldDataComparator;
 
 import java.io.IOException;
 
@@ -40,11 +39,12 @@ public class GeoPointFieldDataType implements FieldDataType<GeoPointFieldData> {
         return new ExtendedFieldComparatorSource() {
             @Override
             public FieldComparator newComparator(String fieldname, int numHits, int sortPos, boolean reversed) throws IOException {
-                return new StringOrdValFieldDataComparator(numHits, fieldname, sortPos, reversed, cache);
+                //return new StringOrdValFieldDataComparator(numHits, fieldname, sortPos, reversed, cache);
+                return Comparators.getTermOrdValComparator(numHits, fieldname);
             }
 
             @Override
-            public int reducedType() {
+            public SortField.Type reducedType() {
                 return SortField.Type.STRING;
             }
         };

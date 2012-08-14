@@ -46,8 +46,9 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
 
     public static class Defaults extends LongFieldMapper.Defaults {
         public static final String NAME = TTLFieldMapper.CONTENT_TYPE;
-        public static final Field.Store STORE = Field.Store.YES;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final boolean STORE = true;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
         public static final boolean ENABLED = false;
         public static final long DEFAULT = -1;
     }
@@ -107,10 +108,10 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
         this(Defaults.STORE, Defaults.INDEX, Defaults.ENABLED, Defaults.DEFAULT);
     }
 
-    protected TTLFieldMapper(Field.Store store, Field.Index index, boolean enabled, long defaultTTL) {
+    protected TTLFieldMapper(boolean store, boolean index, boolean enabled, long defaultTTL) {
         super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), Defaults.PRECISION_STEP,
-                Defaults.FUZZY_FACTOR, index, store, Defaults.BOOST, Defaults.OMIT_NORMS,
-                Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.NULL_VALUE, Defaults.IGNORE_MALFORMED);
+                Defaults.FUZZY_FACTOR, index, Defaults.TOKENIZE, store, Defaults.BOOST, Defaults.OMIT_NORMS,
+                Defaults.INDEX_OPTIONS, Defaults.NULL_VALUE, Defaults.IGNORE_MALFORMED);
         this.enabled = enabled;
         this.defaultTTL = defaultTTL;
     }
@@ -125,7 +126,7 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
 
     // Overrides valueForSearch to display live value of remaining ttl
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         long now;
         SearchContext searchContext = SearchContext.current();
         if (searchContext != null) {
@@ -133,7 +134,7 @@ public class TTLFieldMapper extends LongFieldMapper implements InternalMapper, R
         } else {
             now = System.currentTimeMillis();
         }
-        long value = value(field);
+        long value = field.numericValue().longValue();
         return value - now;
     }
 

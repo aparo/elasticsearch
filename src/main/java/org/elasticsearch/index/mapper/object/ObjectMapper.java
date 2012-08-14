@@ -22,11 +22,13 @@ package org.elasticsearch.index.mapper.object;
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
+import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.search.TermFilter;
 import org.elasticsearch.common.lucene.uid.UidField;
 import org.elasticsearch.common.xcontent.ToXContent;
@@ -403,15 +405,18 @@ public class ObjectMapper implements Mapper, AllFieldMapper.IncludeInAll {
             Document nestedDoc = new Document();
             // pre add the uid field if possible (id was already provided)
             IndexableField uidField = context.doc().getField(UidFieldMapper.NAME);
+            FieldType ft = Lucene.getDefaultFieldType();
+            ft.setIndexed(true);
+
             if (uidField != null) {
                 // we don't need to add it as a full uid field in nested docs, since we don't need versioning
                 // we also rely on this for UidField#loadVersion
 
                 // this is a deeply nested field
                 if (uidField.stringValue() != null) {
-                    nestedDoc.add(new Field(UidFieldMapper.NAME, uidField.stringValue(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+                    nestedDoc.add(new Field(UidFieldMapper.NAME, uidField.stringValue(), ft));
                 } else {
-                    nestedDoc.add(new Field(UidFieldMapper.NAME, ((UidField) uidField).uid(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+                    nestedDoc.add(new Field(UidFieldMapper.NAME, ((UidField) uidField).uid(), ft));
                 }
             }
             // the type of the nested doc starts with __, so we can identify that its a nested one in filters

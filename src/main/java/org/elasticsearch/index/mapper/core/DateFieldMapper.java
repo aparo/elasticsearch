@@ -20,11 +20,13 @@
 package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.NumericRangeFilter;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.Numbers;
@@ -102,8 +104,7 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
                 parseUpperInclusive = context.indexSettings().getAsBoolean("index.mapping.date.parse_upper_inclusive", Defaults.PARSE_UPPER_INCLUSIVE);
             }
             DateFieldMapper fieldMapper = new DateFieldMapper(buildNames(context), dateTimeFormatter,
-                    precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions, nullValue,
-                    timeUnit, parseUpperInclusive, ignoreMalformed);
+                    precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, nullValue, timeUnit, parseUpperInclusive, ignoreMalformed);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -140,12 +141,11 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     protected final TimeUnit timeUnit;
 
     protected DateFieldMapper(Names names, FormatDateTimeFormatter dateTimeFormatter, int precisionStep, String fuzzyFactor,
-                              Field.Index index, Field.Store store,
-                              float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
+                              boolean index, boolean tokenize, boolean store,
+                              float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
                               String nullValue, TimeUnit timeUnit, boolean parseUpperInclusive, boolean ignoreMalformed) {
-        super(names, precisionStep, fuzzyFactor, index, store, boost, omitNorms, omitTermFreqAndPositions,
-                ignoreMalformed, new NamedAnalyzer("_date/" + precisionStep,
-                new NumericDateAnalyzer(precisionStep, dateTimeFormatter.parser())),
+        super(names, precisionStep, fuzzyFactor, index, tokenize, store, boost, omitNorms, indexOptions, ignoreMalformed,
+                new NamedAnalyzer("_date/" + precisionStep, new NumericDateAnalyzer(precisionStep, dateTimeFormatter.parser())),
                 new NamedAnalyzer("_date/max", new NumericDateAnalyzer(Integer.MAX_VALUE, dateTimeFormatter.parser())));
         this.dateTimeFormatter = dateTimeFormatter;
         this.nullValue = nullValue;
@@ -172,12 +172,12 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     }
 
     @Override
-    public Long value(Field field) {
-        byte[] value = field.getBinaryValue();
+    public Long value(IndexableField field) {
+        BytesRef value = field.binaryValue();
         if (value == null) {
             return null;
         }
-        return Numbers.bytesToLong(value);
+        return Numbers.bytesToLong(value.bytes);
     }
 
     @Override
@@ -186,15 +186,15 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     }
 
     /**
-     * Dates should return as a string, delegates to {@link #valueAsString(org.apache.lucene.document.Field)}.
+     * Dates should return as a string, delegates to {@link #valueAsString(org.apache.lucene.index.IndexableField)}.
      */
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return valueAsString(field);
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         Long value = value(field);
         if (value == null) {
             return null;
@@ -204,7 +204,9 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
 
     @Override
     public String indexedValue(String value) {
-        return NumericUtils.longToPrefixCoded(dateTimeFormatter.parser().parseMillis(value));
+        BytesRef bytesRef = new BytesRef(NumericUtils.BUF_SIZE_LONG);
+        NumericUtils.longToPrefixCoded(dateTimeFormatter.parser().parseMillis(value), 0, bytesRef);
+        return bytesRef.utf8ToString();
     }
 
     @Override
@@ -233,7 +235,6 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
                 true, true);
     }
 
-    @Override
     public Query fieldQuery(String value, @Nullable QueryParseContext context) {
         long now = context == null ? System.currentTimeMillis() : context.nowInMillis();
         long lValue = dateMathParser.parse(value, now);
@@ -383,20 +384,26 @@ public class DateFieldMapper extends NumberFieldMapper<Long> {
     @Override
     protected void doXContentBody(XContentBuilder builder) throws IOException {
         super.doXContentBody(builder);
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.indexed() != Defaults.INDEX) {
+            builder.field("index", this.indexed());
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.tokenized() != Defaults.TOKENIZE) {
+            builder.field("tokenize", this.tokenized());
+        }
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (omitNorms != Defaults.OMIT_NORMS) {
             builder.field("omit_norms", omitNorms);
-        }
-        if (omitTermFreqAndPositions != Defaults.OMIT_TERM_FREQ_AND_POSITIONS) {
-            builder.field("omit_term_freq_and_positions", omitTermFreqAndPositions);
         }
         if (precisionStep != Defaults.PRECISION_STEP) {
             builder.field("precision_step", precisionStep);

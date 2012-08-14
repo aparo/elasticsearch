@@ -25,12 +25,11 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
 import com.google.common.collect.UnmodifiableIterator;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.analysis.AnalyzerWrapper;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.queries.FilterClause;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.Filter;
-import org.apache.lucene.queries.FilterClause;
 import org.apache.lucene.search.XTermsFilter;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -418,7 +417,7 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         if (useTermsFilter) {
             Term[] typesTerms = new Term[types.length];
             for (int i = 0; i < typesTerms.length; i++) {
-                typesTerms[i] = TypeFieldMapper.TERM_FACTORY.createTerm(types[i]);
+                typesTerms[i] = TypeFieldMapper.createTerm(types[i]);
             }
             return new XTermsFilter(typesTerms);
         } else {
@@ -426,7 +425,7 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
             for (String type : types) {
                 DocumentMapper docMapper = documentMapper(type);
                 if (docMapper == null) {
-                    bool.add(new FilterClause(new TermFilter(TypeFieldMapper.TERM_FACTORY.createTerm(type)), BooleanClause.Occur.SHOULD));
+                    bool.add(new FilterClause(new TermFilter(TypeFieldMapper.createTerm(type)), BooleanClause.Occur.SHOULD));
                 } else {
                     bool.add(new FilterClause(docMapper.typeFilter(), BooleanClause.Occur.SHOULD));
                 }
@@ -847,7 +846,7 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         }
     }
 
-    final class SmartIndexNameSearchAnalyzer extends Analyzer {
+    final class SmartIndexNameSearchAnalyzer extends AnalyzerWrapper {
 
         private final Analyzer defaultAnalyzer;
 
@@ -856,70 +855,30 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         }
 
         @Override
-        public int getPositionIncrementGap(String fieldName) {
+        protected Analyzer getWrappedAnalyzer(String fieldName) {
             int dotIndex = fieldName.indexOf('.');
             if (dotIndex != -1) {
                 String possibleType = fieldName.substring(0, dotIndex);
                 DocumentMapper possibleDocMapper = mappers.get(possibleType);
                 if (possibleDocMapper != null) {
-                    return possibleDocMapper.mappers().searchAnalyzer().getPositionIncrementGap(fieldName);
+                    return possibleDocMapper.mappers().searchAnalyzer();
                 }
             }
             FieldMappers mappers = fullNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getPositionIncrementGap(fieldName);
+            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
+                return mappers.mapper().searchAnalyzer();
             }
 
             mappers = indexNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getPositionIncrementGap(fieldName);
+            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
+                return mappers.mapper().searchAnalyzer();
             }
-            return defaultAnalyzer.getPositionIncrementGap(fieldName);
+            return defaultAnalyzer;
         }
 
         @Override
-        public int getOffsetGap(String field) {
-            String fieldName = field;
-            int dotIndex = fieldName.indexOf('.');
-            if (dotIndex != -1) {
-                String possibleType = fieldName.substring(0, dotIndex);
-                DocumentMapper possibleDocMapper = mappers.get(possibleType);
-                if (possibleDocMapper != null) {
-                    return possibleDocMapper.mappers().searchAnalyzer().getOffsetGap(field);
-                }
-            }
-            FieldMappers mappers = fullNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getOffsetGap(field);
-            }
-
-            mappers = indexNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getOffsetGap(field);
-            }
-            return defaultAnalyzer.getOffsetGap(field);
-        }
-
-        @Override
-        protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-            int dotIndex = fieldName.indexOf('.');
-            if (dotIndex != -1) {
-                String possibleType = fieldName.substring(0, dotIndex);
-                DocumentMapper possibleDocMapper = mappers.get(possibleType);
-                if (possibleDocMapper != null) {
-                    return possibleDocMapper.mappers().searchAnalyzer().getTokenStreamComponents(fieldName, reader);
-                }
-            }
-            FieldMappers mappers = fullNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getTokenStreamComponents(fieldName, reader);
-            }
-
-            mappers = indexNameFieldMappers.get(fieldName);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchAnalyzer() != null) {
-                return mappers.mapper().searchAnalyzer().getTokenStreamComponents(fieldName, reader);
-            }
-            return defaultAnalyzer.getTokenStreamComponents(fieldName, reader);
+        protected TokenStreamComponents wrapComponents(String fieldName, TokenStreamComponents components) {
+            return new TokenStreamComponents(components.getTokenizer(), components.getTokenStream());
         }
     }
 
@@ -929,6 +888,28 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
 
         SmartIndexNameSearchQuoteAnalyzer(Analyzer defaultAnalyzer) {
             this.defaultAnalyzer = defaultAnalyzer;
+        }
+
+        @Override
+        protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+            int dotIndex = fieldName.indexOf('.');
+            if (dotIndex != -1) {
+                String possibleType = fieldName.substring(0, dotIndex);
+                DocumentMapper possibleDocMapper = mappers.get(possibleType);
+                if (possibleDocMapper != null) {
+                    return possibleDocMapper.mappers().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+                }
+            }
+            FieldMappers mappers = fullNameFieldMappers.get(fieldName);
+            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
+                return mappers.mapper().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+            }
+
+            mappers = indexNameFieldMappers.get(fieldName);
+            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
+                return mappers.mapper().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+            }
+            return defaultAnalyzer.getTokenStreamComponents(fieldName, reader);
         }
 
         @Override
@@ -954,47 +935,25 @@ public class MapperService extends AbstractIndexComponent implements Iterable<Do
         }
 
         @Override
-        public int getOffsetGap(String field) {
-            int dotIndex = field.indexOf('.');
-            if (dotIndex != -1) {
-                String possibleType = field.substring(0, dotIndex);
-                DocumentMapper possibleDocMapper = mappers.get(possibleType);
-                if (possibleDocMapper != null) {
-                    return possibleDocMapper.mappers().searchQuoteAnalyzer().getOffsetGap(field);
-                }
-            }
-            FieldMappers mappers = fullNameFieldMappers.get(field);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
-                return mappers.mapper().searchQuoteAnalyzer().getOffsetGap(field);
-            }
-
-            mappers = indexNameFieldMappers.get(field);
-            if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
-                return mappers.mapper().searchQuoteAnalyzer().getOffsetGap(field);
-            }
-            return defaultAnalyzer.getOffsetGap(field);
-        }
-
-        @Override
-        protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+        public int getOffsetGap(String fieldName) {
             int dotIndex = fieldName.indexOf('.');
             if (dotIndex != -1) {
                 String possibleType = fieldName.substring(0, dotIndex);
                 DocumentMapper possibleDocMapper = mappers.get(possibleType);
                 if (possibleDocMapper != null) {
-                    return possibleDocMapper.mappers().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+                    return possibleDocMapper.mappers().searchQuoteAnalyzer().getOffsetGap(fieldName);
                 }
             }
             FieldMappers mappers = fullNameFieldMappers.get(fieldName);
             if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
-                return mappers.mapper().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+                return mappers.mapper().searchQuoteAnalyzer().getOffsetGap(fieldName);
             }
 
             mappers = indexNameFieldMappers.get(fieldName);
             if (mappers != null && mappers.mapper() != null && mappers.mapper().searchQuoteAnalyzer() != null) {
-                return mappers.mapper().searchQuoteAnalyzer().getTokenStreamComponents(fieldName, reader);
+                return mappers.mapper().searchQuoteAnalyzer().getOffsetGap(fieldName);
             }
-            return defaultAnalyzer.getTokenStreamComponents(fieldName, reader);
+            return defaultAnalyzer.getOffsetGap(fieldName);
         }
     }
 

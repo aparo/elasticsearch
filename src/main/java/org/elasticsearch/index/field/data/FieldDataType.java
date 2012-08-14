@@ -21,6 +21,7 @@ package org.elasticsearch.index.field.data;
 
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.FieldComparatorSource;
+import org.apache.lucene.search.SortField;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.index.cache.field.data.FieldDataCache;
 import org.elasticsearch.index.field.data.bytes.ByteFieldDataType;

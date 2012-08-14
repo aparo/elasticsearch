@@ -22,6 +22,7 @@ package org.elasticsearch.common.lucene.all;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.elasticsearch.ElasticSearchException;
 
 import java.io.IOException;

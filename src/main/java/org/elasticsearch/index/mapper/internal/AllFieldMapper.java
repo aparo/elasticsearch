@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
@@ -79,13 +80,23 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
         }
 
         @Override
-        public Builder store(Field.Store store) {
+        public Builder store(boolean store) {
             return super.store(store);
         }
 
         @Override
-        public Builder termVector(Field.TermVector termVector) {
-            return super.termVector(termVector);
+        public Builder storeTermVectors(boolean storeTermVectors) {
+            return super.storeTermVectors(storeTermVectors);
+        }
+
+        @Override
+        public Builder storeTermVectorOffsets(boolean storeTermVectorOffsets) {
+            return super.storeTermVectorOffsets(storeTermVectorOffsets);
+        }
+
+        @Override
+        public Builder storeTermVectorPositions(boolean storeTermVectorPositions) {
+            return super.storeTermVectorPositions(storeTermVectorPositions);
         }
 
         @Override
@@ -100,7 +111,8 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
 
         @Override
         public AllFieldMapper build(BuilderContext context) {
-            return new AllFieldMapper(name, store, termVector, omitNorms, omitTermFreqAndPositions,
+            return new AllFieldMapper(name, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions,
+                    omitNorms, indexOptions,
                     indexAnalyzer, searchAnalyzer, enabled);
         }
     }
@@ -125,13 +137,12 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     private boolean enabled;
 
     public AllFieldMapper() {
-        this(Defaults.NAME, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS, null, null, Defaults.ENABLED);
+        this(Defaults.NAME, Defaults.STORE, Defaults.STORE_TERM_VECTOR, Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS, Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS, null, null, Defaults.ENABLED);
     }
 
-    protected AllFieldMapper(String name, Field.Store store, Field.TermVector termVector, boolean omitNorms, boolean omitTermFreqAndPositions,
+    protected AllFieldMapper(String name, boolean store, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
                              NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer, boolean enabled) {
-        super(new Names(name, name, name, name), Field.Index.ANALYZED, store, termVector, 1.0f, omitNorms, omitTermFreqAndPositions,
-                indexAnalyzer, searchAnalyzer);
+        super(new Names(name, name, name, name), true, true, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, 1.0f, omitNorms, indexOptions, indexAnalyzer, searchAnalyzer);
         this.enabled = enabled;
     }
 
@@ -147,6 +158,10 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     @Override
     public Query fieldQuery(String value, QueryParseContext context) {
         return new AllTermQuery(names().createIndexNameTerm(value));
+    }
+
+    private Term createTerm(String value) {
+        return new Term(NAME, value);
     }
 
     @Override
@@ -181,7 +196,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
         context.allEntries().reset();
 
         Analyzer analyzer = findAnalyzer(context);
-        return new AllField(names.indexName(), store, termVector, context.allEntries(), analyzer);
+        return new AllField(names.indexName(), getFieldType(), context.allEntries(), analyzer);
     }
 
     private Analyzer findAnalyzer(ParseContext context) {
@@ -200,7 +215,7 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override
-    public Void value(Field field) {
+    public Void value(IndexableField field) {
         return null;
     }
 
@@ -210,12 +225,12 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return null;
     }
 
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return null;
     }
 
@@ -227,18 +242,29 @@ public class AllFieldMapper extends AbstractFieldMapper<Void> implements Interna
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         // if all are defaults, no need to write it at all
-        if (enabled == Defaults.ENABLED && store == Defaults.STORE && termVector == Defaults.TERM_VECTOR && indexAnalyzer == null && searchAnalyzer == null) {
+        /*
+        if (enabled == Defaults.ENABLED && this.stored() == Defaults.STORE &&
+                this.storeTermVectors() == Defaults.STORE_TERM_VECTOR && this.storeTermVectorOffsets() == Defaults.STORE_TERM_VECTOR_OFFSETS &&
+                this.storeTermVectorPositions() == Defaults.STORE_TERM_VECTOR_POSITIONS &&
+                indexAnalyzer == null && searchAnalyzer == null) {
             return builder;
-        }
+        } */
+
         builder.startObject(CONTENT_TYPE);
         if (enabled != Defaults.ENABLED) {
             builder.field("enabled", enabled);
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (indexAnalyzer != null && searchAnalyzer != null && indexAnalyzer.name().equals(searchAnalyzer.name()) && !indexAnalyzer.name().startsWith("_")) {
             // same analyzers, output it once

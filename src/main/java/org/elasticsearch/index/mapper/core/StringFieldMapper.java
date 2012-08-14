@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.core;
 
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.elasticsearch.common.Strings;
@@ -110,8 +111,9 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
                 searchQuotedAnalyzer = new NamedCustomAnalyzer(searchQuotedAnalyzer, positionOffsetGap);
             }
             StringFieldMapper fieldMapper = new StringFieldMapper(buildNames(context),
-                    index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, nullValue,
-                    indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer, positionOffsetGap, ignoreAbove);
+                    index, tokenize, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions,
+                    boost, omitNorms, indexOptions,
+                    nullValue, indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer, positionOffsetGap, ignoreAbove);
             fieldMapper.includeInAll(includeInAll);
             return fieldMapper;
         }
@@ -164,18 +166,19 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
 
     private int ignoreAbove;
 
-    protected StringFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
-                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
-        this(names, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, nullValue, indexAnalyzer,
-                searchAnalyzer, searchAnalyzer, Defaults.POSITION_OFFSET_GAP, Defaults.IGNORE_ABOVE);
+    protected StringFieldMapper(Names names, boolean index, boolean tokenize, boolean store, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
+                                float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
+                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer, NamedAnalyzer searchQuotedAnalyzer) {
+        this(names, index, tokenize, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions,
+                boost, omitNorms, indexOptions, nullValue,
+                indexAnalyzer, searchAnalyzer, searchQuotedAnalyzer, Defaults.POSITION_OFFSET_GAP, Defaults.IGNORE_ABOVE);
     }
 
-    protected StringFieldMapper(Names names, Field.Index index, Field.Store store, Field.TermVector termVector,
-                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer,
-                                NamedAnalyzer searchQuotedAnalyzer, int positionOffsetGap, int ignoreAbove) {
-        super(names, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions, indexAnalyzer, searchAnalyzer);
+    protected StringFieldMapper(Names names, boolean index, boolean tokenize, boolean store, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
+                                float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions,
+                                String nullValue, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer, NamedAnalyzer searchQuotedAnalyzer, int positionOffsetGap, int ignoreAbove) {
+        super(names, index, tokenize, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, boost,
+                omitNorms, indexOptions, indexAnalyzer, searchAnalyzer);
         this.nullValue = nullValue;
         this.positionOffsetGap = positionOffsetGap;
         this.searchQuotedAnalyzer = searchQuotedAnalyzer != null ? searchQuotedAnalyzer : this.searchAnalyzer;
@@ -197,7 +200,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     }
 
     @Override
-    public String value(Field field) {
+    public String value(IndexableField field) {
         return field.stringValue();
     }
 
@@ -207,7 +210,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return value(field);
     }
 
@@ -279,7 +282,7 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
             context.ignoredValue(names.indexName(), value);
             return null;
         }
-        Field field = new Field(names.indexName(), false, value, store, index, termVector);
+        Field field = new Field(names.indexName(), value, getFieldType());
         field.setBoost(boost);
         return field;
     }
@@ -305,20 +308,26 @@ public class StringFieldMapper extends AbstractFieldMapper<String> implements Al
     @Override
     protected void doXContentBody(XContentBuilder builder) throws IOException {
         super.doXContentBody(builder);
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.indexed() != Defaults.INDEX) {
+            builder.field("index", this.indexed());
         }
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this.store());
         }
-        if (termVector != Defaults.TERM_VECTOR) {
-            builder.field("term_vector", termVector.name().toLowerCase());
+        if (this.tokenized() != Defaults.TOKENIZE) {
+            builder.field("tokenize", this.tokenized());
+        }
+        if (this.storeTermVectors() != Defaults.STORE_TERM_VECTOR) {
+            builder.field("term_vector", this.storeTermVectors());
+        }
+        if (this.storeTermVectorPositions() != Defaults.STORE_TERM_VECTOR_POSITIONS) {
+            builder.field("term_vector_positions", this.storeTermVectorPositions());
+        }
+        if (this.storeTermVectorOffsets() != Defaults.STORE_TERM_VECTOR_OFFSETS) {
+            builder.field("term_vector_offset", this.storeTermVectorOffsets());
         }
         if (omitNorms != Defaults.OMIT_NORMS) {
             builder.field("omit_norms", omitNorms);
-        }
-        if (omitTermFreqAndPositions != Defaults.OMIT_TERM_FREQ_AND_POSITIONS) {
-            builder.field("omit_term_freq_and_positions", omitTermFreqAndPositions);
         }
         if (nullValue != null) {
             builder.field("null_value", nullValue);

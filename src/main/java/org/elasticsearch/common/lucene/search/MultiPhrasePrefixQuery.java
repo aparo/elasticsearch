@@ -19,11 +19,10 @@
 
 package org.elasticsearch.common.lucene.search;
 
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermEnum;
+import org.apache.lucene.index.*;
 import org.apache.lucene.search.MultiPhraseQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.ToStringUtils;
 
 import java.io.IOException;
@@ -153,7 +152,7 @@ public class MultiPhrasePrefixQuery extends Query {
 
     private void getPrefixTerms(List<Term> terms, final Term prefix, final IndexReader reader) throws IOException {
         //TODO FIX lucene4 has a faster prefix searcher
-        Terms mterms=MultiFields.getTerms(reader, prefix.field());
+        Terms mterms= MultiFields.getTerms(reader, prefix.field());
         if (mterms==null)
             return;
 

@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.ConstantScoreQuery;
@@ -48,17 +49,20 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
 
     public static final String NAME = "_type";
 
-    public static final Term TERM_FACTORY = new Term(NAME, "");
-
     public static final String CONTENT_TYPE = "_type";
+
+    public static Term createTerm(String type) {
+        return new Term(NAME, type);
+    }
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = TypeFieldMapper.NAME;
         public static final String INDEX_NAME = TypeFieldMapper.NAME;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
-        public static final Field.Store STORE = Field.Store.NO;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
+        public static final boolean STORE = false;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_ONLY;
     }
 
     public static class Builder extends AbstractFieldMapper.Builder<Builder, TypeFieldMapper> {
@@ -69,12 +73,12 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
             index = Defaults.INDEX;
             store = Defaults.STORE;
             omitNorms = Defaults.OMIT_NORMS;
-            omitTermFreqAndPositions = Defaults.OMIT_TERM_FREQ_AND_POSITIONS;
+            indexOptions = Defaults.INDEX_OPTIONS;
         }
 
         @Override
         public TypeFieldMapper build(BuilderContext context) {
-            return new TypeFieldMapper(name, indexName, index, store, termVector, boost, omitNorms, omitTermFreqAndPositions);
+            return new TypeFieldMapper(name, indexName, index, tokenize, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, boost, omitNorms, indexOptions);
         }
     }
 
@@ -93,23 +97,23 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
     }
 
     protected TypeFieldMapper(String name, String indexName) {
-        this(name, indexName, Defaults.INDEX, Defaults.STORE, Defaults.TERM_VECTOR, Defaults.BOOST,
-                Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS);
+        this(name, indexName, Defaults.INDEX, Defaults.TOKENIZE, Defaults.STORE, Defaults.STORE_TERM_VECTOR,
+                Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS, Defaults.BOOST,
+                Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS);
     }
 
-    public TypeFieldMapper(String name, String indexName, Field.Index index, Field.Store store, Field.TermVector termVector,
-                           float boost, boolean omitNorms, boolean omitTermFreqAndPositions) {
-        super(new Names(name, indexName, indexName, name), index, store, termVector, boost, omitNorms, omitTermFreqAndPositions,
-                Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
+    public TypeFieldMapper(String name, String indexName, boolean index, boolean tokenize, boolean store, boolean storeTermVectors, boolean storeTermVectorOffsets, boolean storeTermVectorPositions,
+                           float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions) {
+        super(new Names(name, indexName, indexName, name), index, tokenize, store, storeTermVectors, storeTermVectorOffsets, storeTermVectorPositions, boost, omitNorms, indexOptions, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
     }
 
     public String value(Document document) {
-        Field field = document.getFieldable(names.indexName());
+        IndexableField field = document.getField(names.indexName());
         return field == null ? null : value(field);
     }
 
     @Override
-    public String value(Field field) {
+    public String value(IndexableField field) {
         return field.stringValue();
     }
 
@@ -119,7 +123,7 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return value(field);
     }
 
@@ -134,8 +138,8 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
 
     @Override
     public Filter fieldFilter(String value, @Nullable QueryParseContext context) {
-        if (index == Field.Index.NO) {
-            return new PrefixFilter(UidFieldMapper.TERM_FACTORY.createTerm(Uid.typePrefix(value)));
+        if (this.indexed() == false  /* no process */) {
+            return new PrefixFilter(UidFieldMapper.createTerm(Uid.typePrefix(value)));
         }
         return new TermFilter(names().createIndexNameTerm(value));
     }
@@ -175,10 +179,10 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
 
     @Override
     protected Field parseCreateField(ParseContext context) throws IOException {
-        if (index == Field.Index.NO && store == Field.Store.NO) {
+        if (this.indexed() == false  /* no process */ && this.stored() == false) {
             return null;
         }
-        return new Field(names.indexName(), false, context.type(), store, index, termVector);
+        return new Field(names.indexName(), context.type(), getFieldType());
     }
 
     @Override
@@ -189,15 +193,15 @@ public class TypeFieldMapper extends AbstractFieldMapper<String> implements Inte
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         // if all are defaults, no sense to write it at all
-        if (store == Defaults.STORE && index == Defaults.INDEX) {
+        if (this.store() == Defaults.STORE && this.index() == Defaults.INDEX) {
             return builder;
         }
         builder.startObject(CONTENT_TYPE);
-        if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+        if (this.store() != Defaults.STORE) {
+            builder.field("store", this,store());
         }
-        if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+        if (this.index() != Defaults.INDEX) {
+            builder.field("index", this.index());
         }
         builder.endObject();
         return builder;

@@ -447,7 +447,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         }
 
         public UidField uidField() {
-            return (UidField) doc.rootDoc().getFieldable(UidFieldMapper.NAME);
+            return (UidField) doc.rootDoc().getField(UidFieldMapper.NAME);
         }
 
 
@@ -575,7 +575,7 @@ public interface Engine extends IndexShardComponent, CloseableComponent {
         }
 
         public UidField uidField() {
-            return (UidField) doc.rootDoc().getFieldable(UidFieldMapper.NAME);
+            return (UidField) doc.rootDoc().getField(UidFieldMapper.NAME);
         }
 
         public Index startTime(long startTime) {

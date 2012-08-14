@@ -20,6 +20,8 @@
 package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.elasticsearch.common.lucene.Lucene;
@@ -40,15 +42,14 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
 
     public static final String NAME = "_uid".intern();
 
-    public static final Term TERM_FACTORY = new Term(NAME, "");
-
     public static final String CONTENT_TYPE = "_uid";
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = UidFieldMapper.NAME;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = false; // we store payload
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_AND_FREQS_AND_POSITIONS; // we store payload
     }
 
     public static class Builder extends Mapper.Builder<Builder, UidFieldMapper> {
@@ -64,6 +65,10 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
         public UidFieldMapper build(BuilderContext context) {
             return new UidFieldMapper(name, indexName);
         }
+    }
+
+    public static Term createTerm(String uid) {
+        return new Term(NAME, uid);
     }
 
     public static class TypeParser implements Mapper.TypeParser {
@@ -89,8 +94,9 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     protected UidFieldMapper(String name, String indexName) {
-        super(new Names(name, indexName, indexName, name), Defaults.INDEX, Field.Store.YES, Defaults.TERM_VECTOR, Defaults.BOOST,
-                Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
+        super(new Names(name, indexName, indexName, name), Defaults.INDEX, Defaults.TOKENIZE, true, Defaults.STORE_TERM_VECTOR,
+                Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS, Defaults.BOOST,
+                Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS, Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
     }
 
     @Override
@@ -114,12 +120,18 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
             // since we did not have the uid in the pre phase, we did not add it automatically to the nested docs
             // as they were created we need to make sure we add it to all the nested docs...
             if (context.docs().size() > 1) {
-                UidField uidField = (UidField) context.rootDoc().getFieldable(UidFieldMapper.NAME);
+                UidField uidField = (UidField) context.rootDoc().getField(UidFieldMapper.NAME);
                 assert uidField != null;
                 // we need to go over the docs and add it...
+                // FieldType ft = Lucene.cloneType(this.getFieldType());
+                FieldType ft = this.getFieldType();
+                ft.setIndexed(true);
+                ft.setStored(false);
+                ft.setTokenized(false);
+                ft.setIndexOptions(FieldInfo.IndexOptions.DOCS_ONLY);
                 for (int i = 1; i < context.docs().size(); i++) {
                     // we don't need to add it as a full uid field in nested docs, since we don't need versioning
-                    context.docs().get(i).add(new Field(UidFieldMapper.NAME, uidField.uid(), Field.Store.NO, Field.Index.NOT_ANALYZED));
+                    context.docs().get(i).add(new Field(UidFieldMapper.NAME, uidField.uid(), ft));
                 }
             }
         }
@@ -151,7 +163,7 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     @Override
-    public Uid value(Field field) {
+    public Uid value(IndexableField field) {
         return Uid.createUid(field.stringValue());
     }
 
@@ -161,7 +173,7 @@ public class UidFieldMapper extends AbstractFieldMapper<Uid> implements Internal
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return field.stringValue();
     }
 

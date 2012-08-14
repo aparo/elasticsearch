@@ -20,7 +20,7 @@
 package org.elasticsearch.index.mapper;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Filter;
@@ -113,29 +113,33 @@ public interface FieldMapper<T> {
          * Creates a new index term based on the provided value.
          */
         public Term createIndexNameTerm(String value) {
-            return indexNameTermFactory.createTerm(value);
+            return new Term(indexNameTermFactory.field(), value);
         }
     }
 
     Names names();
 
-    Field.Index index();
+    boolean index();
 
     boolean indexed();
 
-    boolean analyzed();
+    boolean tokenized();
 
-    Field.Store store();
+    boolean store();
+
+    FieldInfo.IndexOptions indexOptions();
 
     boolean stored();
 
-    Field.TermVector termVector();
+    boolean storeTermVectors();
+
+    boolean storeTermVectorOffsets();
+
+    boolean storeTermVectorPositions();
 
     float boost();
 
     boolean omitNorms();
-
-    boolean omitTermFreqAndPositions();
 
     /**
      * The analyzer that will be used to index the field.
@@ -155,19 +159,19 @@ public interface FieldMapper<T> {
     /**
      * Returns the value that will be used as a result for search. Can be only of specific types... .
      */
-    Object valueForSearch(Field field);
+    Object valueForSearch(IndexableField field);
 
     /**
      * Returns the actual value of the field.
      */
-    T value(Field field);
+    T value(IndexableField field);
 
     T valueFromString(String value);
 
     /**
      * Returns the actual value of the field as string.
      */
-    String valueAsString(Field field);
+    String valueAsString(IndexableField field);
 
     /**
      * Returns the indexed value.

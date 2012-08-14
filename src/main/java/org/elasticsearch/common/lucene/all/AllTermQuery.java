@@ -19,20 +19,23 @@
 
 package org.elasticsearch.common.lucene.all;
 
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermPositions;
-import org.apache.lucene.search.ComplexExplanation;
-import org.apache.lucene.search.Explanation;
+import org.apache.lucene.index.*;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TermStatistics;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.search.spans.SpanScorer;
 import org.apache.lucene.search.spans.SpanTermQuery;
 import org.apache.lucene.search.spans.SpanWeight;
 import org.apache.lucene.search.spans.TermSpans;
+import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.BytesRef;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeSet;
 
 import static org.apache.lucene.analysis.payloads.PayloadHelper.decodeFloat;
 

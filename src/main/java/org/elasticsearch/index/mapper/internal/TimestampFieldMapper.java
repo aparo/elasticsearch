@@ -49,8 +49,9 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
 
     public static class Defaults extends DateFieldMapper.Defaults {
         public static final String NAME = "_timestamp";
-        public static final Field.Store STORE = Field.Store.NO;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final boolean STORE = false;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
         public static final boolean ENABLED = false;
         public static final String PATH = null;
         public static final FormatDateTimeFormatter DATE_TIME_FORMATTER = Joda.forPattern(DEFAULT_DATE_TIME_FORMAT);
@@ -122,11 +123,11 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
         this(Defaults.STORE, Defaults.INDEX, Defaults.ENABLED, Defaults.PATH, Defaults.DATE_TIME_FORMATTER, Defaults.PARSE_UPPER_INCLUSIVE);
     }
 
-    protected TimestampFieldMapper(Field.Store store, Field.Index index, boolean enabled, String path, FormatDateTimeFormatter dateTimeFormatter, boolean parseUpperInclusive) {
+    protected TimestampFieldMapper(boolean store, boolean index, boolean enabled, String path,
+                                   FormatDateTimeFormatter dateTimeFormatter, boolean parseUpperInclusive) {
         super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), dateTimeFormatter,
-                Defaults.PRECISION_STEP, Defaults.FUZZY_FACTOR, index, store, Defaults.BOOST, Defaults.OMIT_NORMS,
-                Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.NULL_VALUE, TimeUnit.MILLISECONDS /*always milliseconds*/,
-                parseUpperInclusive, Defaults.IGNORE_MALFORMED);
+                Defaults.PRECISION_STEP, Defaults.FUZZY_FACTOR, index, Defaults.TOKENIZE, store, Defaults.BOOST, Defaults.OMIT_NORMS,
+                Defaults.INDEX_OPTIONS, Defaults.NULL_VALUE, TimeUnit.MILLISECONDS /*always milliseconds*/, parseUpperInclusive, Defaults.IGNORE_MALFORMED);
         this.enabled = enabled;
         this.path = path;
     }
@@ -147,12 +148,12 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
      * Override the default behavior to return a timestamp
      */
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return value(field);
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         Long value = value(field);
         if (value == null) {
             return null;
@@ -210,10 +211,10 @@ public class TimestampFieldMapper extends DateFieldMapper implements InternalMap
         }
         builder.startObject(CONTENT_TYPE);
         if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+            builder.field("index", index);
         }
         if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+            builder.field("store", store);
         }
         if (enabled != Defaults.ENABLED) {
             builder.field("enabled", enabled);

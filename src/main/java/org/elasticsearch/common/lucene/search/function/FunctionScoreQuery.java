@@ -19,10 +19,11 @@
 
 package org.elasticsearch.common.lucene.search.function;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similarities.Similarity;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.ToStringUtils;
 
 import java.io.IOException;
@@ -74,7 +75,7 @@ public class FunctionScoreQuery extends Query {
 
         public CustomBoostFactorWeight(IndexSearcher searcher) throws IOException {
             this.searcher = searcher;
-            this.subQueryWeight = subQuery.weight(searcher);
+            this.subQueryWeight = subQuery.createWeight(searcher);
         }
 
         @Override public Explanation explain(AtomicReaderContext context, int doc) throws IOException {

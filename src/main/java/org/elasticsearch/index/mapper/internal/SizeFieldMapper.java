@@ -46,7 +46,7 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
 
         protected boolean enabled = Defaults.ENABLED;
 
-        protected Field.Store store = Defaults.STORE;
+        protected boolean store = Defaults.STORE;
 
         public Builder() {
             super(Defaults.NAME);
@@ -58,7 +58,7 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
             return builder;
         }
 
-        public Builder store(Field.Store store) {
+        public Builder store(boolean store) {
             this.store = store;
             return builder;
         }
@@ -92,10 +92,10 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
         this(Defaults.ENABLED, Defaults.STORE);
     }
 
-    public SizeFieldMapper(boolean enabled, Field.Store store) {
-        super(new Names(Defaults.NAME), Defaults.PRECISION_STEP, Defaults.FUZZY_FACTOR, Defaults.INDEX, store,
-                Defaults.BOOST, Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS, Defaults.NULL_VALUE,
-                Defaults.IGNORE_MALFORMED);
+    public SizeFieldMapper(boolean enabled, boolean store) {
+        super(new Names(Defaults.NAME), Defaults.PRECISION_STEP, Defaults.FUZZY_FACTOR,
+                Defaults.INDEX, Defaults.TOKENIZE, store, Defaults.BOOST, Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS,
+                 Defaults.NULL_VALUE, Defaults.IGNORE_MALFORMED);
         this.enabled = enabled;
     }
 
@@ -137,6 +137,7 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
         if (!enabled) {
             return null;
         }
+        this.index=true;
         return new CustomIntegerNumericField(this, context.source().length());
     }
 

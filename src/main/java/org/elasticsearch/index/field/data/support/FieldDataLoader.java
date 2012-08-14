@@ -19,11 +19,8 @@
 
 package org.elasticsearch.index.field.data.support;
 
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermDocs;
-import org.apache.lucene.index.TermEnum;
-import org.apache.lucene.util.StringHelper;
+import org.apache.lucene.index.*;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.index.field.data.FieldData;
 
 import java.io.IOException;
@@ -39,7 +36,6 @@ public class FieldDataLoader {
 
         loader.init();
 
-        field = StringHelper.intern(field);
         ArrayList<int[]> ordinals = new ArrayList<int[]>();
         int[] idx = new int[reader.maxDoc()];
         ordinals.add(new int[reader.maxDoc()]);

@@ -19,7 +19,7 @@
 
 package org.elasticsearch.common.lucene.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Scorer;

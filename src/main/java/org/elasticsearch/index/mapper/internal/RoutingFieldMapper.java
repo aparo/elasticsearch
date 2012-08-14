@@ -21,6 +21,7 @@ package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.lucene.Lucene;
@@ -46,10 +47,11 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final String NAME = "_routing";
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
-        public static final Field.Store STORE = Field.Store.YES;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
+        public static final boolean STORE = true;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_ONLY;
         public static final boolean REQUIRED = false;
         public static final String PATH = null;
     }
@@ -109,8 +111,10 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
         this(Defaults.STORE, Defaults.INDEX, Defaults.REQUIRED, Defaults.PATH);
     }
 
-    protected RoutingFieldMapper(Field.Store store, Field.Index index, boolean required, String path) {
-        super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), index, store, Defaults.TERM_VECTOR, 1.0f, Defaults.OMIT_NORMS, Defaults.OMIT_TERM_FREQ_AND_POSITIONS,
+    protected RoutingFieldMapper(boolean store, boolean index, boolean required, String path) {
+        super(new Names(Defaults.NAME, Defaults.NAME, Defaults.NAME, Defaults.NAME), index, Defaults.TOKENIZE, store,
+                Defaults.STORE_TERM_VECTOR, Defaults.STORE_TERM_VECTOR_OFFSETS, Defaults.STORE_TERM_VECTOR_POSITIONS,
+                1.0f, Defaults.OMIT_NORMS, Defaults.INDEX_OPTIONS,
                 Lucene.KEYWORD_ANALYZER, Lucene.KEYWORD_ANALYZER);
         this.required = required;
         this.path = path;
@@ -129,12 +133,12 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
     }
 
     public String value(Document document) {
-        Field field = document.getFieldable(names.indexName());
+        IndexableField field = document.getField(names.indexName());
         return field == null ? null : value(field);
     }
 
     @Override
-    public String value(Field field) {
+    public String value(IndexableField field) {
         return field.stringValue();
     }
 
@@ -144,7 +148,7 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
     }
 
     @Override
-    public String valueAsString(Field field) {
+    public String valueAsString(IndexableField field) {
         return value(field);
     }
 
@@ -159,13 +163,13 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
         if (path != null && routing != null) {
             // we have a path, check if we can validate we have the same routing value as the one in the doc...
             String value = null;
-            Field field = context.doc().getFieldable(path);
+            IndexableField field = context.doc().getField(path);
             if (field != null) {
                 value = field.stringValue();
                 if (value == null) {
                     // maybe its a numeric field...
                     if (field instanceof NumberFieldMapper.CustomNumericField) {
-                        value = ((NumberFieldMapper.CustomNumericField) field).numericAsString();
+                        value = ((NumberFieldMapper.CustomNumericField) field).stringValue();
                     }
                 }
             }
@@ -208,7 +212,7 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
                     context.ignoredValue(names.indexName(), routing);
                     return null;
                 }
-                return new Field(names.indexName(), routing, store, index);
+                return new Field(names.indexName(), routing, getFieldType());
             }
         }
         return null;
@@ -228,10 +232,10 @@ public class RoutingFieldMapper extends AbstractFieldMapper<String> implements I
         }
         builder.startObject(CONTENT_TYPE);
         if (index != Defaults.INDEX) {
-            builder.field("index", index.name().toLowerCase());
+            builder.field("index", index);
         }
         if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+            builder.field("store", store);
         }
         if (required != Defaults.REQUIRED) {
             builder.field("required", required);

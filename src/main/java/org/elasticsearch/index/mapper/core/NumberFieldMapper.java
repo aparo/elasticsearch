@@ -22,6 +22,7 @@ package org.elasticsearch.index.mapper.core;
 import org.apache.lucene.analysis.NumericTokenStream;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
@@ -46,9 +47,10 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
 
     public static class Defaults extends AbstractFieldMapper.Defaults {
         public static final int PRECISION_STEP = NumericUtils.PRECISION_STEP_DEFAULT;
-        public static final Field.Index INDEX = Field.Index.NOT_ANALYZED;
+        public static final boolean INDEX = true;
+        public static final boolean TOKENIZE = false;
         public static final boolean OMIT_NORMS = true;
-        public static final boolean OMIT_TERM_FREQ_AND_POSITIONS = true;
+        public static final FieldInfo.IndexOptions INDEX_OPTIONS = FieldInfo.IndexOptions.DOCS_ONLY;
         public static final String FUZZY_FACTOR = null;
         public static final boolean IGNORE_MALFORMED = false;
     }
@@ -65,11 +67,11 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
             super(name);
             this.index = Defaults.INDEX;
             this.omitNorms = Defaults.OMIT_NORMS;
-            this.omitTermFreqAndPositions = Defaults.OMIT_TERM_FREQ_AND_POSITIONS;
+            this.indexOptions = Defaults.INDEX_OPTIONS;
         }
 
         @Override
-        public T store(Field.Store store) {
+        public T store(boolean store) {
             return super.store(store);
         }
 
@@ -123,10 +125,11 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
     };
 
     protected NumberFieldMapper(Names names, int precisionStep, @Nullable String fuzzyFactor,
-                                Field.Index index, Field.Store store,
-                                float boost, boolean omitNorms, boolean omitTermFreqAndPositions,
-                                boolean ignoreMalformed, NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
-        super(names, index, store, Field.TermVector.NO, boost, boost != 1.0f || omitNorms, omitTermFreqAndPositions, indexAnalyzer, searchAnalyzer);
+                                boolean index, boolean tokenize, boolean store,
+                                float boost, boolean omitNorms, FieldInfo.IndexOptions indexOptions, boolean ignoreMalformed,
+                                NamedAnalyzer indexAnalyzer, NamedAnalyzer searchAnalyzer) {
+        super(names, index, true, store, false, false, false, boost, boost != 1.0f || omitNorms, indexOptions,
+                indexAnalyzer, searchAnalyzer);
         if (precisionStep <= 0 || precisionStep >= maxPrecisionStep()) {
             this.precisionStep = Integer.MAX_VALUE;
         } else {
@@ -231,13 +234,13 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
      * Override the default behavior (to return the string, and return the actual Number instance).
      */
     @Override
-    public Object valueForSearch(Field field) {
+    public Object valueForSearch(IndexableField field) {
         return value(field);
     }
 
     @Override
-    public String valueAsString(Field field) {
-        Number num = value(field);
+    public String valueAsString(IndexableField field) {
+        Number num = field.numericValue();
         return num == null ? null : num.toString();
     }
 
@@ -294,8 +297,6 @@ public abstract class NumberFieldMapper<T extends Number> extends AbstractFieldM
         public Reader readerValue() {
             return null;
         }
-
-        public abstract String numericAsString();
     }
 
     @Override

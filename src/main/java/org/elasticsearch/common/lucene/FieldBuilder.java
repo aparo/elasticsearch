@@ -20,6 +20,8 @@
 package org.elasticsearch.common.lucene;
 
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
+import org.apache.lucene.index.FieldInfo;
 
 /**
  *

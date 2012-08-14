@@ -20,6 +20,7 @@
 package org.elasticsearch.index.field.data.strings;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.RamUsage;
 import org.elasticsearch.index.field.data.FieldData;
 import org.elasticsearch.index.field.data.FieldDataType;

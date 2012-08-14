@@ -114,13 +114,13 @@ public class DocumentMapper implements ToXContent {
          * Called before a field is added to the document. Return <tt>true</tt> to include
          * it in the document.
          */
-        boolean beforeFieldAdded(FieldMapper fieldMapper, Field fieldable, ParseContext parseContent);
+        boolean beforeFieldAdded(FieldMapper fieldMapper, IndexableField fieldable, ParseContext parseContent);
     }
 
     public static class ParseListenerAdapter implements ParseListener {
 
         @Override
-        public boolean beforeFieldAdded(FieldMapper fieldMapper, Field fieldable, Object parseContext) {
+        public boolean beforeFieldAdded(FieldMapper fieldMapper, IndexableField fieldable, Object parseContext) {
             return true;
         }
     }
@@ -155,7 +155,7 @@ public class DocumentMapper implements ToXContent {
             if (indexSettings != null) {
                 String idIndexed = indexSettings.get("index.mapping._id.indexed");
                 if (idIndexed != null && Booleans.parseBoolean(idIndexed, false)) {
-                    idFieldMapper = new IdFieldMapper(Field.Index.NOT_ANALYZED);
+                    idFieldMapper = new IdFieldMapper(true, false);
                 }
             }
             this.rootMappers.put(IdFieldMapper.class, idFieldMapper);

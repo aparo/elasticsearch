@@ -22,6 +22,7 @@ package org.elasticsearch.index.field.data.longs;
 import gnu.trove.list.array.TLongArrayList;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.FieldCache;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.RamUsage;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
 import org.elasticsearch.index.field.data.FieldDataType;
