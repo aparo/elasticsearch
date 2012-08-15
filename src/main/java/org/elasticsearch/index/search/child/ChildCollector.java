@@ -83,7 +83,7 @@ public class ChildCollector extends Collector {
                 continue;
             }
             int parentDocId = idReaderTypeCache.docById(parentId);
-            if (parentDocId != -1 && !indexReader.isDeleted(parentDocId)) {
+            if (parentDocId != -1 && indexReader.document(parentDocId)!=null) {
                 FixedBitSet docIdSet = parentDocs().get(indexReader.getCoreCacheKey());
                 if (docIdSet == null) {
                     docIdSet = new FixedBitSet(indexReader.maxDoc());

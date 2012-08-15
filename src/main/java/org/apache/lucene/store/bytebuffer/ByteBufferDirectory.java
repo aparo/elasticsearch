@@ -18,6 +18,7 @@ package org.apache.lucene.store.bytebuffer;
  */
 
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.SingleInstanceLockFactory;
@@ -98,16 +99,7 @@ public class ByteBufferDirectory extends Directory {
         return files.containsKey(name);
     }
 
-    @Override
-    public long fileModified(String name) throws IOException {
-        ByteBufferFile file = files.get(name);
-        if (file == null)
-            throw new FileNotFoundException(name);
-        return file.getLastModified();
-    }
-
-    @Override
-    public void touchFile(String name) throws IOException {
+    public void touchFile(String name, IOContext context) throws IOException {
         ByteBufferFile file = files.get(name);
         if (file == null)
             throw new FileNotFoundException(name);
@@ -146,7 +138,7 @@ public class ByteBufferDirectory extends Directory {
     }
 
     @Override
-    public IndexOutput createOutput(String name) throws IOException {
+    public IndexOutput createOutput(String name, IOContext context) throws IOException {
         ByteBufferAllocator.Type allocatorType = ByteBufferAllocator.Type.LARGE;
         if (name.contains("segments") || name.endsWith(".del")) {
             allocatorType = ByteBufferAllocator.Type.SMALL;
@@ -166,7 +158,7 @@ public class ByteBufferDirectory extends Directory {
     }
 
     @Override
-    public IndexInput openInput(String name) throws IOException {
+    public IndexInput openInput(String name, IOContext context) throws IOException {
         ByteBufferFile file = files.get(name);
         if (file == null)
             throw new FileNotFoundException(name);

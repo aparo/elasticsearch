@@ -20,10 +20,9 @@
 package org.elasticsearch.index.percolator;
 
 import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.index.memory.CustomMemoryIndex;
+import org.apache.lucene.index.memory.MemoryIndex;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
@@ -290,25 +289,26 @@ public class PercolatorExecutor extends AbstractIndexComponent {
 
     private Response percolate(DocAndQueryRequest request) throws ElasticSearchException {
         // first, parse the source doc into a MemoryIndex
-        final CustomMemoryIndex memoryIndex = new CustomMemoryIndex();
+        final MemoryIndex memoryIndex = new MemoryIndex();
 
         // TODO: This means percolation does not support nested docs...
         for (IndexableField field : request.doc().rootDoc().getFields()) {
-            if (!field.isIndexed()) {
+            if (!field.fieldType().indexed()) {
                 continue;
             }
             // no need to index the UID field
             if (field.name().equals(UidFieldMapper.NAME)) {
                 continue;
             }
-            TokenStream tokenStream = field.tokenStreamValue();
+            //TokenStream tokenStream = field.tokenStreamValue();
+            TokenStream tokenStream = null;//PARO TO FIX readd field.tokenStreamValue();
             if (tokenStream != null) {
-                memoryIndex.addField(field.name(), tokenStream, field.getBoost());
+                memoryIndex.addField(field.name(), tokenStream, field.boost());
             } else {
                 Reader reader = field.readerValue();
                 if (reader != null) {
                     try {
-                        memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), reader), field.getBoost() * request.doc().rootDoc().getBoost());
+                        memoryIndex.addField(field.name(), request.doc().analyzer().tokenStream(field.name(), reader), field.boost());
                     } catch (IOException e) {
                         throw new MapperParsingException("Failed to analyze field [" + field.name() + "]", e);
                     }
@@ -316,7 +316,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                     String value = field.stringValue();
                     if (value != null) {
                         try {
-                            memoryIndex.addField(field.name(), request.doc().analyzer().reusableTokenStream(field.name(), new FastStringReader(value)), field.getBoost() * request.doc().rootDoc().getBoost());
+                            memoryIndex.addField(field.name(), request.doc().analyzer().tokenStream(field.name(), new FastStringReader(value)), field.boost() * request.doc().rootDoc().boost());
                         } catch (IOException e) {
                             throw new MapperParsingException("Failed to analyze field [" + field.name() + "]", e);
                         }

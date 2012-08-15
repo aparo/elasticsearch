@@ -64,7 +64,7 @@ public class TypeFilterParser implements FilterParser {
         Filter filter;
         DocumentMapper documentMapper = parseContext.mapperService().documentMapper(type);
         if (documentMapper == null) {
-            filter = new TermFilter(TypeFieldMapper.TERM_FACTORY.createTerm(type));
+            filter = new TermFilter(TypeFieldMapper.createTerm(type));
         } else {
             filter = documentMapper.typeFilter();
         }

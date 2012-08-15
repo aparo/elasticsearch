@@ -47,7 +47,7 @@ public class NestedChildrenCollector extends FacetCollector {
 
     private FixedBitSet parentDocs;
 
-    private IndexReader currentReader;
+    private AtomicReaderContext currentContext;
 
     public NestedChildrenCollector(FacetCollector collector, Filter parentFilter, Filter childFilter) {
         this.collector = collector;
@@ -74,9 +74,9 @@ public class NestedChildrenCollector extends FacetCollector {
     @Override
     public void setNextReader(AtomicReaderContext context) throws IOException {
         collector.setNextReader(context);
-        currentReader = reader;
-        childDocs = DocSets.convert(reader, childFilter.getDocIdSet(atomicReaderContext, bits));
-        parentDocs = ((FixedBitDocSet) parentFilter.getDocIdSet(atomicReaderContext, bits)).set();
+        currentContext = context;
+        childDocs = DocSets.convert(context.reader(), childFilter.getDocIdSet(context, context.reader().getLiveDocs()));
+        parentDocs = ((FixedBitDocSet) parentFilter.getDocIdSet(context, context.reader().getLiveDocs())).set();
     }
 
     @Override
@@ -90,8 +90,9 @@ public class NestedChildrenCollector extends FacetCollector {
             return;
         }
         int prevParentDoc = parentDocs.prevSetBit(parentDoc - 1);
+        Bits liveDocs = MultiFields.getLiveDocs(currentContext.reader());
         for (int i = (parentDoc - 1); i > prevParentDoc; i--) {
-            if (!currentReader.isDeleted(i) && childDocs.get(i)) {
+            if (liveDocs.get(i) && childDocs.get(i)) {
                 collector.collect(i);
             }
         }

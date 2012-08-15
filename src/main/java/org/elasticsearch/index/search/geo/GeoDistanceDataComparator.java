@@ -77,7 +77,7 @@ public class GeoDistanceDataComparator extends FieldComparator {
         }
 
         @Override
-        public int reducedType() {
+        public SortField.Type reducedType() {
             return SortField.Type.DOUBLE;
         }
     }
@@ -127,8 +127,9 @@ public class GeoDistanceDataComparator extends FieldComparator {
     }
 
     @Override
-    public void setNextReader(AtomicReaderContext context) throws IOException {
+    public FieldComparator setNextReader(AtomicReaderContext context) throws IOException {
         fieldData = (GeoPointFieldData) fieldDataCache.cache(GeoPointFieldDataType.TYPE, context.reader(), indexFieldName);
+        return this;
     }
 
     @Override
@@ -183,5 +184,11 @@ public class GeoDistanceDataComparator extends FieldComparator {
     @Override
     public Comparable value(int slot) {
         return Double.valueOf(values[slot]);
+    }
+
+    @Override
+    public int compareDocToValue(int doc, Object value) throws IOException {
+        //PARO FIX: add compare
+        return 0;  //To change body of implemented methods use File | Settings | File Templates.
     }
 }

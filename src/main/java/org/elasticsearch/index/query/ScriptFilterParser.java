@@ -20,9 +20,11 @@
 package org.elasticsearch.index.query;
 
 import com.google.common.collect.Maps;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
 import org.elasticsearch.common.inject.Inject;
@@ -160,9 +162,9 @@ public class ScriptFilterParser implements FilterParser {
         }
 
         @Override
-        public DocIdSet getDocIdSet(final IndexReader reader) throws IOException {
-            searchScript.setNextReader(reader);
-            return new ScriptDocSet(reader, searchScript);
+        public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
+            searchScript.setNextReader(context);
+            return new ScriptDocSet(context.reader(), searchScript);
         }
 
         static class ScriptDocSet extends GetDocSet {

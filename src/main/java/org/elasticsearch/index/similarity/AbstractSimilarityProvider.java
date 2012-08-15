@@ -28,7 +28,7 @@ import org.elasticsearch.index.settings.IndexSettings;
 /**
  *
  */
-public abstract class AbstractSimilarityProvider<T extends Similarity> extends AbstractIndexComponent implements SimilarityProvider<T> {
+public abstract class AbstractSimilarityProvider<T extends Similarity> extends AbstractIndexComponent implements ElasticSearchSimilarity<T> {
 
     private final String name;
 
@@ -37,7 +37,7 @@ public abstract class AbstractSimilarityProvider<T extends Similarity> extends A
         this.name = name;
     }
 
-    @Override
+
     public String name() {
         return this.name;
     }

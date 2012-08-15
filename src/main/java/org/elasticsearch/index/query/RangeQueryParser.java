@@ -112,7 +112,7 @@ public class RangeQueryParser implements QueryParser {
             }
         }
         if (query == null) {
-            query = new TermRangeQuery(fieldName, from, to, includeLower, includeUpper);
+            query = new TermRangeQuery(fieldName, new BytesRef(from), new BytesRef(to), includeLower, includeUpper);
         }
         query.setBoost(boost);
         return wrapSmartNameQuery(query, smartNameFieldMappers, parseContext);

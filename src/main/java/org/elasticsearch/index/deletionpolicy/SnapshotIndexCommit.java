@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.deletionpolicy;
 
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexCommit;
 import org.elasticsearch.common.lease.Releasable;
 import org.elasticsearch.common.lucene.IndexCommitDelegate;
@@ -53,6 +54,17 @@ public class SnapshotIndexCommit extends IndexCommitDelegate implements Releasab
         return files;
     }
 
+    public long getVersion(){
+        try {
+            return DirectoryReader.open(getDirectory()).getVersion();
+        } catch (IOException e) {
+            //PARO: skip
+            return 0;
+        }
+
+    }
+    
+    
     /**
      * Releases the current snapshot, returning <code>true</code> if it was
      * actually released.
@@ -67,7 +79,7 @@ public class SnapshotIndexCommit extends IndexCommitDelegate implements Releasab
      */
     @Override
     public void delete() {
-        if (!deletionPolicy.isHeld(getVersion())) {
+        if (!deletionPolicy.isHeld(getVersion())){
             delegate.delete();
         }
     }

@@ -19,15 +19,14 @@
 
 package org.elasticsearch.search.internal;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.ExtendedIndexSearcher;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.*;
 import org.elasticsearch.common.lucene.MinimumScoreCollector;
 import org.elasticsearch.common.lucene.MultiCollector;
-import org.elasticsearch.common.lucene.search.AndFilter;
 import org.elasticsearch.common.lucene.search.FilteredCollector;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.search.dfs.CachedDfSource;
@@ -60,7 +59,7 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
     public ContextIndexSearcher(SearchContext searchContext, Engine.Searcher searcher) {
         super(searcher.searcher());
         this.searchContext = searchContext;
-        this.reader = searcher.searcher().getIndexReader();
+        this.reader = searcher.reader();
     }
 
     public void dfSource(CachedDfSource dfSource) {
@@ -135,8 +134,7 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
 
     // override from the Searcher to allow to control if scores will be tracked or not
     // LUCENE MONITOR - We override the logic here to apply our own flags for track scores
-    @Override
-    public TopFieldDocs search(Weight weight, Filter filter, int nDocs,
+    public TopFieldDocs search(Weight weight, int nDocs,
                                Sort sort, boolean fillFields) throws IOException {
         int limit = reader.maxDoc();
         if (limit == 0) {
@@ -146,12 +144,13 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
 
         TopFieldCollector collector = TopFieldCollector.create(sort, nDocs,
                 fillFields, searchContext.trackScores(), searchContext.trackScores(), !weight.scoresDocsOutOfOrder());
-        search(weight, filter, collector);
+        //PARO FIX TODO added leafContexts,
+        search(leafContexts, weight, collector);
         return (TopFieldDocs) collector.topDocs();
     }
 
     @Override
-    public void search(Weight weight, Filter filter, Collector collector) throws IOException {
+    public void search(List<AtomicReaderContext> leaves, Weight weight, Collector collector) throws IOException {
         if (searchContext.parsedFilter() != null && Scopes.MAIN.equals(processingScope)) {
             // this will only get applied to the actual search collector and not
             // to any scoped collectors, also, it will only be applied to the main collector
@@ -173,6 +172,7 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
             collector = new MinimumScoreCollector(collector, searchContext.minimumScore());
         }
 
+        /*
         Filter combinedFilter;
         if (filter == null) {
             combinedFilter = searchContext.aliasFilter();
@@ -182,17 +182,18 @@ public class ContextIndexSearcher extends ExtendedIndexSearcher {
             } else {
                 combinedFilter = filter;
             }
-        }
+        } */
 
         // we only compute the doc id set once since within a context, we execute the same query always...
         if (searchContext.timeoutInMillis() != -1) {
             try {
-                super.search(weight, combinedFilter, collector);
+                super.search(leaves, weight, collector);
             } catch (TimeLimitingCollector.TimeExceededException e) {
                 searchContext.queryResult().searchTimedOut(true);
             }
         } else {
-            super.search(weight, combinedFilter, collector);
+            //PARO FIX TODO added leafContexts,
+            super.search(leaves, weight, collector);
         }
     }
 }

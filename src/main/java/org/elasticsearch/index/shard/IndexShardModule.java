@@ -31,9 +31,8 @@ import org.elasticsearch.jmx.JmxService;
  */
 public class IndexShardModule extends AbstractModule {
 
-    private final Settings settings;
-
     private final ShardId shardId;
+    private final Settings settings;
 
     public IndexShardModule(Settings settings, ShardId shardId) {
         this.settings = settings;

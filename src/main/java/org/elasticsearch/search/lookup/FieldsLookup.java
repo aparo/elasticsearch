@@ -44,7 +44,7 @@ public class FieldsLookup implements Map {
     @Nullable
     private final String[] types;
 
-    private AtomicReaderContext context;
+    private AtomicReaderContext readerContext;
 
     private int docId = -1;
 
@@ -55,11 +55,11 @@ public class FieldsLookup implements Map {
         this.types = types;
     }
 
-    public void setNextReader(AtomicReaderContext context) {
-        if (this.context == context) { // if we are called with the same reader, don't invalidate source
+    public void setNextReader(AtomicReaderContext readerContext) {
+        if (this.readerContext == readerContext) { // if we are called with the same reader, don't invalidate source
             return;
         }
-        this.context = context;
+        this.readerContext = readerContext;
         clearCache();
         this.docId = -1;
     }
@@ -151,7 +151,7 @@ public class FieldsLookup implements Map {
         if (data.doc() == null) {
             try {
                 final DocumentStoredFieldVisitor visitor = new DocumentStoredFieldVisitor(data.mapper().names().indexName());
-                context.reader().document(docId, visitor);
+                readerContext.reader().document(docId, visitor);
                 data.doc(visitor.getDocument());
             } catch (IOException e) {
                 throw new ElasticSearchParseException("failed to load field [" + name + "]", e);

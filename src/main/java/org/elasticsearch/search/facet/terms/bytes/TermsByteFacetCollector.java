@@ -24,6 +24,8 @@ import com.google.common.collect.ImmutableSet;
 import gnu.trove.iterator.TByteIntIterator;
 import gnu.trove.map.hash.TByteIntHashMap;
 import gnu.trove.set.hash.TByteHashSet;
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
@@ -109,7 +111,7 @@ public class TermsByteFacetCollector extends AbstractFacetCollector {
         if (allTerms) {
             try {
                 for (IndexReader reader : context.searcher().subReaders()) {
-                    ByteFieldData fieldData = (ByteFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+                    ByteFieldData fieldData = (ByteFieldData) fieldDataCache.cache(fieldDataType, new AtomicReaderContext((AtomicReader)reader), indexFieldName);
                     fieldData.forEachValue(aggregator);
                 }
             } catch (Exception e) {
@@ -126,10 +128,10 @@ public class TermsByteFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        fieldData = (ByteFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+        fieldData = (ByteFieldData) fieldDataCache.cache(fieldDataType, readerContext, indexFieldName);
         if (script != null) {
-            script.setNextReader(reader);
+            script.setNextReader(readerContext);
         }
     }
 

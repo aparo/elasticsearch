@@ -20,10 +20,11 @@
 package org.elasticsearch.index.search.child;
 
 import gnu.trove.map.hash.TIntObjectHashMap;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similarities.Similarity;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.ToStringUtils;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.ElasticSearchIllegalStateException;
@@ -75,6 +76,10 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
 
     private int numHits = 0;
 
+    private boolean gatherChildrenDocs = false;
+
+    private Map<Integer, List<Integer>> childrendDocsByParent;
+
     // Note, the query is expected to already be filtered to only child type docs
     public TopChildrenQuery(Query query, String scope, String childType, String parentType, ScoreType scoreType, int factor, int incrementalFactor) {
         this.query = query;
@@ -100,6 +105,7 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
     public void clear() {
         parentDocs = null;
         numHits = 0;
+        childrendDocsByParent = null;
     }
 
     @Override
@@ -120,11 +126,17 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
     @Override
     public void processResults(TopDocs topDocs, SearchContext context) {
         Map<Object, TIntObjectHashMap<ParentDoc>> parentDocsPerReader = new HashMap<Object, TIntObjectHashMap<ParentDoc>>();
+        if (gatherChildrenDocs) {
+            childrendDocsByParent = new HashMap<Integer, List<Integer>>();
+        }
         for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-            int readerIndex = context.searcher().readerIndex(scoreDoc.doc);
-            IndexReader subReader = context.searcher().subReaders()[readerIndex];
-            int subDoc = scoreDoc.doc - context.searcher().docStarts()[readerIndex];
 
+            AtomicReaderContext readerContextIndex = context.searcher().contextIndex(scoreDoc.doc);
+            //int readerIndex = context.searcher().readerIndex(scoreDoc.doc);
+            //IndexReader subReader = context.searcher().subReaders()[readerIndex];
+            //int subDoc = scoreDoc.doc - context.searcher().docStarts()[readerIndex];
+            IndexReader subReader = readerContextIndex.reader();
+            int subDoc = scoreDoc.doc - readerContextIndex.docBase;
             // find the parent id
             HashedBytesArray parentId = context.idCache().reader(subReader).parentIdByDoc(parentType, subDoc);
             if (parentId == null) {
@@ -134,31 +146,45 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
             // now go over and find the parent doc Id and reader tuple
             for (IndexReader indexReader : context.searcher().subReaders()) {
                 int parentDocId = context.idCache().reader(indexReader).docById(parentType, parentId);
-                if (parentDocId != -1 && !indexReader.isDeleted(parentDocId)) {
-                    // we found a match, add it and break
+                try {
+                    if (parentDocId != -1 && indexReader.document(parentDocId)!=null) {
+                        // we found a match, add it and break
+                        //PARO ON adding children fetching
+                        if (gatherChildrenDocs) {
+                            List<Integer> childrenIds = childrendDocsByParent.get(parentDocId);
+                            if (childrenIds == null) {
+                                childrenIds = new ArrayList<Integer>();
+                                childrendDocsByParent.put(parentDocId, childrenIds);
+                            }
+                            childrenIds.add(scoreDoc.doc);
+                        }
+                        //PARO OFF adding children fetching
 
-                    TIntObjectHashMap<ParentDoc> readerParentDocs = parentDocsPerReader.get(indexReader.getCoreCacheKey());
-                    if (readerParentDocs == null) {
-                        readerParentDocs = new TIntObjectHashMap<ParentDoc>();
-                        parentDocsPerReader.put(indexReader.getCoreCacheKey(), readerParentDocs);
-                    }
+                        TIntObjectHashMap<ParentDoc> readerParentDocs = parentDocsPerReader.get(indexReader.getCoreCacheKey());
+                        if (readerParentDocs == null) {
+                            readerParentDocs = new TIntObjectHashMap<ParentDoc>();
+                            parentDocsPerReader.put(indexReader.getCoreCacheKey(), readerParentDocs);
+                        }
 
-                    ParentDoc parentDoc = readerParentDocs.get(parentDocId);
-                    if (parentDoc == null) {
-                        numHits++; // we have a hit on a parent
-                        parentDoc = new ParentDoc();
-                        parentDoc.docId = parentDocId;
-                        parentDoc.count = 1;
-                        parentDoc.maxScore = scoreDoc.score;
-                        parentDoc.sumScores = scoreDoc.score;
-                        readerParentDocs.put(parentDocId, parentDoc);
-                    } else {
-                        parentDoc.count++;
-                        parentDoc.sumScores += scoreDoc.score;
-                        if (scoreDoc.score > parentDoc.maxScore) {
+                        ParentDoc parentDoc = readerParentDocs.get(parentDocId);
+                        if (parentDoc == null) {
+                            numHits++; // we have a hit on a parent
+                            parentDoc = new ParentDoc();
+                            parentDoc.docId = parentDocId;
+                            parentDoc.count = 1;
                             parentDoc.maxScore = scoreDoc.score;
+                            parentDoc.sumScores = scoreDoc.score;
+                            readerParentDocs.put(parentDocId, parentDoc);
+                        } else {
+                            parentDoc.count++;
+                            parentDoc.sumScores += scoreDoc.score;
+                            if (scoreDoc.score > parentDoc.maxScore) {
+                                parentDoc.maxScore = scoreDoc.score;
+                            }
                         }
                     }
+                } catch (IOException e) {
+                    //PARO - skip missing or with problem
                 }
             }
         }
@@ -169,6 +195,18 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
             Arrays.sort(values, PARENT_DOC_COMP);
             parentDocs.put(entry.getKey(), values);
         }
+    }
+
+    public void setGatherChildrenDocs(boolean gatherChildrenDocs) {
+        this.gatherChildrenDocs = gatherChildrenDocs;
+    }
+
+    public Map<Integer, List<Integer>> getChildrendDocsByParent() {
+        return childrendDocsByParent;
+    }
+
+    public Query getChildQuery() {
+        return query;
     }
 
     private static final ParentDocComparator PARENT_DOC_COMP = new ParentDocComparator();
@@ -204,9 +242,9 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
     @Override
     public Weight createWeight(IndexSearcher searcher) throws IOException {
         if (parentDocs != null) {
-            return new ParentWeight(searcher, query.weight(searcher));
+            return new ParentWeight(searcher, query.createWeight(searcher));
         }
-        return query.weight(searcher);
+        return query.createWeight(searcher);
     }
 
     public String toString(String field) {
@@ -227,39 +265,40 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
             this.queryWeight = queryWeight;
         }
 
+        @Override
+        public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
+            return new Explanation(getBoost(), "not implemented yet...");
+        }
+
         public Query getQuery() {
             return TopChildrenQuery.this;
+        }
+
+        @Override
+        public float getValueForNormalization() throws IOException {
+            float sum = queryWeight.getValueForNormalization();
+            sum *= getBoost() * getBoost();
+            return sum;
+        }
+
+        @Override
+        public void normalize(float norm, float topLevelBoost) {
+        }
+
+        @Override
+        public Scorer scorer(AtomicReaderContext context, boolean scoreDocsInOrder,
+                             boolean topScorer, Bits acceptDocs) throws IOException {
+            ParentDoc[] readerParentDocs = parentDocs.get(context.reader().getCoreCacheKey());
+            if (readerParentDocs != null) {
+                return new ParentScorer(queryWeight, readerParentDocs);
+            }
+            return new EmptyScorer(queryWeight);
         }
 
         public float getValue() {
             return getBoost();
         }
 
-        @Override
-        public float sumOfSquaredWeights() throws IOException {
-            float sum = queryWeight.sumOfSquaredWeights();
-            sum *= getBoost() * getBoost();
-            return sum;
-        }
-
-        @Override
-        public void normalize(float norm) {
-            // nothing to do here....
-        }
-
-        @Override
-        public Scorer scorer(IndexReader reader, boolean scoreDocsInOrder, boolean topScorer) throws IOException {
-            ParentDoc[] readerParentDocs = parentDocs.get(reader.getCoreCacheKey());
-            if (readerParentDocs != null) {
-                return new ParentScorer(getSimilarity(searcher), readerParentDocs);
-            }
-            return new EmptyScorer(getSimilarity(searcher));
-        }
-
-        @Override
-        public Explanation explain(IndexReader reader, int doc) throws IOException {
-            return new Explanation(getBoost(), "not implemented yet...");
-        }
     }
 
     class ParentScorer extends Scorer {
@@ -268,8 +307,8 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
 
         private int index = -1;
 
-        private ParentScorer(Similarity similarity, ParentDoc[] docs) throws IOException {
-            super(similarity);
+        private ParentScorer(Weight weight, ParentDoc[] docs) throws IOException {
+            super(weight);
             this.docs = docs;
         }
 
@@ -308,5 +347,11 @@ public class TopChildrenQuery extends Query implements ScopePhase.TopDocsPhase {
             }
             throw new ElasticSearchIllegalStateException("No support for score type [" + scoreType + "]");
         }
+        @Override
+        public float freq() throws IOException {
+            //PARO TO FIX calculate freq???
+            return 0;
+    }
+
     }
 }

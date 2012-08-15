@@ -32,6 +32,7 @@ import org.elasticsearch.index.mapper.DocumentMapper;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.FieldMappers;
 import org.elasticsearch.index.mapper.Uid;
+import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.RoutingFieldMapper;
 import org.elasticsearch.index.mapper.internal.SourceFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
@@ -168,7 +169,7 @@ public class FetchPhase implements SearchPhase {
 
             // get the version
 
-            InternalSearchHit searchHit = new InternalSearchHit(docId, uid.id(), uid.type(), routing, sourceRequested ? source : null, null);
+            InternalSearchHit searchHit = new InternalSearchHit(docId, uid.id(), uid.type(), sourceRequested ? source : null, null);
             hits[index] = searchHit;
 
             for (Object oField : doc.getFields()) {

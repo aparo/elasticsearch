@@ -238,7 +238,7 @@ public class IndicesTTLService extends AbstractLifecycleComponent<IndicesTTLServ
             try {
                 Document document = readerContext.reader().document(doc, new HashSet<String>(Arrays.asList(new String[]{UidFieldMapper.NAME, RoutingFieldMapper.NAME})));
                 String uid = document.getField(UidFieldMapper.NAME).stringValue();
-                long version = UidField.loadVersion(readerContext, UidFieldMapper.createTerm(uid));
+                long version = UidField.loadVersion(readerContext.reader(), UidFieldMapper.createTerm(uid));
                 docsToPurge.add(new DocToPurge(Uid.typeFromUid(uid), Uid.idFromUid(uid), version, document.get(RoutingFieldMapper.NAME)));
             } catch (Exception e) {
                 logger.trace("failed to collect doc", e);

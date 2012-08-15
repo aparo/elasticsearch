@@ -20,7 +20,7 @@
 package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.Tokenizer;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -29,18 +29,18 @@ import java.io.Reader;
  *
  */
 public abstract class NumericAnalyzer<T extends NumericTokenizer> extends Analyzer {
-
-    @Override
-    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
+    @Override protected TokenStreamComponents createComponents(String fieldName, Reader aReader) {
+        Tokenizer tokenizer=null;
         try {
-            return createNumericTokenizer(reader, new char[32]);
+            tokenizer=createNumericTokenizer(aReader, new char[32]);
         } catch (IOException e) {
             throw new RuntimeException("Failed to create numeric tokenizer", e);
         }
+        return new TokenStreamComponents(tokenizer);
     }
 
-    @Override
-    public final TokenStream reusableTokenStream(String fieldName, Reader reader) throws IOException {
+    /*
+    @Override public final TokenStream tokenStream(String fieldName, Reader reader) throws IOException {
         Holder holder = (Holder) getPreviousTokenStream();
         if (holder == null) {
             char[] buffer = new char[120];
@@ -50,10 +50,10 @@ public abstract class NumericAnalyzer<T extends NumericTokenizer> extends Analyz
             holder.tokenizer.reset(reader, holder.buffer);
         }
         return holder.tokenizer;
-    }
+    } */
 
     protected abstract T createNumericTokenizer(Reader reader, char[] buffer) throws IOException;
-
+/*
     private static final class Holder {
         final NumericTokenizer tokenizer;
         final char[] buffer;
@@ -63,4 +63,5 @@ public abstract class NumericAnalyzer<T extends NumericTokenizer> extends Analyz
             this.buffer = buffer;
         }
     }
+*/
 }

@@ -47,7 +47,7 @@ public class TruncateTokenFilterTests {
             }
         };
 
-        TokenStream test = analyzer.reusableTokenStream("test", new StringReader("a bb ccc dddd eeeee"));
+        TokenStream test = analyzer.tokenStream("test", new StringReader("a bb ccc dddd eeeee"));
         CharTermAttribute termAttribute = test.addAttribute(CharTermAttribute.class);
         assertThat(test.incrementToken(), equalTo(true));
         assertThat(termAttribute.toString(), equalTo("a"));

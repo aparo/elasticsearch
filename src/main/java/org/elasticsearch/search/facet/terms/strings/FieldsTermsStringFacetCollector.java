@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import gnu.trove.iterator.TObjectIntIterator;
 import gnu.trove.map.hash.TObjectIntHashMap;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.CacheRecycler;
@@ -125,12 +126,12 @@ public class FieldsTermsStringFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
         for (int i = 0; i < indexFieldsNames.length; i++) {
-            fieldsData[i] = fieldDataCache.cache(fieldsDataType[i], reader, indexFieldsNames[i]);
+            fieldsData[i] = fieldDataCache.cache(fieldsDataType[i], readerContext, indexFieldsNames[i]);
         }
         if (script != null) {
-            script.setNextReader(reader);
+            script.setNextReader(readerContext);
         }
     }
 

@@ -21,6 +21,7 @@ package org.elasticsearch.indices.recovery;
 
 import com.google.common.collect.Sets;
 import org.apache.lucene.store.AlreadyClosedException;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexOutput;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.Nullable;
@@ -605,7 +606,7 @@ public class RecoveryTarget extends AbstractComponent {
                     name = "recovery." + onGoingRecovery.startTime + "." + name;
                 }
 
-                indexOutput = store.createOutputRaw(name);
+                indexOutput = store.createOutputRaw(name, IOContext.DEFAULT);
 
                 onGoingRecovery.openIndexOutputs.put(request.name(), indexOutput);
             } else {

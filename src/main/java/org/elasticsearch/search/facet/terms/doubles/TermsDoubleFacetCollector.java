@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import gnu.trove.iterator.TDoubleIntIterator;
 import gnu.trove.map.hash.TDoubleIntHashMap;
 import gnu.trove.set.hash.TDoubleHashSet;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
@@ -125,10 +126,10 @@ public class TermsDoubleFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        fieldData = (DoubleFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+        fieldData = (DoubleFieldData) fieldDataCache.cache(fieldDataType, readerContext, indexFieldName);
         if (script != null) {
-            script.setNextReader(reader);
+            script.setNextReader(readerContext);
         }
     }
 

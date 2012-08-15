@@ -19,7 +19,7 @@
 
 package org.elasticsearch.script;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 
 import java.util.Map;
@@ -33,7 +33,7 @@ public interface SearchScript extends ExecutableScript {
 
     void setScorer(Scorer scorer);
 
-    void setNextReader(IndexReader reader);
+    void setNextReader(AtomicReaderContext readerContext);
 
     void setNextDocId(int doc);
 

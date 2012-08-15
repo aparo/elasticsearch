@@ -21,7 +21,7 @@ package org.elasticsearch.search.lookup;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.ElasticSearchParseException;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -37,7 +37,7 @@ import java.util.*;
 // TODO: If we are processing it in the per hit fetch phase, we cna initialize it with a source if it was loaded..
 public class SourceLookup implements Map {
 
-    private IndexReader reader;
+    private AtomicReaderContext readerContext;
 
     private int docId = -1;
 
@@ -58,7 +58,7 @@ public class SourceLookup implements Map {
         }
         try {
 
-            Document doc = reader.document(docId, new HashSet<String>(Arrays.asList(SourceFieldMapper.NAME)));
+            Document doc = readerContext.reader().document(docId, new HashSet<String>(Arrays.asList(SourceFieldMapper.NAME)));
             IndexableField sourceField = doc.getField(SourceFieldMapper.NAME);
             if (sourceField == null) {
                 source = ImmutableMap.of();
@@ -79,12 +79,11 @@ public class SourceLookup implements Map {
         return XContentHelper.convertToMap(bytes, offset, length, false).v2();
     }
 
-    public void setNextReader(IndexReader reader) {
-        if (this.reader == reader) { // if we are called with the same reader, don't invalidate source
+    public void setNextReader(AtomicReaderContext readerContext) {
+        if (this.readerContext == readerContext) { // if we are called with the same reader, don't invalidate source
             return;
         }
-        this.reader = reader;
-        this.source = null;
+        this.readerContext = readerContext;
         this.sourceAsBytes = null;
         this.docId = -1;
     }

@@ -20,10 +20,7 @@
 package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
-import org.apache.lucene.index.IndexableField;
 
-import java.io.IOException;
 import java.io.Reader;
 
 /**
@@ -71,7 +68,7 @@ public class NamedAnalyzer extends Analyzer {
 
     @Override
     protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        return analyzer.createComponents(fieldName, reader);
+        return analyzer.getTokenStreamComponents(fieldName, reader);
     }
 
     @Override

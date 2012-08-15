@@ -316,6 +316,8 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         modules.add(new EngineModule(indexSettings));
         modules.add(new IndexShardGatewayModule(injector.getInstance(IndexGateway.class)));
 
+        logger.debug("start injector shard_id [{}]", shardId.id());
+
         Injector shardInjector;
         try {
             shardInjector = modules.createChildInjector(injector);
@@ -324,6 +326,7 @@ public class InternalIndexService extends AbstractIndexComponent implements Inde
         } catch (Throwable e) {
             throw new IndexShardCreationException(shardId, e);
         }
+        logger.debug("end shard_id [{}]", shardId.id());
 
         shardsInjectors = newMapBuilder(shardsInjectors).put(shardId.id(), shardInjector).immutableMap();
 

@@ -42,13 +42,13 @@ public class SimilarityModule extends AbstractModule {
     protected void configure() {
         MapBinder<String, SimilarityProviderFactory> similarityBinder
                 = MapBinder.newMapBinder(binder(), String.class, SimilarityProviderFactory.class);
-
+        //TODO IMPROOVEMENT ADD support to other SimilarityProvider
         Map<String, Settings> similarityProvidersSettings = settings.getGroups("index.similarity");
         for (Map.Entry<String, Settings> entry : similarityProvidersSettings.entrySet()) {
             String name = entry.getKey();
             Settings settings = entry.getValue();
 
-            Class<? extends SimilarityProvider> type = settings.getAsClass("type", null, "org.elasticsearch.index.similarity.", "SimilarityProvider");
+            Class<? extends ElasticSearchSimilarity> type = settings.getAsClass("type", null, "org.elasticsearch.index.similarity.", "SimilarityProvider");
             if (type == null) {
                 throw new IllegalArgumentException("Similarity [" + name + "] must have a type associated with it");
             }

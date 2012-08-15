@@ -20,11 +20,11 @@
 package org.apache.lucene.search;
 
 import org.apache.lucene.index.AtomicReaderContext;
+import org.apache.lucene.index.DocsEnum;
+import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.index.TermDocs;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
-import org.elasticsearch.common.lucene.Lucene;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -73,31 +73,19 @@ public class PublicTermsFilter extends Filter {
         return hash;
     }
 
-    @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
+    @Override public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         FixedBitSet result = null;
-        TermDocs td = atomicReaderContext.reader().termDocs();
-        try {
-            // batch read, in Lucene 4.0 its no longer needed
-            int[] docs = new int[Lucene.BATCH_ENUM_DOCS];
-            int[] freqs = new int[Lucene.BATCH_ENUM_DOCS];
-            for (Term term : terms) {
-                td.seek(term);
-                int number = td.read(docs, freqs);
-                if (number > 0) {
-                    if (result == null) {
-                        result = new FixedBitSet(reader.maxDoc());
-                    }
-                    while (number > 0) {
-                        for (int i = 0; i < number; i++) {
-                            result.set(docs[i]);
-                        }
-                        number = td.read(docs, freqs);
-                    }
+        int doc;
+        for(Term term:terms){
+            DocsEnum td = MultiFields.getTermDocsEnum(atomicReaderContext.reader(), MultiFields.getLiveDocs(atomicReaderContext.reader()), term.field(), term.bytes());
+            if(td!=null){
+                if(result==null){
+                    result = new FixedBitSet(atomicReaderContext.reader().maxDoc());
+                }
+                while((doc = td.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                    result.set(doc);
                 }
             }
-        } finally {
-            td.close();
         }
         return result;
     }

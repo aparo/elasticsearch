@@ -21,9 +21,10 @@ package org.elasticsearch.index.percolator;
 
 import com.google.common.collect.Maps;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.document.DocumentStoredFieldVisitor;
 import org.apache.lucene.index.AtomicReaderContext;
-import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.*;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.lucene.search.TermFilter;
@@ -156,7 +157,7 @@ public class PercolatorService extends AbstractIndexComponent {
 
     class QueriesLoaderCollector extends Collector {
 
-        private AtomicReaderContext reader;
+        private AtomicReaderContext readerContext;
 
         private Map<String, Query> queries = Maps.newHashMap();
 
@@ -171,11 +172,13 @@ public class PercolatorService extends AbstractIndexComponent {
         @Override
         public void collect(int doc) throws IOException {
             // the _source is the query
-            Document document = reader.reader().document(doc, new UidAndSourceFieldSelector());
+            final DocumentStoredFieldVisitor visitor = new DocumentStoredFieldVisitor(UidFieldMapper.NAME, SourceFieldMapper.NAME);
+            readerContext.reader().document(doc, visitor);
+            Document document = visitor.getDocument();
             String id = Uid.createUid(document.get(UidFieldMapper.NAME)).id();
+            BytesRef source = document.getBinaryValue(SourceFieldMapper.NAME);
             try {
-                IndexableField sourceField = document.getField(SourceFieldMapper.NAME);
-                queries.put(id, percolator.parseQuery(id, new BytesArray(sourceField.getBinaryValue(), sourceField.getBinaryOffset(), sourceField.getBinaryLength())));
+                queries.put(id, percolator.parseQuery(id, new BytesArray(source.bytes, source.offset, source.length)));
             } catch (Exception e) {
                 logger.warn("failed to add query [{}]", e, id);
             }
@@ -183,7 +186,7 @@ public class PercolatorService extends AbstractIndexComponent {
 
         @Override
         public void setNextReader(AtomicReaderContext context) throws IOException {
-            this.reader = context;
+            this.readerContext = context;
         }
 
         @Override

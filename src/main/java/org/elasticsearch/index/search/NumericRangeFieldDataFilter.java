@@ -19,9 +19,10 @@
 
 package org.elasticsearch.index.search;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.common.lucene.docset.DocSet;
 import org.elasticsearch.common.lucene.docset.GetDocSet;
@@ -143,8 +144,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final ByteFieldData fieldData = (ByteFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.BYTE, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final ByteFieldData fieldData = (ByteFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.BYTE, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {
@@ -203,8 +204,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final ShortFieldData fieldData = (ShortFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.SHORT, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final ShortFieldData fieldData = (ShortFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.SHORT, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {
@@ -262,8 +263,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final IntFieldData fieldData = (IntFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.INT, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final IntFieldData fieldData = (IntFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.INT, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {
@@ -321,8 +322,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final LongFieldData fieldData = (LongFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.LONG, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final LongFieldData fieldData = (LongFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.LONG, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {
@@ -384,8 +385,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final FloatFieldData fieldData = (FloatFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.FLOAT, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final FloatFieldData fieldData = (FloatFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.FLOAT, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {
@@ -447,8 +448,8 @@ public abstract class NumericRangeFieldDataFilter<T> extends Filter {
                 if (inclusiveLowerPoint > inclusiveUpperPoint)
                     return DocSet.EMPTY_DOC_SET;
 
-                final DoubleFieldData fieldData = (DoubleFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.DOUBLE, reader, field);
-                return new GetDocSet(reader.maxDoc()) {
+                final DoubleFieldData fieldData = (DoubleFieldData) this.fieldDataCache.cache(FieldDataType.DefaultTypes.DOUBLE, atomicReaderContext.reader(), field);
+                return new GetDocSet(atomicReaderContext.reader().maxDoc()) {
 
                     @Override
                     public boolean isCacheable() {

@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.compress;
 
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.common.util.BigLongArray;
 
@@ -203,7 +204,7 @@ public abstract class CompressedIndexInput<T extends CompressorContext> extends 
     protected abstract int uncompress(IndexInput in, byte[] out) throws IOException;
 
     @Override
-    public Object clone() {
+    public DataInput clone() {
         // we clone and we need to make sure we keep the same positions!
         CompressedIndexInput cloned = (CompressedIndexInput) super.clone();
         cloned.uncompressed = new byte[uncompressedLength];

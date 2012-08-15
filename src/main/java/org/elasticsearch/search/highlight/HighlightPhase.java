@@ -25,6 +25,8 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Query;
@@ -197,7 +199,7 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
                     }
                 } else {
                     SearchLookup lookup = context.lookup();
-                    lookup.setNextReader(hitContext.reader());
+                    lookup.setNextReader(new AtomicReaderContext((AtomicReader)hitContext.reader()));
                     lookup.setNextDocId(hitContext.docId());
                     textsToHighlight = lookup.source().extractRawValues(mapper.names().sourcePath());
                 }

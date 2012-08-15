@@ -246,7 +246,7 @@ public class Store extends AbstractIndexShardComponent {
         if (lastFound == -1) {
             return defaultValue;
         }
-        IndexInput indexInput = lastDir.openInput(CHECKSUMS_PREFIX + lastFound);
+        IndexInput indexInput = lastDir.openInput(CHECKSUMS_PREFIX + lastFound, IOContext.DEFAULT);
         try {
             indexInput.readInt(); // version
             return indexInput.readStringStringMap();
@@ -268,7 +268,7 @@ public class Store extends AbstractIndexShardComponent {
                     checksums.put(metaData.name(), metaData.checksum());
                 }
             }
-            IndexOutput output = directory.createOutput(checksumName, true);
+            IndexOutput output = directory.createOutput(checksumName, true, IOContext.DEFAULT);
             output.writeInt(0); // version
             output.writeStringStringMap(checksums);
             output.close();
@@ -299,19 +299,19 @@ public class Store extends AbstractIndexShardComponent {
     /**
      * Creates a raw output, no checksum is computed, and no compression if enabled.
      */
-    public IndexOutput createOutputRaw(String name) throws IOException {
-        return directory.createOutput(name, true);
+    public IndexOutput createOutputRaw(String name, IOContext context) throws IOException {
+        return directory.createOutput(name, true, context);
     }
 
     /**
      * Opened an index input in raw form, no decompression for example.
      */
-    public IndexInput openInputRaw(String name) throws IOException {
+    public IndexInput openInputRaw(String name, IOContext context) throws IOException {
         StoreFileMetaData metaData = filesMetadata.get(name);
         if (metaData == null) {
             throw new FileNotFoundException(name);
         }
-        return metaData.directory().openInput(name);
+        return metaData.directory().openInput(name, context);
     }
 
     public void writeChecksum(String name, String checksum) throws IOException {
@@ -351,7 +351,8 @@ public class Store extends AbstractIndexShardComponent {
                 for (Directory delegate : delegates) {
                     for (String file : delegate.listAll()) {
                         String checksum = checksums.get(file);
-                        builder.put(file, new StoreFileMetaData(file, delegate.fileLength(file), delegate.fileModified(file), checksum, delegate));
+                        File fileObject = new File(file);
+                        builder.put(file, new StoreFileMetaData(file, delegate.fileLength(file), fileObject.lastModified(), checksum, delegate));
                     }
                 }
                 filesMetadata = builder.immutableMap();
@@ -373,31 +374,18 @@ public class Store extends AbstractIndexShardComponent {
             return filesMetadata.containsKey(name);
         }
 
-        @Override
-        public long fileModified(String name) throws IOException {
-            StoreFileMetaData metaData = filesMetadata.get(name);
-            if (metaData == null) {
-                throw new FileNotFoundException(name);
-            }
-            // not set yet (IndexOutput not closed)
-            if (metaData.lastModified() != -1) {
-                return metaData.lastModified();
-            }
-            return metaData.directory().fileModified(name);
-        }
-
-        @Override
-        public void touchFile(String name) throws IOException {
-            synchronized (mutex) {
-                StoreFileMetaData metaData = filesMetadata.get(name);
-                if (metaData != null) {
-                    metaData.directory().touchFile(name);
-                    metaData = new StoreFileMetaData(metaData.name(), metaData.length(), metaData.directory().fileModified(name), metaData.checksum(), metaData.directory());
-                    filesMetadata = MapBuilder.newMapBuilder(filesMetadata).put(name, metaData).immutableMap();
+        /*
+                @Override public void touchFile(String name) throws IOException {
+                    synchronized (mutex) {
+                        StoreFileMetaData metaData = filesMetadata.get(name);
+                        if (metaData != null) {
+                            metaData.directory().touchFile(name);
+                            metaData = new StoreFileMetaData(metaData.name(), metaData.length(), metaData.directory().fileModified(name), metaData.checksum(), metaData.directory());
+                            filesMetadata = MapBuilder.newMapBuilder(filesMetadata).put(name, metaData).immutableMap();
+                        }
+                    }
                 }
-            }
-        }
-
+        */
         public void deleteFileChecksum(String name) throws IOException {
             StoreFileMetaData metaData = filesMetadata.get(name);
             if (metaData != null) {
@@ -455,11 +443,11 @@ public class Store extends AbstractIndexShardComponent {
         }
 
         @Override
-        public IndexOutput createOutput(String name) throws IOException {
-            return createOutput(name, false);
+        public IndexOutput createOutput(String name, IOContext context) throws IOException {
+            return createOutput(name, false, context);
         }
 
-        public IndexOutput createOutput(String name, boolean raw) throws IOException {
+        public IndexOutput createOutput(String name, boolean raw, IOContext context) throws IOException {
             Directory directory = null;
             if (isChecksum(name)) {
                 directory = delegates[0];
@@ -484,7 +472,7 @@ public class Store extends AbstractIndexShardComponent {
                     }
                 }
             }
-            IndexOutput out = directory.createOutput(name);
+            IndexOutput out = directory.createOutput(name, IOContext.DEFAULT);
             synchronized (mutex) {
                 StoreFileMetaData metaData = new StoreFileMetaData(name, -1, -1, null, directory);
                 filesMetadata = MapBuilder.newMapBuilder(filesMetadata).put(name, metaData).immutableMap();
@@ -513,28 +501,12 @@ public class Store extends AbstractIndexShardComponent {
         }
 
         @Override
-        public IndexInput openInput(String name) throws IOException {
+        public IndexInput openInput(String name, IOContext context) throws IOException {
             StoreFileMetaData metaData = filesMetadata.get(name);
             if (metaData == null) {
                 throw new FileNotFoundException(name);
             }
-            IndexInput in = metaData.directory().openInput(name);
-            if (name.endsWith(".fdt") || name.endsWith(".tvf")) {
-                Compressor compressor = CompressorFactory.compressor(in);
-                if (compressor != null) {
-                    in = compressor.indexInput(in);
-                }
-            }
-            return in;
-        }
-
-        @Override
-        public IndexInput openInput(String name, int bufferSize) throws IOException {
-            StoreFileMetaData metaData = filesMetadata.get(name);
-            if (metaData == null) {
-                throw new FileNotFoundException(name);
-            }
-            IndexInput in = metaData.directory().openInput(name, bufferSize);
+            IndexInput in = metaData.directory().openInput(name, context);
             if (name.endsWith(".fdt") || name.endsWith(".tvf")) {
                 Compressor compressor = CompressorFactory.compressor(in);
                 if (compressor != null) {
@@ -609,7 +581,6 @@ public class Store extends AbstractIndexShardComponent {
             }
         }
 
-        @Override
         public void sync(String name) throws IOException {
             if (sync) {
                 sync(ImmutableList.of(name));
@@ -654,7 +625,7 @@ public class Store extends AbstractIndexShardComponent {
                 checksum = Long.toString(((ChecksumIndexOutput) underlying).digest().getValue(), Character.MAX_RADIX);
             }
             synchronized (mutex) {
-                StoreFileMetaData md = new StoreFileMetaData(name, metaData.directory().fileLength(name), metaData.directory().fileModified(name), checksum, metaData.directory());
+                StoreFileMetaData md = new StoreFileMetaData(name, metaData.directory().fileLength(name), new File(name).lastModified(), checksum, metaData.directory());
                 filesMetadata = MapBuilder.newMapBuilder(filesMetadata).put(name, md).immutableMap();
                 files = filesMetadata.keySet().toArray(new String[filesMetadata.size()]);
             }

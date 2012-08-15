@@ -21,13 +21,16 @@ package org.apache.lucene.index;
 
 import org.apache.lucene.search.IndexSearcher;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  *
  */
 public class ExtendedIndexSearcher extends IndexSearcher {
 
-    public ExtendedIndexSearcher(ExtendedIndexSearcher searcher) {
-        super(searcher.getIndexReader(), searcher.subReaders(), searcher.docStarts());
+    public ExtendedIndexSearcher(IndexSearcher searcher) {
+        super(searcher.getIndexReader());
         setSimilarity(searcher.getSimilarity());
     }
 
@@ -35,15 +38,44 @@ public class ExtendedIndexSearcher extends IndexSearcher {
         super(r);
     }
 
-    public IndexReader[] subReaders() {
-        return this.subReaders;
+    public static void gatherSubReaders(List<AtomicReader> allSubReaders, IndexReader reader) {
+        List<IndexReaderContext> subReaders = reader.getTopReaderContext().children();
+        if (subReaders == null) {
+            // Add the reader itself, and do not recurse
+            allSubReaders.add((AtomicReader) reader);
+        } else {
+            for (IndexReaderContext subReader : subReaders) {
+                gatherSubReaders(allSubReaders, subReader.reader());
+            }
+        }
+    }
+
+    public AtomicReader[] subReaders() {
+        List<AtomicReader> allSubReaders = new ArrayList<AtomicReader>();
+        gatherSubReaders(allSubReaders, this.getIndexReader());
+        //this.getIndexReader().getTopReaderContext().children().get(0).reader()
+        //ReaderUtil.gatherSubReaders(allSubReaders, this.getIndexReader().getTopReaderContext().leaves());
+        //TODO non bella conversione
+        return allSubReaders.toArray(new AtomicReader[allSubReaders.size()]);
     }
 
     public int[] docStarts() {
-        return this.docStarts;
+        List<AtomicReaderContext> contexts = this.getIndexReader().getTopReaderContext().leaves();
+        int[] result = new int[contexts.size()];
+        for (int i = 0; i < contexts.size(); i++) {
+            result[i] = contexts.get(i).docBase;
+        }
+        return result;
     }
 
-    public int readerIndex(int doc) {
-        return DirectoryReader.readerIndex(doc, docStarts, subReaders.length);
+    /*
+        public int readerIndex(int doc) {
+            return DirectoryReader.readerIndex(doc, docStarts(), subReaders().length);
+        }
+    */
+    public AtomicReaderContext contextIndex(int doc) {
+        List<AtomicReaderContext> contexts = this.getIndexReader().getTopReaderContext().leaves();
+
+        return contexts.get(ReaderUtil.subIndex(doc, docStarts()));
     }
 }

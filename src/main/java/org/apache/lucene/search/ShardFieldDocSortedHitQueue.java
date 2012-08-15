@@ -44,18 +44,18 @@ public class ShardFieldDocSortedHitQueue extends PriorityQueue<ShardFieldDoc> {
     /**
      * Creates a hit queue sorted by the given list of fields.
      *
-     * @param fields Field names, in priority order (highest priority first).
+     * @param fields IndexableField names, in priority order (highest priority first).
      * @param size   The number of hits to retain.  Must be greater than zero.
      */
     public ShardFieldDocSortedHitQueue(SortField[] fields, int size) {
-        initialize(size);
+        super(size);
         setFields(fields);
     }
 
 
     /**
      * Allows redefinition of sort fields if they are <code>null</code>.
-     * This is to handle the case using ParallelMultiSearcher where the
+     * This is to handle the case using ParallelMultiIndexSearcher where the
      * original list contains AUTO and we don't know the actual sort
      * type until the values come back.  The fields can only be set once.
      * This method should be synchronized external like all other PQ methods.
@@ -95,9 +95,13 @@ public class ShardFieldDocSortedHitQueue extends PriorityQueue<ShardFieldDoc> {
         if (fields == null) return null;
         Collator[] ret = new Collator[fields.length];
         for (int i = 0; i < fields.length; ++i) {
+            //TODO FIX REWRITE
+
+/*
             Locale locale = fields[i].getLocale();
             if (locale != null)
                 ret[i] = Collator.getInstance(locale);
+*/
         }
         return ret;
     }
@@ -106,17 +110,16 @@ public class ShardFieldDocSortedHitQueue extends PriorityQueue<ShardFieldDoc> {
     /**
      * Returns whether <code>a</code> is less relevant than <code>b</code>.
      *
-     * @param a ScoreDoc
-     * @param b ScoreDoc
+     * @param docA ScoreDoc
+     * @param docB ScoreDoc
      * @return <code>true</code> if document <code>a</code> should be sorted after document <code>b</code>.
      */
-    @SuppressWarnings("unchecked")
-    @Override
+    @SuppressWarnings("unchecked") @Override
     protected final boolean lessThan(final ShardFieldDoc docA, final ShardFieldDoc docB) {
         final int n = fields.length;
         int c = 0;
         for (int i = 0; i < n && c == 0; ++i) {
-            final int type = fields[i].getType();
+            final SortField.Type type = fields[i].getType();
             if (type == SortField.Type.STRING) {
                 final String s1 = (String) docA.fields[i];
                 final String s2 = (String) docB.fields[i];

@@ -19,8 +19,7 @@
 
 package org.elasticsearch.index.search;
 
-import org.apache.lucene.index.AtomicReaderContext;
-import org.apache.lucene.index.Term;
+import org.apache.lucene.index.*;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.util.Bits;
@@ -48,7 +47,7 @@ public class UidFilter extends Filter {
         int i = 0;
         for (String type : types) {
             for (String id : ids) {
-                uids[i++] = UidFieldMapper.TERM_FACTORY.createTerm(Uid.createUid(type, id));
+                uids[i++] = UidFieldMapper.createTerm(Uid.createUid(type, id));
             }
         }
         if (this.uids.length > 1) {
@@ -64,32 +63,25 @@ public class UidFilter extends Filter {
     // - If we have a single id, we can create a SingleIdDocIdSet to save on mem
     // - We can use sorted int array DocIdSet to reserve memory compared to OpenBitSet in some cases
     @Override
-    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
-        BloomFilter filter = bloomCache.filter(reader, UidFieldMapper.NAME, true);
+    public DocIdSet getDocIdSet(AtomicReaderContext context, Bits bits) throws IOException {
+        BloomFilter filter = bloomCache.filter(context.reader(), UidFieldMapper.NAME, true);
         FixedBitSet set = null;
-        TermDocs td = null;
-        Unicode.UTF8Result utf8 = new Unicode.UTF8Result();
-        try {
-            for (Term uid : uids) {
-                Unicode.fromStringAsUtf8(uid.text(), utf8);
-                if (!filter.isPresent(utf8.result, 0, utf8.length)) {
-                    continue;
-                }
-                if (td == null) {
-                    td = reader.termDocs();
-                }
-                td.seek(uid);
-                // no need for batching, its on the UID, there will be only one doc
-                while (td.next()) {
-                    if (set == null) {
-                        set = new FixedBitSet(reader.maxDoc());
-                    }
-                    set.set(td.doc());
-                }
+        DocsEnum td = null;
+        IndexReader reader = context.reader();
+        int doc;
+        for (Term uid : uids) {
+            Unicode.UTF8Result utf8 = Unicode.fromStringAsUtf8(uid.text());
+            if (!filter.isPresent(utf8.result, 0, utf8.length)) {
+                continue;
             }
-        } finally {
-            if (td != null) {
-                td.close();
+            if (td == null) {
+                td = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader), uid.field(), uid.bytes());
+            }
+            while ((doc = td.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                if (set == null) {
+                    set = new FixedBitSet(reader.maxDoc());
+                }
+                set.set(doc);
             }
         }
         return set;

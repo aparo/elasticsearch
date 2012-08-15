@@ -37,7 +37,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "BOOLEAN" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      * @deprecated use {@link #textQuery(String, Object)} instead
      */
     public static MatchQueryBuilder text(String name, Object text) {
@@ -48,7 +48,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "BOOLEAN" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      * @deprecated Use {@link #matchQuery(String, Object)}
      */
     public static MatchQueryBuilder textQuery(String name, Object text) {
@@ -69,7 +69,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "PHRASE" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      * @deprecated use {@link #textPhraseQuery(String, Object)} instead
      */
     public static MatchQueryBuilder textPhrase(String name, Object text) {
@@ -80,18 +80,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "PHRASE" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
-     * @deprecated Use {@link #matchPhraseQuery(String, Object)}
-     */
-    public static MatchQueryBuilder textPhraseQuery(String name, Object text) {
-        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
-    }
-
-    /**
-     * Creates a text query with type "PHRASE" for the provided field name and text.
-     *
-     * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      */
     public static MatchQueryBuilder matchPhraseQuery(String name, Object text) {
         return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
@@ -101,7 +90,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "PHRASE_PREFIX" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      * @deprecated use {@link #textPhrasePrefixQuery(String, Object)} instead
      */
     public static MatchQueryBuilder textPhrasePrefix(String name, Object text) {
@@ -112,8 +101,7 @@ public abstract class QueryBuilders {
      * Creates a text query with type "PHRASE_PREFIX" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
-     * @deprecated Use {@link #matchPhrasePrefixQuery(String, Object)}
+     * @param text The query text (to be tokenized).
      */
     public static MatchQueryBuilder textPhrasePrefixQuery(String name, Object text) {
         return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE_PREFIX);
@@ -123,7 +111,7 @@ public abstract class QueryBuilders {
      * Creates a match query with type "PHRASE_PREFIX" for the provided field name and text.
      *
      * @param name The field name.
-     * @param text The query text (to be analyzed).
+     * @param text The query text (to be tokenized).
      */
     public static MatchQueryBuilder matchPhrasePrefixQuery(String name, Object text) {
         return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE_PREFIX);

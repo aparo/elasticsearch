@@ -84,7 +84,7 @@ public final class CustomAnalyzer extends Analyzer {
     }
 
     @Override
-    public final TokenStream reusableTokenStream(String fieldName, Reader reader) throws IOException {
+    public final TokenStream tokenStream(String fieldName, Reader reader) throws IOException {
         Holder holder = (Holder) getPreviousTokenStream();
         if (holder == null) {
             holder = buildHolder(charFilterIfNeeded(reader));

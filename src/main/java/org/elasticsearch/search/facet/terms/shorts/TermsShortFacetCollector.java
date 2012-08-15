@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableSet;
 import gnu.trove.iterator.TShortIntIterator;
 import gnu.trove.map.hash.TShortIntHashMap;
 import gnu.trove.set.hash.TShortHashSet;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
@@ -125,10 +126,10 @@ public class TermsShortFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        fieldData = (ShortFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+        fieldData = (ShortFieldData) fieldDataCache.cache(fieldDataType, readerContext, indexFieldName);
         if (script != null) {
-            script.setNextReader(reader);
+            script.setNextReader(readerContext);
         }
     }
 

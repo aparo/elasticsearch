@@ -21,8 +21,8 @@ package org.elasticsearch.index.query;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import org.apache.lucene.queryParser.MapperQueryParser;
-import org.apache.lucene.queryParser.QueryParserSettings;
+import org.apache.lucene.queryparser.classic.MapperQueryParser;
+import org.apache.lucene.queryparser.classic.QueryParserSettings;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.similarities.Similarity;
@@ -121,8 +121,8 @@ public class QueryParseContext {
         return indexQueryParser.similarityService;
     }
 
-    public Similarity searchSimilarity() {
-        return indexQueryParser.similarityService != null ? indexQueryParser.similarityService.defaultSearchSimilarity() : null;
+    public Similarity searchSimilarityProvider() {
+        return indexQueryParser.similarityService != null ? indexQueryParser.similarityService.defaultSearchSimilarity().get() : null;
     }
 
     public IndexCache indexCache() {

@@ -20,7 +20,7 @@
 package org.elasticsearch.search.facet.terms.strings;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.util.PriorityQueue;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.CacheRecycler;
@@ -117,7 +117,7 @@ public class TermsStringOrdinalsFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
         if (current != null) {
             missing += current.counts[0];
             total += current.total - current.counts[0];
@@ -125,7 +125,7 @@ public class TermsStringOrdinalsFacetCollector extends AbstractFacetCollector {
                 aggregators.add(current);
             }
         }
-        fieldData = (StringFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+        fieldData = (StringFieldData) fieldDataCache.cache(fieldDataType, readerContext, indexFieldName);
         current = new ReaderAggregator(fieldData);
     }
 
@@ -265,7 +265,7 @@ public class TermsStringOrdinalsFacetCollector extends AbstractFacetCollector {
     public static class AggregatorPriorityQueue extends PriorityQueue<ReaderAggregator> {
 
         public AggregatorPriorityQueue(int size) {
-            initialize(size);
+            super(size);
         }
 
         @Override

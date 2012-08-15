@@ -20,6 +20,8 @@
 package org.elasticsearch.search.fetch.script;
 
 import com.google.common.collect.ImmutableMap;
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.search.SearchHitField;
@@ -67,7 +69,7 @@ public class ScriptFieldsFetchSubPhase implements FetchSubPhase {
     @Override
     public void hitExecute(SearchContext context, HitContext hitContext) throws ElasticSearchException {
         for (ScriptFieldsContext.ScriptField scriptField : context.scriptFields().fields()) {
-            scriptField.script().setNextReader(hitContext.reader());
+            scriptField.script().setNextReader(new AtomicReaderContext((AtomicReader)hitContext.reader()));
             scriptField.script().setNextDocId(hitContext.docId());
 
             Object value;

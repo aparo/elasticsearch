@@ -17,15 +17,13 @@
  * under the License.
  */
 
-package org.apache.lucene.queryParser;
+package org.apache.lucene.queryparser.classic;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
 import org.elasticsearch.common.io.FastStringReader;
 import org.elasticsearch.common.lucene.Lucene;
@@ -287,7 +285,7 @@ public class MapperQueryParser extends QueryParser {
         }
     }
 
-    @Override
+
     protected Query getRangeQuery(String field, String part1, String part2, boolean inclusive) throws ParseException {
         if ("*".equals(part1)) {
             part1 = null;
@@ -350,7 +348,7 @@ public class MapperQueryParser extends QueryParser {
                 }
             }
         }
-        return newRangeQuery(field, part1, part2, inclusive);
+        return newRangeQuery(field, part1, part2, inclusive, inclusive);
     }
 
     @Override
@@ -411,7 +409,8 @@ public class MapperQueryParser extends QueryParser {
 
     @Override
     protected Query newFuzzyQuery(Term term, float minimumSimilarity, int prefixLength) {
-        FuzzyQuery query = new FuzzyQuery(term, minimumSimilarity, prefixLength, settings.fuzzyMaxExpansions());
+        //PARO TO FIX add max edit distance <- minimumSimilarity
+        FuzzyQuery query = new FuzzyQuery(term, 1, prefixLength, settings.fuzzyMaxExpansions(), false);
         QueryParsers.setRewriteMethod(query, settings.fuzzyRewriteMethod());
         return query;
     }
@@ -504,7 +503,7 @@ public class MapperQueryParser extends QueryParser {
         // get Analyzer from superclass and tokenize the term
         TokenStream source;
         try {
-            source = getAnalyzer().reusableTokenStream(field, new StringReader(termStr));
+            source = getAnalyzer().tokenStream(field, new StringReader(termStr));
         } catch (IOException e) {
             return super.getPrefixQuery(field, termStr);
         }
@@ -629,7 +628,7 @@ public class MapperQueryParser extends QueryParser {
             if (c == '?' || c == '*') {
                 if (isWithinToken) {
                     try {
-                        TokenStream source = getAnalyzer().reusableTokenStream(field, new FastStringReader(tmp.toString()));
+                        TokenStream source = getAnalyzer().tokenStream(field, new FastStringReader(tmp.toString()));
                         CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);
                         if (source.incrementToken()) {
                             String term = termAtt.toString();
@@ -658,7 +657,7 @@ public class MapperQueryParser extends QueryParser {
         }
         if (isWithinToken) {
             try {
-                TokenStream source = getAnalyzer().reusableTokenStream(field, new FastStringReader(tmp.toString()));
+                TokenStream source = getAnalyzer().tokenStream(field, new FastStringReader(tmp.toString()));
                 CharTermAttribute termAtt = source.addAttribute(CharTermAttribute.class);
                 if (source.incrementToken()) {
                     String term = termAtt.toString();

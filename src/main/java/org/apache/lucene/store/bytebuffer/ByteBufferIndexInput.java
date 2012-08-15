@@ -17,6 +17,7 @@ package org.apache.lucene.store.bytebuffer;
  * limitations under the License.
  */
 
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
 
 import java.io.EOFException;
@@ -186,7 +187,7 @@ public class ByteBufferIndexInput extends IndexInput {
     }
 
     @Override
-    public Object clone() {
+    public DataInput clone() {
         ByteBufferIndexInput cloned = (ByteBufferIndexInput) super.clone();
         cloned.file.incRef(); // inc ref on cloned one
         if (currentBuffer != EMPTY_BUFFER) {

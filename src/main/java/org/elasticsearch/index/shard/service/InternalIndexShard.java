@@ -21,7 +21,7 @@ package org.elasticsearch.index.shard.service;
 
 import com.google.common.base.Charsets;
 import org.apache.lucene.index.CheckIndex;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.search.FilteredQuery;
 import org.apache.lucene.search.Query;
@@ -854,7 +854,8 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
         try {
             checkIndexTook = 0;
             long time = System.currentTimeMillis();
-            if (!IndexReader.indexExists(store.directory())) {
+
+            if (!DirectoryReader.indexExists(store.directory())) {
                 return;
             }
             CheckIndex checkIndex = new CheckIndex(store.directory());
@@ -873,7 +874,7 @@ public class InternalIndexShard extends AbstractIndexShardComponent implements I
                     if (logger.isDebugEnabled()) {
                         logger.debug("fixing index, writing new segments file ...");
                     }
-                    checkIndex.fixIndex(status);
+                    checkIndex.fixIndex(status, status.segmentInfos.get(0).codec);
                     if (logger.isDebugEnabled()) {
                         logger.debug("index fixed, wrote new segments file \"{}\"", status.segmentsFileName);
                     }

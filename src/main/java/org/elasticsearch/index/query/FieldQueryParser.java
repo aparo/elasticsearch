@@ -19,8 +19,8 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.queryParser.MapperQueryParser;
-import org.apache.lucene.queryParser.QueryParserSettings;
+import org.apache.lucene.queryparser.classic.MapperQueryParser;
+import org.apache.lucene.queryparser.classic.QueryParserSettings;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;

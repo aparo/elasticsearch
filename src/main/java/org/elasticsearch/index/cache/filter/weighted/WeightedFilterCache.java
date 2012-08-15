@@ -174,7 +174,7 @@ public class WeightedFilterCache extends AbstractIndexComponent implements Filte
                     }
                 }
 
-                cacheValue = DocSets.cacheable(atomicReaderContext.reader(), filter.getDocIdSet(atomicReaderContext, bits));
+                cacheValue = DocSets.cacheable(atomicReaderContext, filter.getDocIdSet(atomicReaderContext, bits));
                 // we might put the same one concurrently, that's fine, it will be replaced and the removal
                 // will be called
                 cache.totalMetric.inc(cacheValue.sizeInBytes());

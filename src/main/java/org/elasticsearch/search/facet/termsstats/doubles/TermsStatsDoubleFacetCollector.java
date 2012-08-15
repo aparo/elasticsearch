@@ -21,7 +21,7 @@ package org.elasticsearch.search.facet.termsstats.doubles;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.CacheRecycler;
@@ -113,12 +113,12 @@ public class TermsStatsDoubleFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        keyFieldData = (NumericFieldData) fieldDataCache.cache(keyFieldDataType, reader, keyFieldName);
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+        keyFieldData = (NumericFieldData) fieldDataCache.cache(keyFieldDataType, readerContext, keyFieldName);
         if (script != null) {
-            script.setNextReader(reader);
+            script.setNextReader(readerContext);
         } else {
-            aggregator.valueFieldData = (NumericFieldData) fieldDataCache.cache(valueFieldDataType, reader, valueFieldName);
+            aggregator.valueFieldData = (NumericFieldData) fieldDataCache.cache(valueFieldDataType, readerContext, valueFieldName);
         }
     }
 

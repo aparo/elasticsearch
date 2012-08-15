@@ -19,7 +19,7 @@
 
 package org.elasticsearch.search.facet.query;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.*;
 import org.elasticsearch.common.lucene.docset.DocSet;
 import org.elasticsearch.common.lucene.docset.DocSets;
@@ -57,8 +57,9 @@ public class QueryFacetCollector extends AbstractFacetCollector implements Optim
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        docSet = DocSets.convert(reader, filter.getDocIdSet(atomicReaderContext, bits));
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+
+        docSet = DocSets.convert(readerContext.reader(), filter.getDocIdSet(readerContext, readerContext.reader().getLiveDocs()));
     }
 
     @Override

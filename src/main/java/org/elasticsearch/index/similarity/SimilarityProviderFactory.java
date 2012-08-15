@@ -26,5 +26,5 @@ import org.elasticsearch.common.settings.Settings;
  */
 public interface SimilarityProviderFactory {
 
-    SimilarityProvider create(String name, Settings settings);
+    ElasticSearchSimilarity create(String name, Settings settings);
 }

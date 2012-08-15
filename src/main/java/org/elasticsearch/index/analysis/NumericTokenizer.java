@@ -35,27 +35,27 @@ public abstract class NumericTokenizer extends Tokenizer {
     protected final Object extra;
 
     protected NumericTokenizer(Reader reader, NumericTokenStream numericTokenStream, Object extra) throws IOException {
-        super(numericTokenStream);
+        super(reader);
         this.numericTokenStream = numericTokenStream;
         this.extra = extra;
-        reset(reader);
+        setReader(reader);
     }
 
     protected NumericTokenizer(Reader reader, NumericTokenStream numericTokenStream, char[] buffer, Object extra) throws IOException {
-        super(numericTokenStream);
+        super(reader);
         this.numericTokenStream = numericTokenStream;
         this.extra = extra;
-        reset(reader, buffer);
+        setReader(reader, buffer);
     }
 
     @Override
-    public void reset(Reader input) throws IOException {
+    public void setReader(Reader input) throws IOException {
         char[] buffer = new char[32];
-        reset(input, buffer);
+        setReader(input, buffer);
     }
 
-    public void reset(Reader input, char[] buffer) throws IOException {
-        super.reset(input);
+    public void setReader(Reader input, char[] buffer) throws IOException {
+        super.setReader(input);
         int len = input.read(buffer);
         String value = new String(buffer, 0, len);
         setValue(numericTokenStream, value);

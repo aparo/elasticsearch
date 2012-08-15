@@ -151,26 +151,27 @@ public class MatchQuery {
         }
 
         // Logic similar to QueryParser#getFieldQuery
+        boolean success = false;
+        success = true;
 
-        TokenStream source;
+        TokenStream source=null;
         try {
-            source = analyzer.reusableTokenStream(fieldTerm.field(), new FastStringReader(text));
+            source = analyzer.tokenStream(fieldTerm.field(), new FastStringReader(text));
             source.reset();
         } catch (IOException e) {
-            source = analyzer.tokenStream(fieldTerm.field(), new FastStringReader(text));
+                try {
+                    source = analyzer.tokenStream(fieldTerm.field(), new FastStringReader(text));
+                } catch (IOException e1) {
+                    e1.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+                    success = false;
+                }
         }
         CachingTokenFilter buffer = new CachingTokenFilter(source);
         CharTermAttribute termAtt = null;
         PositionIncrementAttribute posIncrAtt = null;
         int numTokens = 0;
 
-        boolean success = false;
-        try {
-            buffer.reset();
-            success = true;
-        } catch (IOException e) {
-            // success==false if we hit an exception
-        }
+        buffer.reset();
         if (success) {
             if (buffer.hasAttribute(CharTermAttribute.class)) {
                 termAtt = buffer.getAttribute(CharTermAttribute.class);

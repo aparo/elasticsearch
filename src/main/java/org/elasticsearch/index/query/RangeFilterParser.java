@@ -120,7 +120,7 @@ public class RangeFilterParser implements FilterParser {
             }
         }
         if (filter == null) {
-            filter = new TermRangeFilter(fieldName, from, to, includeLower, includeUpper);
+            filter = new TermRangeFilter(fieldName, new BytesRef(from), new BytesRef(to), includeLower, includeUpper);
         }
 
         if (cache) {

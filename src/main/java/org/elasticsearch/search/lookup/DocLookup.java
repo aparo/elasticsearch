@@ -20,7 +20,7 @@
 package org.elasticsearch.search.lookup;
 
 import com.google.common.collect.Maps;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
@@ -52,7 +52,7 @@ public class DocLookup implements Map {
     @Nullable
     private final String[] types;
 
-    private IndexReader reader;
+    private AtomicReaderContext readerContext;
 
     private Scorer scorer;
 
@@ -72,11 +72,11 @@ public class DocLookup implements Map {
         return this.fieldDataCache;
     }
 
-    public void setNextReader(IndexReader reader) {
-        if (this.reader == reader) { // if we are called with the same reader, don't invalidate source
+    public void setNextReader(AtomicReaderContext readerContext) {
+        if (this.readerContext == readerContext) { // if we are called with the same reader, don't invalidate source
             return;
         }
-        this.reader = reader;
+        this.readerContext = readerContext;
         this.docId = -1;
         localCacheFieldData.clear();
     }
@@ -116,7 +116,7 @@ public class DocLookup implements Map {
                 throw new ElasticSearchIllegalArgumentException("No field found for [" + fieldName + "] in mapping with types " + Arrays.toString(types) + "");
             }
             try {
-                fieldData = fieldDataCache.cache(mapper.fieldDataType(), reader, mapper.names().indexName());
+                fieldData = fieldDataCache.cache(mapper.fieldDataType(), readerContext, mapper.names().indexName());
             } catch (IOException e) {
                 throw new ElasticSearchException("Failed to load field data for [" + fieldName + "]", e);
             }

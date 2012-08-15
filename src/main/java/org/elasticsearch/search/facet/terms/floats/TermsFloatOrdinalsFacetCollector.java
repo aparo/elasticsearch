@@ -21,7 +21,7 @@ package org.elasticsearch.search.facet.terms.floats;
 
 import com.google.common.collect.ImmutableSet;
 import gnu.trove.set.hash.TFloatHashSet;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.util.PriorityQueue;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.CacheRecycler;
@@ -116,7 +116,7 @@ public class TermsFloatOrdinalsFacetCollector extends AbstractFacetCollector {
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
         if (current != null) {
             missing += current.counts[0];
             total += current.total - current.counts[0];
@@ -124,7 +124,7 @@ public class TermsFloatOrdinalsFacetCollector extends AbstractFacetCollector {
                 aggregators.add(current);
             }
         }
-        fieldData = (FloatFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
+        fieldData = (FloatFieldData) fieldDataCache.cache(fieldDataType, readerContext.reader(), indexFieldName);
         current = new ReaderAggregator(fieldData);
     }
 
@@ -255,7 +255,7 @@ public class TermsFloatOrdinalsFacetCollector extends AbstractFacetCollector {
     public static class AggregatorPriorityQueue extends PriorityQueue<ReaderAggregator> {
 
         public AggregatorPriorityQueue(int size) {
-            initialize(size);
+            super(size);
         }
 
         @Override

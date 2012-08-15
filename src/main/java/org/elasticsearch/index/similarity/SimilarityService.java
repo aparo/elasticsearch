@@ -20,7 +20,6 @@
 package org.elasticsearch.index.similarity;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.lucene.search.similarities.Similarity;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ImmutableSettings;
@@ -38,9 +37,7 @@ import static com.google.common.collect.Maps.newHashMap;
  */
 public class SimilarityService extends AbstractIndexComponent {
 
-    private final ImmutableMap<String, SimilarityProvider> similarityProviders;
-
-    private final ImmutableMap<String, Similarity> similarities;
+    private final ImmutableMap<String, ElasticSearchSimilarity> similarityProviders;
 
     public SimilarityService(Index index) {
         this(index, ImmutableSettings.Builder.EMPTY_SETTINGS, null);
@@ -51,7 +48,7 @@ public class SimilarityService extends AbstractIndexComponent {
                              @Nullable Map<String, SimilarityProviderFactory> providerFactories) {
         super(index, indexSettings);
 
-        Map<String, SimilarityProvider> similarityProviders = newHashMap();
+        Map<String, ElasticSearchSimilarity> similarityProviders = newHashMap();
         if (providerFactories != null) {
             Map<String, Settings> providersSettings = indexSettings.getGroups("index.similarity");
             for (Map.Entry<String, SimilarityProviderFactory> entry : providerFactories.entrySet()) {
@@ -63,37 +60,32 @@ public class SimilarityService extends AbstractIndexComponent {
                     similaritySettings = ImmutableSettings.Builder.EMPTY_SETTINGS;
                 }
 
-                SimilarityProvider similarityProvider = similarityProviderFactory.create(similarityName, similaritySettings);
+                ElasticSearchSimilarity similarityProvider = similarityProviderFactory.create(similarityName, similaritySettings);
                 similarityProviders.put(similarityName, similarityProvider);
             }
         }
 
         // add defaults
         if (!similarityProviders.containsKey("index")) {
-            similarityProviders.put("index", new DefaultSimilarityProvider(index, indexSettings, "index", ImmutableSettings.Builder.EMPTY_SETTINGS));
+            similarityProviders.put("index", new DefaultSimilarityProviderFactory(index, indexSettings, "index", ImmutableSettings.Builder.EMPTY_SETTINGS));
         }
         if (!similarityProviders.containsKey("search")) {
-            similarityProviders.put("search", new DefaultSimilarityProvider(index, indexSettings, "search", ImmutableSettings.Builder.EMPTY_SETTINGS));
+            similarityProviders.put("search", new DefaultSimilarityProviderFactory(index, indexSettings, "search", ImmutableSettings.Builder.EMPTY_SETTINGS));
         }
         this.similarityProviders = ImmutableMap.copyOf(similarityProviders);
-
-
-        Map<String, Similarity> similarities = newHashMap();
-        for (SimilarityProvider provider : similarityProviders.values()) {
-            similarities.put(provider.name(), provider.get());
-        }
-        this.similarities = ImmutableMap.copyOf(similarities);
     }
 
-    public Similarity similarity(String name) {
-        return similarities.get(name);
+    public ElasticSearchSimilarity similarityProvider(String name) {
+        return similarityProviders.get(name);
     }
 
-    public Similarity defaultIndexSimilarity() {
-        return similarities.get("index");
+    public ElasticSearchSimilarity defaultIndexSimilarity() {
+        return similarityProviders.get("index");
+
     }
 
-    public Similarity defaultSearchSimilarity() {
-        return similarities.get("search");
+    public ElasticSearchSimilarity defaultSearchSimilarity() {
+        return similarityProviders.get("search");
+
     }
 }

@@ -19,7 +19,9 @@
 
 package org.apache.lucene.analysis.miscellaneous;
 
-import org.apache.lucene.analysis.*;
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.elasticsearch.common.lucene.Lucene;
 import org.testng.annotations.Test;
@@ -40,14 +42,14 @@ public class UniqueTokenFilterTests {
     public void simpleTest() throws IOException {
         Analyzer analyzer = new ReusableAnalyzerBase() {
             @Override
-            protected TokenStreamComponents createComponents(String fieldName,
+            protected Analyzer.TokenStreamComponents createComponents(String fieldName,
                                                              Reader reader) {
                 Tokenizer t = new WhitespaceTokenizer(Lucene.VERSION, reader);
                 return new TokenStreamComponents(t, new UniqueTokenFilter(t));
             }
         };
 
-        TokenStream test = analyzer.reusableTokenStream("test", new StringReader("this test with test"));
+        TokenStream test = analyzer.tokenStream("test", new StringReader("this test with test"));
         CharTermAttribute termAttribute = test.addAttribute(CharTermAttribute.class);
         assertThat(test.incrementToken(), equalTo(true));
         assertThat(termAttribute.toString(), equalTo("this"));

@@ -19,7 +19,7 @@
 
 package org.elasticsearch.search.facet.datehistogram;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.CacheRecycler;
 import org.elasticsearch.common.joda.TimeZoneRounding;
@@ -94,9 +94,9 @@ public class ValueScriptDateHistogramFacetCollector extends AbstractFacetCollect
     }
 
     @Override
-    protected void doSetNextReader(IndexReader reader, int docBase) throws IOException {
-        fieldData = (LongFieldData) fieldDataCache.cache(fieldDataType, reader, indexFieldName);
-        valueScript.setNextReader(reader);
+    protected void doSetNextReader(AtomicReaderContext readerContext) throws IOException {
+        fieldData = (LongFieldData) fieldDataCache.cache(fieldDataType, readerContext.reader(), indexFieldName);
+        valueScript.setNextReader(readerContext);
     }
 
     @Override
