@@ -53,7 +53,7 @@ public class MoreLikeThisQueryParser implements QueryParser {
 
         MoreLikeThisQuery mltQuery = new MoreLikeThisQuery();
         mltQuery.setMoreLikeFields(new String[]{parseContext.defaultField()});
-        mltQuery.setSimilarity(parseContext.searchSimilarity());
+        mltQuery.setSimilarity(parseContext.searchSimilarityProvider());
         Analyzer analyzer = null;
 
         XContentParser.Token token;

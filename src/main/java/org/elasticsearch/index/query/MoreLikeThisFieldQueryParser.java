@@ -63,7 +63,7 @@ public class MoreLikeThisFieldQueryParser implements QueryParser {
 
 
         MoreLikeThisQuery mltQuery = new MoreLikeThisQuery();
-        mltQuery.setSimilarity(parseContext.searchSimilarity());
+        mltQuery.setSimilarity(parseContext.searchSimilarityProvider());
         Analyzer analyzer = null;
 
         String currentFieldName = null;

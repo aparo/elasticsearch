@@ -143,7 +143,7 @@ public class ParentFieldMapper extends AbstractFieldMapper<Uid> implements Inter
                     throw new MapperParsingException("No parent id provided, not within the document, and not externally");
                 }
                 // we did not add it in the parsing phase, add it now
-                return new Field(names.indexName(), Uid.createUid(context.stringBuilder(), type, parentId), store, index);
+                return new Field(names.indexName(), Uid.createUid(context.stringBuilder(), type, parentId), getFieldType());
             } else if (parentId != null && !parsedParentId.equals(Uid.createUid(context.stringBuilder(), type, parentId))) {
                 throw new MapperParsingException("Parent id mismatch, document value is [" + Uid.createUid(parsedParentId).id() + "], while external value is [" + parentId + "]");
             }

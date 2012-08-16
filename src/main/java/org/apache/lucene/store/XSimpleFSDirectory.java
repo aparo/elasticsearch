@@ -20,7 +20,6 @@
 package org.apache.lucene.store;
 
 import org.apache.lucene.index.TrackingMergeScheduler;
-import org.elasticsearch.common.RateLimiter;
 
 import java.io.File;
 import java.io.IOException;

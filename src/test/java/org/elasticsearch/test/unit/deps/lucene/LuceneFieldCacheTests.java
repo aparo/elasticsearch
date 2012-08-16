@@ -20,7 +20,6 @@
 package org.elasticsearch.test.unit.deps.lucene;
 
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.NumericField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;

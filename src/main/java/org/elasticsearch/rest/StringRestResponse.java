@@ -19,6 +19,7 @@
 
 package org.elasticsearch.rest;
 
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.common.Unicode;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;

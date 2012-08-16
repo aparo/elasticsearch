@@ -316,7 +316,7 @@ public class PercolatorExecutor extends AbstractIndexComponent {
                     String value = field.stringValue();
                     if (value != null) {
                         try {
-                            memoryIndex.addField(field.name(), request.doc().analyzer().tokenStream(field.name(), new FastStringReader(value)), field.boost() * request.doc().rootDoc().boost());
+                            memoryIndex.addField(field.name(), request.doc().analyzer().tokenStream(field.name(), new FastStringReader(value)), field.boost());// * request.doc().rootDoc().boost()
                         } catch (IOException e) {
                             throw new MapperParsingException("Failed to analyze field [" + field.name() + "]", e);
                         }

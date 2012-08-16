@@ -71,7 +71,7 @@ public class MatchAllQueryParser implements QueryParser {
             return Queries.MATCH_ALL_QUERY;
         }
 
-        MatchAllDocsQuery query = new MatchAllDocsQuery(normsField);
+        MatchAllDocsQuery query = new MatchAllDocsQuery();
         query.setBoost(boost);
         return query;
     }

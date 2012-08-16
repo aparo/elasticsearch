@@ -109,7 +109,8 @@ public class FuzzyQueryParser implements QueryParser {
             }
         }
         if (query == null) {
-            query = new FuzzyQuery(new Term(fieldName, value), Float.parseFloat(minSimilarity), prefixLength, maxExpansions);
+            //PARO TO FIX propagate parameters
+            query = new FuzzyQuery(new Term(fieldName, value),1, prefixLength, maxExpansions, true);
         }
         if (query instanceof MultiTermQuery) {
             QueryParsers.setRewriteMethod((MultiTermQuery) query, rewriteMethod);
