@@ -20,14 +20,13 @@
 package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.Analyzer;
-
-import java.io.Reader;
+import org.apache.lucene.analysis.AnalyzerWrapper;
 
 /**
  * Named analyzer is an analyzer wrapper around an actual analyzer ({@link #analyzer} that is associated
  * with a name ({@link #name()}.
  */
-public class NamedAnalyzer extends Analyzer {
+public class NamedAnalyzer extends AnalyzerWrapper {
 
     private final String name;
 
@@ -66,19 +65,18 @@ public class NamedAnalyzer extends Analyzer {
         return this.analyzer;
     }
 
-    @Override
-    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        return analyzer.getTokenStreamComponents(fieldName, reader);
+    public Analyzer getAnalyzer() {
+        return analyzer;
     }
 
     @Override
-    public int getPositionIncrementGap(String fieldName) {
-        return analyzer.getPositionIncrementGap(fieldName);
+    protected Analyzer getWrappedAnalyzer(String fieldName) {
+        return analyzer;
     }
 
     @Override
-    public int getOffsetGap(String field) {
-        return analyzer.getOffsetGap(field);
+    protected TokenStreamComponents wrapComponents(String fieldName, TokenStreamComponents components) {
+        return new TokenStreamComponents(components.getTokenizer(), components.getTokenStream());
     }
 
     @Override

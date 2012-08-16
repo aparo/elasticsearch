@@ -40,7 +40,7 @@ public class EnglishAnalyzerProvider extends AbstractIndexAnalyzerProvider<Engli
         super(index, indexSettings, name, settings);
         analyzer = new EnglishAnalyzer(version,
                 Analysis.parseStopWords(env, settings, EnglishAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

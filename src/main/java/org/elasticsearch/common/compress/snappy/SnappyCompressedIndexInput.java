@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.compress.snappy;
 
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.common.compress.CompressedIndexInput;
 
@@ -59,7 +60,7 @@ public abstract class SnappyCompressedIndexInput extends CompressedIndexInput<Sn
     }
 
     @Override
-    public Object clone() {
+    public DataInput clone() {
         SnappyCompressedIndexInput cloned = (SnappyCompressedIndexInput) super.clone();
         cloned.inputBuffer = new byte[inputBuffer.length];
         return cloned;

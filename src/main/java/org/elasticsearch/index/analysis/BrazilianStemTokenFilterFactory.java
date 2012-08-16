@@ -51,6 +51,6 @@ public class BrazilianStemTokenFilterFactory extends AbstractTokenFilterFactory 
 
     @Override
     public TokenStream create(TokenStream tokenStream) {
-        return new BrazilianStemFilter(tokenStream, exclusions);
+        return new BrazilianStemFilter(tokenStream);
     }
 }

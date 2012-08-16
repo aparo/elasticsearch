@@ -40,7 +40,7 @@ public class LatvianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Latvi
         super(index, indexSettings, name, settings);
         analyzer = new LatvianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, LatvianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

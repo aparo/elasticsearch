@@ -21,7 +21,6 @@ package org.elasticsearch.index.merge.policy;
 
 import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.index.LogDocMergePolicy;
-import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentInfos;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
@@ -33,7 +32,6 @@ import org.elasticsearch.index.shard.AbstractIndexShardComponent;
 import org.elasticsearch.index.store.Store;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -203,6 +201,7 @@ public class LogDocMergePolicyProvider extends AbstractIndexShardComponent imple
             return super.findMerges(infos);
         }
 
+        /*
         @Override
         public MergeSpecification findForcedMerges(SegmentInfos infos, int maxSegmentCount, Map<SegmentInfo, Boolean> segmentsToMerge) throws IOException {
             if (enableMerge.get() == Boolean.FALSE) {
@@ -210,7 +209,7 @@ public class LogDocMergePolicyProvider extends AbstractIndexShardComponent imple
             }
             return super.findForcedMerges(infos, maxSegmentCount, segmentsToMerge);
         }
-
+        */
         @Override
         public MergeSpecification findForcedDeletesMerges(SegmentInfos infos) throws CorruptIndexException, IOException {
             if (enableMerge.get() == Boolean.FALSE) {

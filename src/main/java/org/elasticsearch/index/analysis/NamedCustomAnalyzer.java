@@ -30,8 +30,10 @@ public class NamedCustomAnalyzer extends NamedAnalyzer {
         this.positionOffsetGap = positionOffsetGap;
     }
 
+    //PARO FIX search how to propagate
+    /*
     @Override
     public int getPositionIncrementGap(String fieldName) {
         return positionOffsetGap;
-    }
+    } */
 }

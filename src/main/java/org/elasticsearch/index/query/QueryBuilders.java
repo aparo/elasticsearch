@@ -73,7 +73,7 @@ public abstract class QueryBuilders {
      * @deprecated use {@link #textPhraseQuery(String, Object)} instead
      */
     public static MatchQueryBuilder textPhrase(String name, Object text) {
-        return textPhraseQuery(name, text);
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
     }
 
     /**
@@ -83,6 +83,15 @@ public abstract class QueryBuilders {
      * @param text The query text (to be tokenized).
      */
     public static MatchQueryBuilder matchPhraseQuery(String name, Object text) {
+        return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
+    }
+    /**
+     * Creates a text query with type "PHRASE" for the provided field name and text.
+     *
+     * @param name The field name.
+     * @param text The query text (to be tokenized).
+     */
+    public static MatchQueryBuilder textPhraseQuery(String name, Object text) {
         return new MatchQueryBuilder(name, text).type(MatchQueryBuilder.Type.PHRASE);
     }
 

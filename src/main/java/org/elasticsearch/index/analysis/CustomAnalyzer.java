@@ -71,42 +71,18 @@ public final class CustomAnalyzer extends Analyzer {
     }
 
     @Override
-    public int getOffsetGap(String field) {
-        if (offsetGap < 0) {
-            return super.getOffsetGap(field);
-        }
-        return this.offsetGap;
-    }
-
-    @Override
-    protected TokenStreamComponents createComponents(String fieldName, Reader reader) {
-        return buildHolder(reader).tokenStream;
-    }
-
-    @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) throws IOException {
-        Holder holder = (Holder) getPreviousTokenStream();
-        if (holder == null) {
-            holder = buildHolder(charFilterIfNeeded(reader));
-            setPreviousTokenStream(holder);
-        } else {
-            holder.tokenizer.reset(charFilterIfNeeded(reader));
-        }
-        return holder.tokenStream;
-    }
-
-    private Holder buildHolder(Reader input) {
-        Tokenizer tokenizer = tokenizerFactory.create(input);
+    protected TokenStreamComponents createComponents(String fieldName, Reader aReader) {
+        Tokenizer tokenizer = tokenizerFactory.create(charFilterIfNeeded(aReader));
         TokenStream tokenStream = tokenizer;
         for (TokenFilterFactory tokenFilter : tokenFilters) {
             tokenStream = tokenFilter.create(tokenStream);
         }
-        return new Holder(tokenizer, tokenStream);
+        return new TokenStreamComponents(tokenizer, tokenStream);
     }
 
     private Reader charFilterIfNeeded(Reader reader) {
         if (charFilters != null && charFilters.length > 0) {
-            CharStream charStream = CharReader.get(reader);
+            Reader charStream = reader;
             for (CharFilterFactory charFilter : charFilters) {
                 charStream = charFilter.create(charStream);
             }
@@ -115,13 +91,4 @@ public final class CustomAnalyzer extends Analyzer {
         return reader;
     }
 
-    static class Holder {
-        final Tokenizer tokenizer;
-        final TokenStream tokenStream;
-
-        private Holder(Tokenizer tokenizer, TokenStream tokenStream) {
-            this.tokenizer = tokenizer;
-            this.tokenStream = tokenStream;
-        }
-    }
 }

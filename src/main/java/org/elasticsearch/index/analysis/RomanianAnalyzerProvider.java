@@ -40,7 +40,7 @@ public class RomanianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Roma
         super(index, indexSettings, name, settings);
         analyzer = new RomanianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, RomanianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

@@ -40,7 +40,7 @@ public class CatalanAnalyzerProvider extends AbstractIndexAnalyzerProvider<Catal
         super(index, indexSettings, name, settings);
         analyzer = new CatalanAnalyzer(version,
                 Analysis.parseStopWords(env, settings, CatalanAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

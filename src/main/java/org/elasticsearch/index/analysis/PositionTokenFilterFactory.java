@@ -19,28 +19,27 @@
 
 package org.elasticsearch.index.analysis;
 
-import org.apache.lucene.analysis.cn.ChineseAnalyzer;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.settings.IndexSettings;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.position.PositionFilter;
 
 /**
- *
+ * @author aparo (alberto.paro)
  */
-public class ChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<ChineseAnalyzer> {
 
-    private final ChineseAnalyzer analyzer;
+public class PositionTokenFilterFactory extends AbstractTokenFilterFactory {
 
     @Inject
-    public ChineseAnalyzerProvider(Index index, @IndexSettings Settings indexSettings, @Assisted String name, @Assisted Settings settings) {
+    public PositionTokenFilterFactory(Index index, @IndexSettings Settings indexSettings, @Assisted String name, @Assisted Settings settings) {
         super(index, indexSettings, name, settings);
-        analyzer = new ChineseAnalyzer();
     }
 
     @Override
-    public ChineseAnalyzer get() {
-        return this.analyzer;
+    public TokenStream create(TokenStream tokenStream) {
+        return new PositionFilter(tokenStream);
     }
 }

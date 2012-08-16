@@ -40,7 +40,7 @@ public class IndonesianAnalyzerProvider extends AbstractIndexAnalyzerProvider<In
         super(index, indexSettings, name, settings);
         analyzer = new IndonesianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, IndonesianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

@@ -40,7 +40,7 @@ public class ArmenianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Arme
         super(index, indexSettings, name, settings);
         analyzer = new ArmenianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, ArmenianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

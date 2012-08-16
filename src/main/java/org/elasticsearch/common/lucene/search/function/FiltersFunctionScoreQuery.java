@@ -121,22 +121,7 @@ public class FiltersFunctionScoreQuery extends Query {
             this.subQueryWeight = subQuery.createWeight(searcher);
         }
 
-
         @Override
-        public Scorer scorer(IndexReader reader, boolean scoreDocsInOrder, boolean topScorer) throws IOException {
-            Scorer subQueryScorer = subQueryWeight.scorer(reader, scoreDocsInOrder, false);
-            if (subQueryScorer == null) {
-                return null;
-            }
-            for (int i = 0; i < filterFunctions.length; i++) {
-                FilterFunction filterFunction = filterFunctions[i];
-                filterFunction.function.setNextReader(reader);
-                docSets[i] = DocSets.convert(reader, filterFunction.filter.getDocIdSet(atomicReaderContext, bits));
-            }
-            return new CustomBoostFactorScorer(getSimilarity(searcher), this, subQueryScorer, scoreMode, filterFunctions, maxBoost, docSets);
-        }
-
-        @Override 
         public Explanation explain(AtomicReaderContext context, int doc) throws IOException {
             Explanation subQueryExpl = subQueryWeight.explain(context, doc);
             if (!subQueryExpl.isMatch()) {

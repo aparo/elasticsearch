@@ -19,7 +19,7 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.Strings;
@@ -122,8 +122,8 @@ public class CustomScoreQueryParser implements QueryParser {
         }
 
         @Override
-        public void setNextReader(IndexReader reader) {
-            script.setNextReader(reader);
+        public void setNextReader(AtomicReaderContext context) {
+            script.setNextReader(context);
         }
 
         @Override

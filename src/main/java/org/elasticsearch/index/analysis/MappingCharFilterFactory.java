@@ -48,9 +48,9 @@ public class MappingCharFilterFactory extends AbstractCharFilterFactory {
         if (rules == null) {
             throw new ElasticSearchIllegalArgumentException("mapping requires either `mappings` or `mappings_path` to be configured");
         }
-
-        normMap = new NormalizeCharMap();
-        parseRules(rules, normMap);
+        NormalizeCharMap.Builder builder=new NormalizeCharMap.Builder();
+        parseRules(rules, builder);
+        normMap = builder.build();
     }
 
     @Override
@@ -64,7 +64,7 @@ public class MappingCharFilterFactory extends AbstractCharFilterFactory {
     /**
      * parses a list of MappingCharFilter style rules into a normalize char map
      */
-    private void parseRules(List<String> rules, NormalizeCharMap map) {
+    private void parseRules(List<String> rules, NormalizeCharMap.Builder builder) {
         for (String rule : rules) {
             Matcher m = rulePattern.matcher(rule);
             if (!m.find())
@@ -73,7 +73,7 @@ public class MappingCharFilterFactory extends AbstractCharFilterFactory {
             String rhs = parseString(m.group(2).trim());
             if (lhs == null || rhs == null)
                 throw new RuntimeException("Invalid Mapping Rule : [" + rule + "]. Illegal mapping.");
-            map.add(lhs, rhs);
+            builder.add(lhs, rhs);
         }
     }
 

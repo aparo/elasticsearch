@@ -22,6 +22,7 @@ package org.elasticsearch.index.analysis.compound;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.compound.HyphenationCompoundWordTokenFilter;
 import org.apache.lucene.analysis.compound.hyphenation.HyphenationTree;
+import org.apache.lucene.analysis.util.CharArraySet;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.assistedinject.Assisted;
@@ -65,7 +66,7 @@ public class HyphenationCompoundWordTokenFilterFactory extends AbstractCompoundW
     @Override
     public TokenStream create(TokenStream tokenStream) {
         return new HyphenationCompoundWordTokenFilter(version, tokenStream,
-                hyphenationTree, wordList,
+                hyphenationTree, new CharArraySet(version, wordList, false) ,
                 minWordSize, minSubwordSize, maxSubwordSize, onlyLongestMatch);
     }
 }

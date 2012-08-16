@@ -40,7 +40,7 @@ public class SwedishAnalyzerProvider extends AbstractIndexAnalyzerProvider<Swedi
         super(index, indexSettings, name, settings);
         analyzer = new SwedishAnalyzer(version,
                 Analysis.parseStopWords(env, settings, SwedishAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

@@ -51,6 +51,6 @@ public class GermanStemTokenFilterFactory extends AbstractTokenFilterFactory {
 
     @Override
     public TokenStream create(TokenStream tokenStream) {
-        return new GermanStemFilter(tokenStream, exclusions);
+        return new GermanStemFilter(tokenStream);
     }
 }

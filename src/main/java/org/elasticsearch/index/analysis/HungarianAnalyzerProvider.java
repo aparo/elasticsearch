@@ -40,7 +40,7 @@ public class HungarianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Hun
         super(index, indexSettings, name, settings);
         analyzer = new HungarianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, HungarianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

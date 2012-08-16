@@ -21,6 +21,7 @@ package org.elasticsearch.common.compress.lzf;
 
 import com.ning.compress.lzf.ChunkDecoder;
 import com.ning.compress.lzf.LZFChunk;
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.common.compress.CompressedIndexInput;
 import org.elasticsearch.common.lucene.store.InputStreamIndexInput;
@@ -65,7 +66,7 @@ public class LZFCompressedIndexInput extends CompressedIndexInput<LZFCompressorC
     }
 
     @Override
-    public Object clone() {
+    public DataInput clone() {
         LZFCompressedIndexInput cloned = (LZFCompressedIndexInput) super.clone();
         cloned.inputBuffer = new byte[LZFChunk.MAX_CHUNK_LEN];
         return cloned;

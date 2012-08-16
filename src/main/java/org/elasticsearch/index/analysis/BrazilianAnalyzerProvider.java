@@ -40,7 +40,7 @@ public class BrazilianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Bra
         super(index, indexSettings, name, settings);
         analyzer = new BrazilianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, BrazilianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

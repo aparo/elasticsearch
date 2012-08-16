@@ -40,7 +40,7 @@ public class FinnishAnalyzerProvider extends AbstractIndexAnalyzerProvider<Finni
         super(index, indexSettings, name, settings);
         analyzer = new FinnishAnalyzer(version,
                 Analysis.parseStopWords(env, settings, FinnishAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

@@ -144,7 +144,7 @@ public abstract class AbstractFragmentsBuilder extends BaseFragmentsBuilder {
                         }
                     }
                     if (!toffsList.isEmpty()) {
-                        subInfos.add(new FieldFragList.WeightedFragInfo.SubInfo(subInfo.text, toffsList, subInfo.getSeqnum()));
+                        subInfos.add(new FieldFragList.WeightedFragInfo.SubInfo(subInfo.getText(), toffsList, subInfo.getSeqnum()));
                     }
 
                     if (subInfo.getTermsOffsets().isEmpty()) {

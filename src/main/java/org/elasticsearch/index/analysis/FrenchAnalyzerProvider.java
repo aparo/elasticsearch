@@ -40,7 +40,7 @@ public class FrenchAnalyzerProvider extends AbstractIndexAnalyzerProvider<French
         super(index, indexSettings, name, settings);
         analyzer = new FrenchAnalyzer(version,
                 Analysis.parseStopWords(env, settings, FrenchAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

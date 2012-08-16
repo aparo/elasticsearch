@@ -21,6 +21,7 @@ package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.miscellaneous.StemmerOverrideFilter;
+import org.apache.lucene.analysis.util.CharArrayMap;
 import org.apache.lucene.util.Version;
 import org.elasticsearch.ElasticSearchIllegalArgumentException;
 import org.elasticsearch.common.Strings;
@@ -31,14 +32,12 @@ import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.settings.IndexSettings;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @AnalysisSettingsRequired
 public class StemmerOverrideTokenFilterFactory extends AbstractTokenFilterFactory {
 
-    private final Map<String, String> dictionary;
+    private final CharArrayMap<String> dictionary;
 
     @Inject
     public StemmerOverrideTokenFilterFactory(Index index, @IndexSettings Settings indexSettings, Environment env, @Assisted String name, @Assisted Settings settings) {
@@ -48,16 +47,16 @@ public class StemmerOverrideTokenFilterFactory extends AbstractTokenFilterFactor
         if (rules == null) {
             throw new ElasticSearchIllegalArgumentException("stemmer override filter requires either `rules` or `rules_path` to be configured");
         }
-        dictionary = new HashMap<String, String>();
-        parseRules(rules, dictionary, "=>");
+        dictionary = parseRules(rules, "=>");
     }
 
     @Override
     public TokenStream create(TokenStream tokenStream) {
-        return new StemmerOverrideFilter(Version.LUCENE_32, tokenStream, dictionary);
+        return new StemmerOverrideFilter(Version.LUCENE_40, tokenStream, dictionary);
     }
 
-    static void parseRules(List<String> rules, Map<String, String> rulesMap, String mappingSep) {
+    static CharArrayMap<String> parseRules(List<String> rules, String mappingSep) {
+        CharArrayMap<String> rulesMap=new CharArrayMap<String>(Version.LUCENE_40, rules.size(), true);
         for (String rule : rules) {
             String key, override;
             List<String> mapping = Strings.splitSmart(rule, mappingSep, false);
@@ -74,6 +73,7 @@ public class StemmerOverrideTokenFilterFactory extends AbstractTokenFilterFactor
                 rulesMap.put(key, override);
             }
         }
+        return rulesMap;
     }
 
 }

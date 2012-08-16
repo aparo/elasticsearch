@@ -40,7 +40,7 @@ public class SpanishAnalyzerProvider extends AbstractIndexAnalyzerProvider<Spani
         super(index, indexSettings, name, settings);
         analyzer = new SpanishAnalyzer(version,
                 Analysis.parseStopWords(env, settings, SpanishAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

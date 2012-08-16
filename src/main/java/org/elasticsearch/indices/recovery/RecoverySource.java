@@ -21,6 +21,7 @@ package org.elasticsearch.indices.recovery;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.StopWatch;
@@ -135,7 +136,7 @@ public class RecoverySource extends AbstractComponent {
                                     final int BUFFER_SIZE = (int) recoverySettings.fileChunkSize().bytes();
                                     byte[] buf = new byte[BUFFER_SIZE];
                                     StoreFileMetaData md = shard.store().metaData(name);
-                                    indexInput = shard.store().openInputRaw(name);
+                                    indexInput = shard.store().openInputRaw(name, IOContext.DEFAULT);
                                     boolean shouldCompressRequest = recoverySettings.compress();
                                     if (CompressorFactory.isCompressed(indexInput)) {
                                         shouldCompressRequest = false;

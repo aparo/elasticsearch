@@ -40,7 +40,7 @@ public class DanishAnalyzerProvider extends AbstractIndexAnalyzerProvider<Danish
         super(index, indexSettings, name, settings);
         analyzer = new DanishAnalyzer(version,
                 Analysis.parseStopWords(env, settings, DanishAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override

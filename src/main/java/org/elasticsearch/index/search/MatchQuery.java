@@ -224,7 +224,7 @@ public class MatchQuery {
                 } catch (IOException e) {
                     // safe to ignore, because we know the number of tokens
                 }
-                Query q = newTermQuery(mapper, fieldTerm.createTerm(term));
+                Query q = newTermQuery(mapper, new Term(fieldTerm.field(), term));
                 return wrapSmartNameQuery(q, smartNameFieldMappers, parseContext);
             }
             BooleanQuery q = new BooleanQuery(positionCount == 1);
@@ -238,7 +238,7 @@ public class MatchQuery {
                     // safe to ignore, because we know the number of tokens
                 }
 
-                Query currentQuery = newTermQuery(mapper, fieldTerm.createTerm(term));
+                Query currentQuery = newTermQuery(mapper, new Term(fieldTerm.field(), term));
                 q.add(currentQuery, occur);
             }
             return wrapSmartNameQuery(q, smartNameFieldMappers, parseContext);
@@ -271,7 +271,7 @@ public class MatchQuery {
                         multiTerms.clear();
                     }
                     position += positionIncrement;
-                    multiTerms.add(fieldTerm.createTerm(term));
+                    multiTerms.add(new Term(fieldTerm.field(), term));
                 }
                 if (enablePositionIncrements) {
                     mpq.add(multiTerms.toArray(new Term[multiTerms.size()]), position);
@@ -302,9 +302,9 @@ public class MatchQuery {
 
                     if (enablePositionIncrements) {
                         position += positionIncrement;
-                        pq.add(fieldTerm.createTerm(term), position);
+                        pq.add(new Term(fieldTerm.field(), term), position);
                     } else {
-                        pq.add(fieldTerm.createTerm(term));
+                        pq.add(new Term(fieldTerm.field(), term));
                     }
                 }
                 return wrapSmartNameQuery(pq, smartNameFieldMappers, parseContext);
@@ -338,7 +338,7 @@ public class MatchQuery {
                     multiTerms.clear();
                 }
                 position += positionIncrement;
-                multiTerms.add(fieldTerm.createTerm(term));
+                multiTerms.add(new Term(fieldTerm.field(), term));
             }
             if (enablePositionIncrements) {
                 mpq.add(multiTerms.toArray(new Term[multiTerms.size()]), position);
@@ -359,7 +359,8 @@ public class MatchQuery {
                     QueryParsers.setRewriteMethod((FuzzyQuery) query, fuzzyRewriteMethod);
                 }
             }
-            FuzzyQuery query = new FuzzyQuery(term, Float.parseFloat(fuzziness), fuzzyPrefixLength, maxExpansions);
+            //PARO TO FIX propagate up parameters
+            FuzzyQuery query = new FuzzyQuery(term, 1, fuzzyPrefixLength, maxExpansions, true);
             QueryParsers.setRewriteMethod(query, rewriteMethod);
             return query;
         }

@@ -20,6 +20,7 @@
 package org.elasticsearch.index.cache.field.data.support;
 
 import com.google.common.cache.Cache;
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.SegmentReader;
 import org.elasticsearch.ElasticSearchException;
@@ -102,6 +103,11 @@ public abstract class AbstractConcurrentMapFieldDataCache extends AbstractIndexC
             }
         }
         return sizeInBytes;
+    }
+
+    @Override
+    public FieldData cache(FieldDataType type, AtomicReaderContext context, String fieldName) throws IOException {
+        return cache(type, context.reader(), fieldName);
     }
 
     @Override

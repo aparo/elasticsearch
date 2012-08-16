@@ -46,10 +46,11 @@ public class StandardHtmlStripAnalyzer extends StopwordAnalyzerBase {
         tok = new LowerCaseFilter(matchVersion, tok);
         tok = new StopFilter(matchVersion, tok, stopwords);
         return new TokenStreamComponents(src, tok) {
+
             @Override
-            protected boolean reset(final Reader reader) throws IOException {
+            protected void setReader(final Reader reader) throws IOException {
                 src.setMaxTokenLength(StandardAnalyzer.DEFAULT_MAX_TOKEN_LENGTH);
-                return super.reset(reader);
+                super.setReader(reader);
             }
         };
     }

@@ -21,6 +21,9 @@ package org.elasticsearch.search.fetch.matchedfilters;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import org.apache.lucene.index.AtomicReader;
+import org.apache.lucene.index.AtomicReaderContext;
+import org.apache.lucene.index.MultiFields;
 import org.apache.lucene.search.DocIdSet;
 import org.apache.lucene.search.Filter;
 import org.elasticsearch.ElasticSearchException;
@@ -66,7 +69,7 @@ public class MatchedFiltersFetchSubPhase implements FetchSubPhase {
             String name = entry.getKey();
             Filter filter = entry.getValue();
             try {
-                DocIdSet docIdSet = filter.getDocIdSet(hitContext.reader());
+                DocIdSet docIdSet = filter.getDocIdSet(new AtomicReaderContext((AtomicReader) hitContext.reader()), MultiFields.getLiveDocs(hitContext.reader()));
                 if (docIdSet != null) {
                     DocSet docSet = DocSets.convert(hitContext.reader(), docIdSet);
                     if (docSet.get(hitContext.docId())) {

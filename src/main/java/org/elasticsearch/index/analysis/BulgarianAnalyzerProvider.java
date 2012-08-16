@@ -40,7 +40,7 @@ public class BulgarianAnalyzerProvider extends AbstractIndexAnalyzerProvider<Bul
         super(index, indexSettings, name, settings);
         analyzer = new BulgarianAnalyzer(version,
                 Analysis.parseStopWords(env, settings, BulgarianAnalyzer.getDefaultStopSet(), version),
-                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET));
+                Analysis.parseStemExclusion(settings, CharArraySet.EMPTY_SET, version));
     }
 
     @Override
