@@ -34,7 +34,7 @@ public class DfsSearchResult implements SearchPhaseResult {
 
     private static Term[] EMPTY_TERMS = new Term[0];
 
-    private static int[] EMPTY_FREQS = new int[0];
+    private static long[] EMPTY_FREQS = new long[0];
 
     private SearchShardTarget shardTarget;
 
@@ -42,7 +42,7 @@ public class DfsSearchResult implements SearchPhaseResult {
 
     private Term[] terms;
 
-    private int[] freqs;
+    private long[] freqs;
 
     private int maxDoc;
 
@@ -77,7 +77,7 @@ public class DfsSearchResult implements SearchPhaseResult {
         return maxDoc;
     }
 
-    public DfsSearchResult termsAndFreqs(Term[] terms, int[] freqs) {
+    public DfsSearchResult termsAndFreqs(Term[] terms, long[] freqs) {
         this.terms = terms;
         this.freqs = freqs;
         return this;
@@ -87,7 +87,7 @@ public class DfsSearchResult implements SearchPhaseResult {
         return terms;
     }
 
-    public int[] freqs() {
+    public long[] freqs() {
         return freqs;
     }
 
@@ -114,7 +114,7 @@ public class DfsSearchResult implements SearchPhaseResult {
         if (freqsSize == 0) {
             freqs = EMPTY_FREQS;
         } else {
-            freqs = new int[freqsSize];
+            freqs = new long[freqsSize];
             for (int i = 0; i < freqs.length; i++) {
                 freqs[i] = in.readVInt();
             }
@@ -132,8 +132,8 @@ public class DfsSearchResult implements SearchPhaseResult {
             out.writeUTF(term.text());
         }
         out.writeVInt(freqs.length);
-        for (int freq : freqs) {
-            out.writeVInt(freq);
+        for (long freq : freqs) {
+            out.writeVLong(freq);
         }
         out.writeVInt(maxDoc);
     }

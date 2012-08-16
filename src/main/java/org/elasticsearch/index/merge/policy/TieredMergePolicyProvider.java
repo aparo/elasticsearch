@@ -260,21 +260,6 @@ public class TieredMergePolicyProvider extends AbstractIndexShardComponent imple
             }
             return super.findMerges(infos);
         }
-
-        @Override
-        public MergeSpecification findForcedMerges(SegmentInfos infos, int maxSegmentCount, Map<SegmentInfo, Boolean> segmentsToMerge) throws IOException {
-            if (enableMerge.get() == Boolean.FALSE) {
-                return null;
-            }
-            return super.findForcedMerges(infos, maxSegmentCount, segmentsToMerge);
-        }
-
-        @Override
-        public MergeSpecification findForcedDeletesMerges(SegmentInfos infos) throws CorruptIndexException, IOException {
-            if (enableMerge.get() == Boolean.FALSE) {
-                return null;
-            }
-            return super.findForcedDeletesMerges(infos);
-        }
+      
     }
 }

@@ -73,16 +73,17 @@ public class PublicTermsFilter extends Filter {
         return hash;
     }
 
-    @Override public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
+    @Override
+    public DocIdSet getDocIdSet(AtomicReaderContext atomicReaderContext, Bits bits) throws IOException {
         FixedBitSet result = null;
         int doc;
-        for(Term term:terms){
-            DocsEnum td = MultiFields.getTermDocsEnum(atomicReaderContext.reader(), MultiFields.getLiveDocs(atomicReaderContext.reader()), term.field(), term.bytes());
-            if(td!=null){
-                if(result==null){
+        for (Term term : terms) {
+            DocsEnum td = MultiFields.getTermDocsEnum(atomicReaderContext.reader(), MultiFields.getLiveDocs(atomicReaderContext.reader()), term.field(), term.bytes(), DocsEnum.FLAG_FREQS);
+            if (td != null) {
+                if (result == null) {
                     result = new FixedBitSet(atomicReaderContext.reader().maxDoc());
                 }
-                while((doc = td.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                while ((doc = td.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
                     result.set(doc);
                 }
             }

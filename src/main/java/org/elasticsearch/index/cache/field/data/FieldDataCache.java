@@ -21,6 +21,7 @@ package org.elasticsearch.index.cache.field.data;
 
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.FieldCache;
 import org.elasticsearch.common.component.CloseableComponent;
 import org.elasticsearch.index.IndexComponent;
 import org.elasticsearch.index.field.data.FieldData;
@@ -31,7 +32,7 @@ import java.io.IOException;
 /**
  *
  */
-public interface FieldDataCache extends IndexComponent, CloseableComponent {
+public interface FieldDataCache extends FieldCache.Parser, IndexComponent, CloseableComponent {
 
     FieldData cache(FieldDataType type, AtomicReaderContext readerContext, String fieldName) throws IOException;
 

@@ -21,7 +21,7 @@ package org.elasticsearch.index.cache.id.simple;
 
 import gnu.trove.impl.Constants;
 import org.apache.lucene.index.*;
-import org.apache.lucene.util.StringHelper;
+import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.bytes.HashedBytesArray;
 import org.elasticsearch.common.collect.MapBuilder;
@@ -68,11 +68,6 @@ public class SimpleIdCache extends AbstractIndexComponent implements IdCache, Se
     }
 
     @Override
-    public void onClose(SegmentReader owner) {
-        clear(owner);
-    }
-
-    @Override
     public void clear(IndexReader reader) {
         idReaders.remove(reader.getCoreCacheKey());
     }
@@ -115,35 +110,27 @@ public class SimpleIdCache extends AbstractIndexComponent implements IdCache, Se
                     HashMap<String, TypeBuilder> readerBuilder = new HashMap<String, TypeBuilder>();
                     builders.put(reader.getCoreCacheKey(), readerBuilder);
 
-                    String field = StringHelper.intern(UidFieldMapper.NAME);
-                    TermDocs termDocs = reader.termDocs();
-                    TermEnum termEnum = reader.terms(new Term(field));
-                    try {
-                        do {
-                            Term term = termEnum.term();
-                            if (term == null || term.field() != field) break;
-                            // TODO we can optimize this, since type is the prefix, and we get terms ordered
-                            // so, only need to move to the next type once its different
-                            Uid uid = Uid.createUid(term.text());
+                    String field = UidFieldMapper.NAME;
+                    Terms terms = MultiFields.getTerms(reader, field);
+                    if (terms != null) {
+                        TermsEnum termsEnum = terms.iterator(null);
+                        BytesRef text;
+                        while ((text = termsEnum.next()) != null) {
+                            Uid uid = Uid.createUid(text.utf8ToString());
 
                             TypeBuilder typeBuilder = readerBuilder.get(uid.type());
                             if (typeBuilder == null) {
                                 typeBuilder = new TypeBuilder(reader);
-                                readerBuilder.put(StringHelper.intern(uid.type()), typeBuilder);
+                                readerBuilder.put(uid.type(), typeBuilder);
                             }
 
                             HashedBytesArray idAsBytes = checkIfCanReuse(builders, new HashedBytesArray(uid.id()));
-                            termDocs.seek(termEnum);
-                            while (termDocs.next()) {
-                                // when traversing, make sure to ignore deleted docs, so the key->docId will be correct
-                                if (!reader.isDeleted(termDocs.doc())) {
-                                    typeBuilder.idToDoc.put(idAsBytes, termDocs.doc());
-                                }
+                            DocsEnum termDocs = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader), field, text, DocsEnum.FLAG_FREQS);
+                            int doc;
+                            while ((doc = termDocs.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                                typeBuilder.idToDoc.put(idAsBytes, doc);
                             }
-                        } while (termEnum.next());
-                    } finally {
-                        termDocs.close();
-                        termEnum.close();
+                        }
                     }
                 }
 
@@ -156,45 +143,38 @@ public class SimpleIdCache extends AbstractIndexComponent implements IdCache, Se
                     }
 
                     Map<String, TypeBuilder> readerBuilder = builders.get(reader.getCoreCacheKey());
-
-                    String field = StringHelper.intern(ParentFieldMapper.NAME);
-                    TermDocs termDocs = reader.termDocs();
-                    TermEnum termEnum = reader.terms(new Term(field));
-                    try {
-                        do {
-                            Term term = termEnum.term();
-                            if (term == null || term.field() != field) break;
+                    String field = ParentFieldMapper.NAME;
+                    Terms terms = MultiFields.getTerms(reader, field);
+                    if (terms != null) {
+                        TermsEnum termsEnum = terms.iterator(null);
+                        BytesRef text;
+                        while ((text = termsEnum.next()) != null) {
                             // TODO we can optimize this, since type is the prefix, and we get terms ordered
                             // so, only need to move to the next type once its different
-                            Uid uid = Uid.createUid(term.text());
+                            Uid uid = Uid.createUid(text.utf8ToString());
 
                             TypeBuilder typeBuilder = readerBuilder.get(uid.type());
                             if (typeBuilder == null) {
                                 typeBuilder = new TypeBuilder(reader);
-                                readerBuilder.put(StringHelper.intern(uid.type()), typeBuilder);
+                                readerBuilder.put(uid.type(), typeBuilder);
                             }
 
                             HashedBytesArray idAsBytes = checkIfCanReuse(builders, new HashedBytesArray(uid.id()));
                             boolean added = false; // optimize for when all the docs are deleted for this id
 
-                            termDocs.seek(termEnum);
-                            while (termDocs.next()) {
-                                // ignore deleted docs while we are at it
-                                if (!reader.isDeleted(termDocs.doc())) {
-                                    if (!added) {
-                                        typeBuilder.parentIdsValues.add(idAsBytes);
-                                        added = true;
-                                    }
-                                    typeBuilder.parentIdsOrdinals[termDocs.doc()] = typeBuilder.t;
+                            DocsEnum termDocs = MultiFields.getTermDocsEnum(reader, MultiFields.getLiveDocs(reader), field, text, DocsEnum.FLAG_FREQS);
+                            int doc;
+                            while ((doc = termDocs.nextDoc()) != DocsEnum.NO_MORE_DOCS) {
+                                if (!added) {
+                                    typeBuilder.parentIdsValues.add(idAsBytes);
+                                    added = true;
                                 }
+                                typeBuilder.parentIdsOrdinals[doc] = typeBuilder.t;
                             }
                             if (added) {
                                 typeBuilder.t++;
                             }
-                        } while (termEnum.next());
-                    } finally {
-                        termDocs.close();
-                        termEnum.close();
+                        }
                     }
                 }
 
@@ -242,6 +222,11 @@ public class SimpleIdCache extends AbstractIndexComponent implements IdCache, Se
             }
         }
         return false;
+    }
+
+    @Override
+    public void onClose(SegmentReader reader) {
+        clear(reader);
     }
 
     static class TypeBuilder {

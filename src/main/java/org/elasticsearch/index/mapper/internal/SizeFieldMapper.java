@@ -20,7 +20,6 @@
 package org.elasticsearch.index.mapper.internal;
 
 import org.apache.lucene.document.Field;
-import org.apache.lucene.index.IndexableField;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.mapper.*;
@@ -152,7 +151,7 @@ public class SizeFieldMapper extends IntegerFieldMapper implements RootMapper {
             builder.field("enabled", enabled);
         }
         if (store != Defaults.STORE) {
-            builder.field("store", store.name().toLowerCase());
+            builder.field("store", store);
         }
         builder.endObject();
         return builder;

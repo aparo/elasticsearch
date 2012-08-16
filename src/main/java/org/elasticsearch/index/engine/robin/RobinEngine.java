@@ -267,8 +267,8 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             try {
                 // commit on a just opened writer will commit even if there are no changes done to it
                 // we rely on that for the commit data translog id key
-                if (IndexReader.indexExists(store.directory())) {
-                    Map<String, String> commitUserData = IndexReader.getCommitUserData(store.directory());
+                if (DirectoryReader.indexExists(store.directory())) {
+                    Map<String, String> commitUserData = DirectoryReader.open(store.directory()).getIndexCommit().getUserData();
                     if (commitUserData.containsKey(Translog.TRANSLOG_ID_KEY)) {
                         translogIdGenerator.set(Long.parseLong(commitUserData.get(Translog.TRANSLOG_ID_KEY)));
                     } else {
@@ -341,13 +341,13 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             Searcher searcher = searcher();
             try {
                 Unicode.UTF8Result utf8 = Unicode.fromStringAsUtf8(get.uid().text());
-                for (IndexReader reader : searcher.searcher().subReaders()) {
-                    BloomFilter filter = bloomCache.filter(reader, UidFieldMapper.NAME, asyncLoadBloomFilter);
+                for (IndexReaderContext context : searcher.reader().getTopReaderContext().children()) {
+                    BloomFilter filter = bloomCache.filter(context.reader(), UidFieldMapper.NAME, asyncLoadBloomFilter);
                     // we know that its not there...
                     if (!filter.isPresent(utf8.result, 0, utf8.length)) {
                         continue;
                     }
-                    UidField.DocIdAndVersion docIdAndVersion = UidField.loadDocIdAndVersion(reader, get.uid());
+                    UidField.DocIdAndVersion docIdAndVersion = UidField.loadDocIdAndVersion(context.reader(), get.uid());
                     if (docIdAndVersion != null && docIdAndVersion.docId != Lucene.NO_DOC) {
                         return new GetResult(searcher, docIdAndVersion);
                     }
@@ -392,7 +392,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
     }
 
     private void innerCreate(Create create, IndexWriter writer) throws IOException {
-        synchronized (dirtyLock(create.uid())) {
+        synchronized (dirtyLock(create.uid().toString())) {
             UidField uidField = create.uidField();
             final long currentVersion;
             VersionValue versionValue = versionMap.get(create.uid().text());
@@ -877,7 +877,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                             indexWriter.commit(MapBuilder.<String, String>newMapBuilder().put(Translog.TRANSLOG_ID_KEY, Long.toString(translogId)).map());
                             if (flush.force()) {
                                 // if we force, we might not have committed, we need to check that its the same id
-                                Map<String, String> commitUserData = IndexReader.getCommitUserData(store.directory());
+                                Map<String, String> commitUserData = DirectoryReader.open(store.directory()).getIndexCommit().getUserData();
                                 long committedTranslogId = Long.parseLong(commitUserData.get(Translog.TRANSLOG_ID_KEY));
                                 if (committedTranslogId != translogId) {
                                     // we did not commit anything, revert to the old translog
@@ -951,7 +951,6 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
         }
     }
 
-    @Override
     public void maybeMerge() throws EngineException {
         if (!possibleMergeNeeded) {
             return;
@@ -999,7 +998,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                     ((EnableMergePolicy) indexWriter.getConfig().getMergePolicy()).enableMerge();
                 }
                 if (optimize.onlyExpungeDeletes()) {
-                    indexWriter.expungeDeletes(false);
+                    indexWriter.forceMergeDeletes(false);
                 } else if (optimize.maxNumSegments() <= 0) {
                     indexWriter.maybeMerge();
                     possibleMergeNeeded = false;
@@ -1144,17 +1143,19 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             // first, go over and compute the search ones...
             Searcher searcher = searcher();
             try {
-                IndexReader[] readers = searcher.reader().getSequentialSubReaders();
-                for (IndexReader reader : readers) {
-                    assert reader instanceof SegmentReader;
-                    SegmentInfo info = Lucene.getSegmentInfo((SegmentReader) reader);
+                //IndexReader[] readers = searcher.reader().getSequentialSubReaders();
+
+                List<IndexReaderContext> readers = searcher.reader().getTopReaderContext().children();
+                for (IndexReaderContext context : readers) {
+                    assert context.reader() instanceof SegmentReader;
+                    SegmentInfo info = Lucene.getSegmentInfo((SegmentReader) context.reader());
                     assert !segments.containsKey(info.name);
                     Segment segment = new Segment(info.name);
                     segment.search = true;
-                    segment.docCount = reader.numDocs();
-                    segment.delDocCount = reader.numDeletedDocs();
+                    segment.docCount = context.reader().numDocs();
+                    segment.delDocCount = context.reader().numDeletedDocs();
                     try {
-                        segment.sizeInBytes = info.sizeInBytes(true);
+                        segment.sizeInBytes = info.sizeInBytes();
                     } catch (IOException e) {
                         logger.trace("failed to get size for [{}]", e, info.name);
                     }
@@ -1167,24 +1168,20 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
             // now, correlate or add the committed ones...
             if (lastCommittedSegmentInfos != null) {
                 SegmentInfos infos = lastCommittedSegmentInfos;
-                for (SegmentInfo info : infos) {
-                    Segment segment = segments.get(info.name);
+                for (SegmentInfoPerCommit info : infos) {
+                    Segment segment = segments.get(info.info.name);
                     if (segment == null) {
-                        segment = new Segment(info.name);
+                        segment = new Segment(info.info.name);
                         segment.search = false;
                         segment.committed = true;
-                        segment.docCount = info.docCount;
+                        segment.docCount = info.info.getDocCount();
+                        segment.delDocCount = indexWriter.numDeletedDocs(info);
                         try {
-                            segment.delDocCount = indexWriter.numDeletedDocs(info);
+                            segment.sizeInBytes = info.sizeInBytes();
                         } catch (IOException e) {
-                            logger.trace("failed to get deleted docs for committed segment", e);
+                            logger.trace("failed to get size for [{}]", e, info.info.name);
                         }
-                        try {
-                            segment.sizeInBytes = info.sizeInBytes(true);
-                        } catch (IOException e) {
-                            logger.trace("failed to get size for [{}]", e, info.name);
-                        }
-                        segments.put(info.name, segment);
+                        segments.put(info.info.name, segment);
                     } else {
                         segment.committed = true;
                     }
@@ -1273,13 +1270,15 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
         Unicode.UTF8Result utf8 = Unicode.fromStringAsUtf8(uid.text());
         Searcher searcher = searcher();
         try {
-            for (IndexReader reader : searcher.searcher().subReaders()) {
-                BloomFilter filter = bloomCache.filter(reader, UidFieldMapper.NAME, asyncLoadBloomFilter);
+            //for (IndexReader reader : searcher.searcher().subReaders()) {
+
+            for (IndexReaderContext context : searcher.reader().getTopReaderContext().children()) {
+                BloomFilter filter = bloomCache.filter(context.reader(), UidFieldMapper.NAME, asyncLoadBloomFilter);
                 // we know that its not there...
                 if (!filter.isPresent(utf8.result, 0, utf8.length)) {
                     continue;
                 }
-                long version = UidField.loadVersion(reader, uid);
+                long version = UidField.loadVersion(context.reader(), uid);
                 // either -2 (its there, but no version associated), or an actual version
                 if (version != -1) {
                     return version;
@@ -1293,19 +1292,22 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
 
     private IndexWriter createWriter() throws IOException {
         IndexWriter indexWriter = null;
+        final double minReopenSec = this.indexSettings.getAsDouble("index.min_reopen_sec", 0.01 + 0.05 * 0.5);
+        final double maxReopenSec = this.indexSettings.getAsDouble("index.max_reopen_sec", minReopenSec * (1.0 + 10 * 0.5));
+
         try {
             // release locks when started
             if (IndexWriter.isLocked(store.directory())) {
                 logger.warn("shard is locked, releasing lock");
                 IndexWriter.unlock(store.directory());
             }
-            boolean create = !IndexReader.indexExists(store.directory());
+            boolean create = !DirectoryReader.indexExists(store.directory());
             IndexWriterConfig config = new IndexWriterConfig(Lucene.VERSION, analysisService.defaultIndexAnalyzer());
             config.setOpenMode(create ? IndexWriterConfig.OpenMode.CREATE : IndexWriterConfig.OpenMode.APPEND);
             config.setIndexDeletionPolicy(deletionPolicy);
             config.setMergeScheduler(mergeScheduler.newMergeScheduler());
             config.setMergePolicy(mergePolicyProvider.newMergePolicy());
-            config.setSimilarity(similarityService.defaultIndexSimilarity());
+            config.setSimilarity(similarityService.defaultIndexSimilarity().get());
             config.setRAMBufferSizeMB(indexingBufferSize.mbFrac());
             config.setTermIndexInterval(termIndexInterval);
             config.setReaderTermsIndexDivisor(termIndexDivisor);
@@ -1443,7 +1445,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
         @Override
         public IndexSearcher newSearcher(IndexReader reader) throws IOException {
             ExtendedIndexSearcher searcher = new ExtendedIndexSearcher(reader);
-            searcher.setSimilarity(similarityService.defaultSearchSimilarity());
+            searcher.setSimilarity(similarityService.defaultSearchSimilarity().get());
             if (warmer != null) {
                 // we need to pass a custom searcher that does not release anything on Engine.Search Release,
                 // we will release explicitly
@@ -1494,7 +1496,7 @@ public class RobinEngine extends AbstractIndexShardComponent implements Engine {
                     }
                     if (newSearcher != null && closeNewSearcher) {
                         try {
-                            newSearcher.close();
+                            //newSearcher.close();
                         } catch (Exception e) {
                             // ignore
                         }

@@ -283,7 +283,7 @@ public class SearchService extends AbstractLifecycleComponent<SearchService> {
         SearchContext context = findContext(request.id());
         contextProcessing(context);
         try {
-            context.searcher().dfSource(new CachedDfSource(request.dfs(), context.similarityService().defaultSearchSimilarity()));
+            context.searcher().dfSource(new CachedDfSource(context.searcher().getIndexReader(), request.dfs(), context.similarityService().defaultSearchSimilarity().get()));
         } catch (IOException e) {
             freeContext(context);
             cleanContext(context);
@@ -349,7 +349,7 @@ public class SearchService extends AbstractLifecycleComponent<SearchService> {
         SearchContext context = findContext(request.id());
         contextProcessing(context);
         try {
-            context.searcher().dfSource(new CachedDfSource(request.dfs(), context.similarityService().defaultSearchSimilarity()));
+            context.searcher().dfSource(new CachedDfSource(context.searcher().getIndexReader(), request.dfs(), context.similarityService().defaultSearchSimilarity().get()));
         } catch (IOException e) {
             freeContext(context);
             cleanContext(context);

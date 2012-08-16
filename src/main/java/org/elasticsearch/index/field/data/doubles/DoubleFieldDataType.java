@@ -20,6 +20,7 @@
 package org.elasticsearch.index.field.data.doubles;
 
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.search.Comparators;
 import org.apache.lucene.search.FieldComparator;
 import org.apache.lucene.search.SortField;
 import org.elasticsearch.index.cache.field.data.FieldDataCache;

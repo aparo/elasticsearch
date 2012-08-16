@@ -21,7 +21,9 @@ package org.elasticsearch.search.dfs;
 
 import com.google.common.collect.ImmutableMap;
 import gnu.trove.set.hash.THashSet;
+import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.index.TermContext;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
 import org.elasticsearch.search.SearchParseElement;
 import org.elasticsearch.search.SearchPhase;
@@ -60,7 +62,15 @@ public class DfsPhase implements SearchPhase {
             termsSet.clear();
             context.query().extractTerms(termsSet);
             Term[] terms = termsSet.toArray(new Term[termsSet.size()]);
-            int[] freqs = context.searcher().docFreqs(terms);
+            long[] freqs = new long[termsSet.size()];
+            //TODO PARO REPLACED context.searcher().docFreqs(terms);
+            final IndexReaderContext readerContext = context.searcher().getTopReaderContext();
+            int i = 0;
+            for (Term term : terms) {
+                TermContext state = TermContext.build(readerContext, term, true);
+                freqs[i] = context.searcher().termStatistics(term, state).docFreq();
+                i++;
+            }
 
             context.dfsResult().termsAndFreqs(terms, freqs);
             context.dfsResult().maxDoc(context.searcher().getIndexReader().maxDoc());

@@ -45,7 +45,10 @@ public class StringRestResponse extends Utf8RestResponse {
 
     private static Unicode.UTF8Result convert(String content) {
         Unicode.UTF8Result result = cache.get().get();
-        UnicodeUtil.UTF16toUTF8(content, 0, content.length(), result);
+        BytesRef res = new BytesRef(result.result);
+        UnicodeUtil.UTF16toUTF8(content, 0, content.length(), res);
+        result.setLength(res.length);
+        result.result = res.bytes;
         return result;
     }
 }

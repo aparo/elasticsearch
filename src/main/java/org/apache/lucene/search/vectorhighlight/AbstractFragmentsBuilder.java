@@ -175,9 +175,7 @@ public abstract class AbstractFragmentsBuilder extends BaseFragmentsBuilder {
         private final static List<FieldPhraseList.WeightedPhraseInfo> EMPTY = Collections.emptyList();
 
         private WeightedFragInfo(int startOffset, int endOffset, float totalBoost, List<FieldFragList.WeightedFragInfo.SubInfo> subInfos) {
-            super(startOffset, endOffset, EMPTY);
-            this.subInfos = subInfos;
-            this.totalBoost = totalBoost;
+            super(startOffset, endOffset, subInfos, totalBoost);
         }
     }
 

@@ -19,6 +19,7 @@
 
 package org.elasticsearch.rest;
 
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.common.Unicode;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
@@ -34,10 +35,10 @@ public class XContentRestResponse extends AbstractRestResponse {
     private static final byte[] END_JSONP;
 
     static {
-        Unicode.UTF8Result U_END_JSONP = new Unicode.UTF8Result();
+        BytesRef U_END_JSONP = new BytesRef();
         UnicodeUtil.UTF16toUTF8(");", 0, ");".length(), U_END_JSONP);
         END_JSONP = new byte[U_END_JSONP.length];
-        System.arraycopy(U_END_JSONP.result, 0, END_JSONP, 0, U_END_JSONP.length);
+        System.arraycopy(U_END_JSONP.bytes, 0, END_JSONP, 0, U_END_JSONP.length);
     }
 
     private static ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>> prefixCache = new ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>>() {
@@ -126,7 +127,10 @@ public class XContentRestResponse extends AbstractRestResponse {
             return null;
         }
         Unicode.UTF8Result result = prefixCache.get().get();
-        UnicodeUtil.UTF16toUTF8(callback, 0, callback.length(), result);
+        BytesRef res = new BytesRef(result.result);
+        UnicodeUtil.UTF16toUTF8(callback, 0, callback.length(), res);
+        result.setLength(res.length);
+        result.result = res.bytes;
         result.result[result.length] = '(';
         result.length++;
         return result;

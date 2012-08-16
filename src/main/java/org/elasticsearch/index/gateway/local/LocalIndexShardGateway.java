@@ -20,7 +20,7 @@
 package org.elasticsearch.index.gateway.local;
 
 import com.google.common.io.Closeables;
-import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.elasticsearch.ElasticSearchException;

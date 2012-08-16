@@ -20,6 +20,7 @@
 package org.elasticsearch.common;
 
 import org.apache.lucene.util.ArrayUtil;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.UnicodeUtil;
 import org.elasticsearch.common.util.concurrent.ThreadLocals;
 
@@ -30,16 +31,14 @@ import java.util.Arrays;
  */
 public class Unicode {
 
-    private static ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>> cachedUtf8Result = new ThreadLocal<ThreadLocals.CleanableValue<Unicode.UTF8Result>>() {
-        @Override
-        protected ThreadLocals.CleanableValue<Unicode.UTF8Result> initialValue() {
-            return new ThreadLocals.CleanableValue<Unicode.UTF8Result>(new Unicode.UTF8Result());
+    private static ThreadLocal<ThreadLocals.CleanableValue<UTF8Result>> cachedUtf8Result = new ThreadLocal<ThreadLocals.CleanableValue<UTF8Result>>() {
+        @Override protected ThreadLocals.CleanableValue<UTF8Result> initialValue() {
+            return new ThreadLocals.CleanableValue<UTF8Result>(new UTF8Result());
         }
     };
 
     private static ThreadLocal<ThreadLocals.CleanableValue<UTF16Result>> cachedUtf16Result = new ThreadLocal<ThreadLocals.CleanableValue<UTF16Result>>() {
-        @Override
-        protected ThreadLocals.CleanableValue<UTF16Result> initialValue() {
+        @Override protected ThreadLocals.CleanableValue<UTF16Result> initialValue() {
             return new ThreadLocals.CleanableValue<UTF16Result>(new UTF16Result());
         }
     };
@@ -48,33 +47,40 @@ public class Unicode {
         if (source == null) {
             return null;
         }
-        Unicode.UTF8Result result = unsafeFromStringAsUtf8(source);
+        UTF8Result result = unsafeFromStringAsUtf8(source);
         return Arrays.copyOfRange(result.result, 0, result.length);
     }
 
-    public static Unicode.UTF8Result fromStringAsUtf8(String source) {
+    public static UTF8Result fromStringAsUtf8(String source) {
         if (source == null) {
             return null;
         }
-        Unicode.UTF8Result result = new Unicode.UTF8Result();
-        UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
+        UTF8Result result = new UTF8Result();
+        BytesRef chars = new BytesRef();
+        UnicodeUtil.UTF16toUTF8(source.toCharArray(), 0, source.length(), chars);
+        result.length=chars.length;
+        result.result=chars.bytes;
         return result;
     }
 
-    public static void fromStringAsUtf8(String source, Unicode.UTF8Result result) {
+    /*
+    public static void fromStringAsUtf8(String source, UnicodeUtil.UTF8Result result) {
         if (source == null) {
             result.length = 0;
             return;
         }
         UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
-    }
+    } */
 
-    public static Unicode.UTF8Result unsafeFromStringAsUtf8(String source) {
+    public static UTF8Result unsafeFromStringAsUtf8(String source) {
         if (source == null) {
             return null;
         }
-        Unicode.UTF8Result result = cachedUtf8Result.get().get();
-        UnicodeUtil.UTF16toUTF8(source, 0, source.length(), result);
+        UTF8Result result = cachedUtf8Result.get().get();
+        BytesRef chars = new BytesRef();
+        UnicodeUtil.UTF16toUTF8(source.toCharArray(), 0, source.length(), chars);
+        result.length=chars.length;
+        result.result=chars.bytes;
         return result;
     }
 
@@ -142,16 +148,16 @@ public class Unicode {
     }
 
     public static final class UTF8Result {
-        public byte[] result = new byte[10];
-        public int length;
+    public byte[] result = new byte[10];
+    public int length;
 
-        public void setLength(int newLength) {
-            if (result.length < newLength) {
-                result = ArrayUtil.grow(result, newLength);
-            }
-            length = newLength;
-        }
+    public void setLength(int newLength) {
+      if (result.length < newLength) {
+        result = ArrayUtil.grow(result, newLength);
+      }
+      length = newLength;
     }
+  }
 
     /**
      * Convert UTF8 bytes into UTF16 characters.  If offset

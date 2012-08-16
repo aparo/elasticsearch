@@ -93,6 +93,8 @@ public class CustomFieldQuery extends FieldQuery {
             }
         } else if (sourceQuery instanceof FiltersFunctionScoreQuery) {
             flatten(((FiltersFunctionScoreQuery) sourceQuery).getSubQuery(), reader, flatQueries);
+        } else if (sourceQuery instanceof FunctionScoreQuery) {
+            flatten(((FiltersFunctionScoreQuery) sourceQuery).getSubQuery(), reader, flatQueries);
         } else {
             super.flatten(sourceQuery, reader, flatQueries);
         }
@@ -105,8 +107,8 @@ public class CustomFieldQuery extends FieldQuery {
         }
         if (sourceFilter instanceof TermFilter) {
             flatten(new TermQuery(((TermFilter) sourceFilter).getTerm()), reader, flatQueries);
-        } else if (sourceFilter instanceof XTermsFilter) {
-            XTermsFilter termsFilter = (XTermsFilter) sourceFilter;
+        } else if (sourceFilter instanceof TermsFilter) {
+            TermsFilter termsFilter = (TermsFilter) sourceFilter;
             for (Term term : termsFilter.getTerms()) {
                 flatten(new TermQuery(term), reader, flatQueries);
             }

@@ -24,7 +24,6 @@ import com.google.common.collect.Maps;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
 import org.apache.lucene.index.AtomicReader;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexableField;
@@ -132,7 +131,7 @@ public class HighlightPhase extends AbstractComponent implements FetchSubPhase {
 
             // if we can do highlighting using Term Vectors, use FastVectorHighlighter, otherwise, use the
             // slower plain highlighter
-            if (mapper.termVector() != Field.TermVector.WITH_POSITIONS_OFFSETS) {
+            if (!(mapper.storeTermVectorOffsets() && mapper.storeTermVectorPositions() && mapper.storeTermVectors())) {
                 MapperHighlightEntry entry = cache.mappers.get(mapper);
                 if (entry == null) {
                     // Don't use the context.query() since it might be rewritten, and we need to pass the non rewritten queries to

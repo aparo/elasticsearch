@@ -19,6 +19,7 @@
 
 package org.elasticsearch.index.cache.field.data.none;
 
+import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.index.IndexReader;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.common.inject.Inject;
@@ -41,6 +42,11 @@ public class NoneFieldDataCache extends AbstractIndexComponent implements FieldD
     public NoneFieldDataCache(Index index, @IndexSettings Settings indexSettings) {
         super(index, indexSettings);
         logger.debug("Using no field cache");
+    }
+
+    @Override
+    public FieldData cache(FieldDataType type, AtomicReaderContext readerContext, String fieldName) throws IOException {
+        return cache(type, readerContext.reader(), fieldName);
     }
 
     @Override

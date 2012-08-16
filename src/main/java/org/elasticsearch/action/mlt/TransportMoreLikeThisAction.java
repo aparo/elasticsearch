@@ -19,7 +19,7 @@
 
 package org.elasticsearch.action.mlt;
 
-import org.apache.lucene.document.Field;
+import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
 import org.elasticsearch.ElasticSearchException;
 import org.elasticsearch.action.ActionListener;
@@ -210,7 +210,7 @@ public class TransportMoreLikeThisAction extends TransportAction<MoreLikeThisReq
         }
         docMapper.parse(SourceToParse.source(getResponse.sourceRef()).type(request.type()).id(request.id()), new DocumentMapper.ParseListenerAdapter() {
             @Override
-            public boolean beforeFieldAdded(FieldMapper fieldMapper, Field field, Object parseContext) {
+            public boolean beforeFieldAdded(FieldMapper fieldMapper, IndexableField field, Object parseContext) {
                 if (fieldMapper instanceof InternalMapper) {
                     return true;
                 }
@@ -228,7 +228,7 @@ public class TransportMoreLikeThisAction extends TransportAction<MoreLikeThisReq
         });
     }
 
-    private void addMoreLikeThis(MoreLikeThisRequest request, BoolQueryBuilder boolBuilder, FieldMapper fieldMapper, Field field) {
+    private void addMoreLikeThis(MoreLikeThisRequest request, BoolQueryBuilder boolBuilder, FieldMapper fieldMapper, IndexableField field) {
         addMoreLikeThis(request, boolBuilder, field.name(), fieldMapper.valueAsString(field));
     }
 
